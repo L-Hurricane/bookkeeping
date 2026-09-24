@@ -11,4 +11,4 @@ Use an empty schema or upgrade the existing Flyway history. Automatic baselining
 and runtime clean remain disabled; Hibernate validates and never generates schema.
 Only the disposable bookkeeping_migration_test schema permits clean in its test.
 V6 creates transactions. V7 creates transaction_tags. V8 creates idempotency records for create operations.
-No balance adjustment table is added.
+V9 creates balance_adjustments. Adjustment amount is the stored fact; current balance is not a column.

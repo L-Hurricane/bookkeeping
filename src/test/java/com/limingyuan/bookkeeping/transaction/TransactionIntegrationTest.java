@@ -60,6 +60,7 @@ class TransactionIntegrationTest {
     @AfterEach void cleanup() {
         for (long id : fixtures) {
             jdbc.sql("DELETE FROM idempotency_records WHERE user_id = :id").param("id", id).update();
+            jdbc.sql("DELETE FROM balance_adjustments WHERE user_id = :id").param("id", id).update();
             jdbc.sql("DELETE FROM transaction_tags WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = :id)")
                     .param("id", id).update();
             jdbc.sql("DELETE FROM transactions WHERE user_id = :id").param("id", id).update();

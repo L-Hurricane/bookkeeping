@@ -20,12 +20,13 @@ public class AccountService {
     private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
     private final AccountRepository accounts;
+    private final CurrentBalance balances;
     private final TrustedUserContext context;
     private final Clock clock;
     private final TransactionTemplate transaction;
-    public AccountService(AccountRepository accounts, TrustedUserContext context, Clock clock,
+    public AccountService(AccountRepository accounts, CurrentBalance balances, TrustedUserContext context, Clock clock,
             PlatformTransactionManager transactionManager) {
-        this.accounts = accounts; this.context = context; this.clock = clock;
+        this.accounts = accounts; this.balances = balances; this.context = context; this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
     }
     public record AccountView(long id, String name, String currency, String openingBalance,
@@ -89,9 +90,8 @@ public class AccountService {
     }
 
     private AccountView view(AccountEntity account) {
-        String balance = Money.format(account.getOpeningBalance());
-        // Phase 2 has no transaction or adjustment facts to aggregate.
-        return new AccountView(account.getId(), account.getName(), account.getCurrency(), balance, balance,
-                TIME.format(account.getCreatedTime().atZone(BEIJING)));
+        String opening = Money.format(account.getOpeningBalance());
+        return new AccountView(account.getId(), account.getName(), account.getCurrency(), opening,
+                Money.format(balances.of(account.getId())), TIME.format(account.getCreatedTime().atZone(BEIJING)));
     }
 }

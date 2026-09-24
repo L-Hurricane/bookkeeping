@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.account;
 
 import com.limingyuan.bookkeeping.account.application.AccountService;
+import com.limingyuan.bookkeeping.account.application.CurrentBalance;
 import com.limingyuan.bookkeeping.account.persistence.*;
 import com.limingyuan.bookkeeping.category.application.CategoryBootstrap;
 import com.limingyuan.bookkeeping.category.domain.CategoryType;
@@ -111,7 +112,7 @@ class AccountCategoryIntegrationTest {
         Instant now = Instant.parse("2026-09-24T23:59:59.123456789Z");
         SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
                 new TrustedUserContext.Identity(userId, 1), null, List.of()));
-        var service = new AccountService(accounts, context, Clock.fixed(now, ZoneOffset.ofHours(-7)), transactions);
+        var service = new AccountService(accounts, new CurrentBalance(jdbc, context), context, Clock.fixed(now, ZoneOffset.ofHours(-7)), transactions);
         var result = service.initialize("0");
         assertThat(result.createdTime()).isEqualTo("2026-09-25T07:59:59+08:00");
         assertThat(accounts.findByUserId(userId).orElseThrow().getUpdatedAtUtc())
