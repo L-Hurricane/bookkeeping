@@ -34,9 +34,11 @@ public class TransactionController {
 
     @PostMapping
     public ResponseEntity<TransactionService.TransactionView> create(@PathVariable long accountId,
-            @Valid @RequestBody CreateRequest request) {
-        return ResponseEntity.status(201).body(transactions.create(accountId, request.type(), draft(request.amount(),
-                request.name(), request.categoryId(), request.tagIds(), request.businessTime(), request.remark())));
+            @RequestHeader("Idempotency-Key") String idempotencyKey, @Valid @RequestBody CreateRequest request) {
+        var outcome = transactions.create(accountId, idempotencyKey, request.type(), draft(request.amount(),
+                request.name(), request.categoryId(), request.tagIds(), request.businessTime(), request.remark()));
+        var response = ResponseEntity.status(outcome.status()).body(outcome.body());
+        return outcome.replay() ? ResponseEntity.status(outcome.status()).header("Idempotent-Replay", "true").body(outcome.body()) : response;
     }
 
     @GetMapping("/{transactionId}")

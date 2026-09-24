@@ -59,6 +59,7 @@ class TransactionIntegrationTest {
 
     @AfterEach void cleanup() {
         for (long id : fixtures) {
+            jdbc.sql("DELETE FROM idempotency_records WHERE user_id = :id").param("id", id).update();
             jdbc.sql("DELETE FROM transaction_tags WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = :id)")
                     .param("id", id).update();
             jdbc.sql("DELETE FROM transactions WHERE user_id = :id").param("id", id).update();
@@ -101,6 +102,7 @@ class TransactionIntegrationTest {
         long foreignAccount = initialize(other.token());
         expect(404, body("EXPENSE", "1", null, expenseCategory, List.of(foreignTag), "2026-09-24T12:00:00+08:00", null), token, "RESOURCE_NOT_FOUND");
         mvc.perform(post("/api/v1/accounts/" + foreignAccount + "/transactions").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("EXPENSE", "1", null, expenseCategory, List.of(), "2026-09-24T12:00:00+08:00", null)))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
@@ -118,6 +120,7 @@ class TransactionIntegrationTest {
         jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", otherAccount).update();
         long otherCategory = categoryId("EXPENSE", "早餐", other.token());
         var theirs = mvc.perform(post("/api/v1/accounts/" + otherAccount + "/transactions").header("Authorization", "Bearer " + other.token())
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("EXPENSE", "4", null, otherCategory, List.of(), "2026-09-24T12:00:00+08:00", null)))
                 .andExpect(status().isCreated()).andReturn();
@@ -140,6 +143,7 @@ class TransactionIntegrationTest {
             Callable<JsonNode> call = () -> {
                 start.await();
                 var result = mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body("EXPENSE", "9.00", null, expenseCategory, List.of(expenseTag), "2026-09-24T12:00:01+08:00", null)))
                         .andReturn();
@@ -192,6 +196,7 @@ class TransactionIntegrationTest {
         assertThat(unchanged.path("amount").asText()).isEqualTo("12.00");
         assertThat(unchanged.path("tags").get(0).path("id").asLong()).isEqualTo(otherExpenseTag);
         mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("EXPENSE", "1", null, expenseCategory, List.of(), "2019-12-31T23:59:59+08:00", null)))
                 .andExpect(status().isConflict())
@@ -263,6 +268,128 @@ class TransactionIntegrationTest {
         assertThat(json.readTree(detail.getResponse().getContentAsString()).path("amount").asText()).isEqualTo("6.00");
     }
 
+    @Test void idempotencyKeyIsRequiredAndReplayDoesNotWriteAgain() throws Exception {
+        mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXPENSE", "1.2", " 午餐 ", expenseCategory, List.of(otherExpenseTag, expenseTag), "2026-09-12T08:00:00+08:00", "  ")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", " ").contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXPENSE", "1", null, expenseCategory, List.of(), "2026-09-12T08:00:00+08:00", null)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "k".repeat(65)).contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXPENSE", "1", null, expenseCategory, List.of(), "2026-09-12T08:00:00+08:00", null)))
+                .andExpect(status().isBadRequest());
+        String key = "create-key-1";
+        String payload = body("EXPENSE", "1.2", " 午餐 ", expenseCategory, List.of(otherExpenseTag, expenseTag), "2026-09-12T08:00:00+08:00", " 备注 ");
+        var first = submit(key, payload, token);
+        assertThat(first.getResponse().getStatus()).isEqualTo(201);
+        assertThat(first.getResponse().getHeader("Idempotent-Replay")).isNull();
+        long id = json.readTree(first.getResponse().getContentAsString()).path("id").asLong();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE user_id = :id AND scope = 'CREATE_TRANSACTION' AND operation_id = :key")
+                .param("id", userId).param("key", key).query(Long.class).single()).isEqualTo(1);
+        String equivalent = body("EXPENSE", "1.20", "午餐", expenseCategory, List.of(expenseTag, otherExpenseTag), "2026-09-12T08:00:00+08:00", "备注");
+        var replay = submit(key, equivalent, token);
+        assertThat(replay.getResponse().getStatus()).isEqualTo(200);
+        assertThat(replay.getResponse().getHeader("Idempotent-Replay")).isEqualTo("true");
+        assertThat(json.readTree(replay.getResponse().getContentAsString()).path("id").asLong()).isEqualTo(id);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(1);
+        assertThat(accountOrder()).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transaction_tags WHERE transaction_id = :id").param("id", id).query(Long.class).single()).isEqualTo(2);
+        long lunch = categoryId("EXPENSE", "午餐", token);
+        for (String changed : List.of(
+                body("EXPENSE", "2.00", "午餐", expenseCategory, List.of(expenseTag, otherExpenseTag), "2026-09-12T08:00:00+08:00", "备注"),
+                body("EXPENSE", "1.20", "午餐", lunch, List.of(expenseTag, otherExpenseTag), "2026-09-12T08:00:00+08:00", "备注"),
+                body("EXPENSE", "1.20", "午餐", expenseCategory, List.of(expenseTag), "2026-09-12T08:00:00+08:00", "备注"),
+                body("EXPENSE", "1.20", "午餐", expenseCategory, List.of(expenseTag, otherExpenseTag), "2026-09-12T09:00:00+08:00", "备注"))) {
+            var conflict = submit(key, changed, token);
+            assertThat(conflict.getResponse().getStatus()).isEqualTo(409);
+            assertThat(json.readTree(conflict.getResponse().getContentAsString()).path("error").path("code").asText()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        }
+        assertThat(accountOrder()).isEqualTo(1);
+        assertThat(storedAmount(id)).isEqualByComparingTo("1.20");
+    }
+
+    @Test void embeddedNewlinesDoNotCollapseDistinctNameAndRemark() throws Exception {
+        String key = "newline-boundary";
+        var first = submit(key, body("EXPENSE", "3.00", "a\nb", expenseCategory, List.of(), "2026-09-12T10:00:00+08:00", "c"), token);
+        assertThat(first.getResponse().getStatus()).isEqualTo(201);
+        var conflict = submit(key, body("EXPENSE", "3.00", "a", expenseCategory, List.of(), "2026-09-12T10:00:00+08:00", "b\nc"), token);
+        assertThat(conflict.getResponse().getStatus()).isEqualTo(409);
+        assertThat(json.readTree(conflict.getResponse().getContentAsString()).path("error").path("code").asText()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(1);
+        assertThat(accountOrder()).isEqualTo(1);
+    }
+
+    @Test void concurrentSameKeyCreatesOneTransactionAndDifferentRequestConflicts() throws Exception {
+        String key = "concurrent-same";
+        String payload = body("EXPENSE", "4.00", null, expenseCategory, List.of(expenseTag), "2026-09-13T08:00:00+08:00", null);
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<org.springframework.test.web.servlet.MvcResult> call = () -> { start.await(); return submit(key, payload, token); };
+            var first = executor.submit(call);
+            var second = executor.submit(call);
+            start.countDown();
+            var results = List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
+            assertThat(results).allSatisfy(result -> assertThat(result.getResponse().getStatus()).isIn(200, 201));
+            var ids = results.stream().map(result -> {
+                try { return json.readTree(result.getResponse().getContentAsString()).path("id").asLong(); }
+                catch (Exception ex) { throw new RuntimeException(ex); }
+            }).distinct().toList();
+            assertThat(ids).hasSize(1);
+        }
+        assertThat(accountOrder()).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE user_id = :id AND operation_id = :key")
+                .param("id", userId).param("key", key).query(Long.class).single()).isEqualTo(1);
+        String otherKey = "concurrent-conflict";
+        var gate = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var left = executor.submit(() -> {
+                gate.await();
+                return submit(otherKey, body("EXPENSE", "5.00", null, expenseCategory, List.of(), "2026-09-13T09:00:00+08:00", null), token).getResponse().getStatus();
+            });
+            var right = executor.submit(() -> {
+                gate.await();
+                return submit(otherKey, body("EXPENSE", "6.00", null, expenseCategory, List.of(), "2026-09-13T09:00:00+08:00", null), token).getResponse().getStatus();
+            });
+            gate.countDown();
+            assertThat(List.of(left.get(20, TimeUnit.SECONDS), right.get(20, TimeUnit.SECONDS))).containsExactlyInAnyOrder(201, 409);
+        }
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(2);
+        assertThat(accountOrder()).isEqualTo(2);
+    }
+
+    @Test void failedCreateLeavesNoIdempotencySuccessAndDeletedRetryDoesNotRecreate() throws Exception {
+        String failedKey = "bad-category";
+        var failed = submit(failedKey, body("EXPENSE", "1", null, incomeCategory, List.of(), "2026-09-14T08:00:00+08:00", null), token);
+        assertThat(failed.getResponse().getStatus()).isEqualTo(409);
+        assertThat(accountOrder()).isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE operation_id = :key").param("key", failedKey).query(Long.class).single()).isZero();
+        String key = "delete-then-retry";
+        var created = submit(key, body("EXPENSE", "7", null, expenseCategory, List.of(expenseTag), "2026-09-14T09:00:00+08:00", null), token);
+        assertThat(created.getResponse().getStatus()).isEqualTo(201);
+        long id = json.readTree(created.getResponse().getContentAsString()).path("id").asLong();
+        mvc.perform(delete("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        var retry = submit(key, body("EXPENSE", "7", null, expenseCategory, List.of(expenseTag), "2026-09-14T09:00:00+08:00", null), token);
+        assertThat(retry.getResponse().getStatus()).isEqualTo(404);
+        assertThat(retry.getResponse().getHeader("Idempotent-Replay")).isEqualTo("true");
+        assertThat(json.readTree(retry.getResponse().getContentAsString()).path("error").path("code").asText()).isEqualTo("RESOURCE_NOT_FOUND");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE id = :id").param("id", id).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE operation_id = :key").param("key", key).query(Long.class).single()).isEqualTo(1);
+        assertThat(accountOrder()).isEqualTo(1);
+        var other = newUser("same-key");
+        long otherAccount = initialize(other.token());
+        jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", otherAccount).update();
+        long otherCategory = categoryId("EXPENSE", "早餐", other.token());
+        var foreign = mvc.perform(post("/api/v1/accounts/" + otherAccount + "/transactions").header("Authorization", "Bearer " + other.token())
+                        .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXPENSE", "7", null, otherCategory, List.of(), "2026-09-14T09:00:00+08:00", null)))
+                .andExpect(status().isCreated()).andReturn();
+        assertThat(json.readTree(foreign.getResponse().getContentAsString()).path("id").asLong()).isNotEqualTo(id);
+    }
+
     @Test void deleteRemovesAssociationsAndDoesNotReuseOrder() throws Exception {
         var created = create(body("EXPENSE", "8", null, expenseCategory, List.of(expenseTag), "2026-09-03T10:00:00+08:00", null), token);
         long id = created.path("id").asLong();
@@ -304,8 +431,15 @@ class TransactionIntegrationTest {
         return json.writeValueAsString(map);
     }
 
+    private org.springframework.test.web.servlet.MvcResult submit(String key, String payload, String bearer) throws Exception {
+        return mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + bearer)
+                        .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andReturn();
+    }
+
     private JsonNode create(String payload, String bearer) throws Exception {
         var result = mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + bearer)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isCreated()).andReturn();
         return json.readTree(result.getResponse().getContentAsString());
@@ -313,6 +447,7 @@ class TransactionIntegrationTest {
 
     private void expect(int status, String payload, String bearer, String code) throws Exception {
         mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + bearer)
+                        .header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().is(status)).andExpect(jsonPath("$.error.code").value(code));
     }

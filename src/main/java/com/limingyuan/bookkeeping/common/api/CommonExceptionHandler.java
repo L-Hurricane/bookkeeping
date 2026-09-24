@@ -6,6 +6,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,11 +19,12 @@ public class CommonExceptionHandler {
     @ExceptionHandler(ApiFailure.class)
     ResponseEntity<ApiErrors.ErrorResponse> failure(ApiFailure ex, HttpServletRequest request) {
         var details = ex.details().isEmpty() ? null : ex.details();
-        return ResponseEntity.status(ex.status()).header("Cache-Control", "no-store")
-                .body(errors.body(request, ex.code(), ex.getMessage(), details));
+        var response = ResponseEntity.status(ex.status()).header("Cache-Control", "no-store");
+        ex.headers().forEach(response::header);
+        return response.body(errors.body(request, ex.code(), ex.getMessage(), details));
     }
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
-            MissingServletRequestParameterException.class})
+            MissingServletRequestParameterException.class, MissingRequestHeaderException.class})
     ResponseEntity<ApiErrors.ErrorResponse> invalid(HttpServletRequest request) {
         return response(request, 400, "VALIDATION_FAILED", "请求参数不合法");
     }

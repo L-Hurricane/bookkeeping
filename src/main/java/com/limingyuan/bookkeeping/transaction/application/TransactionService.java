@@ -2,6 +2,8 @@ package com.limingyuan.bookkeeping.transaction.application;
 
 import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.category.application.CategoryService;
+import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRecord;
+import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRepository;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
@@ -16,6 +18,7 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -27,7 +30,9 @@ public class TransactionService {
     private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
     private static final int NAME_LIMIT = 255;
+    static final String CREATE_SCOPE = "CREATE_TRANSACTION";
     private final AccountService accounts;
+    private final IdempotencyRepository idempotency;
     private final CategoryService categories;
     private final TagService tags;
     private final TransactionRepository transactions;
@@ -37,10 +42,11 @@ public class TransactionService {
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
 
-    public TransactionService(AccountService accounts, CategoryService categories, TagService tags,
+    public TransactionService(AccountService accounts, IdempotencyRepository idempotency, CategoryService categories, TagService tags,
             TransactionRepository transactions, TransactionTagRepository associations, TrustedUserContext context,
             Clock clock, JdbcClient jdbc, PlatformTransactionManager transactionManager) {
         this.accounts = accounts;
+        this.idempotency = idempotency;
         this.categories = categories;
         this.tags = tags;
         this.transactions = transactions;
@@ -59,23 +65,75 @@ public class TransactionService {
             CategoryRef category, List<TagRef> tags, String businessTime) { }
     public record TransactionList(String month, List<TransactionListItem> items) { }
     public record Draft(String amount, String name, long categoryId, List<Long> tagIds, String businessTime, String remark) { }
+    public record CreateOutcome(int status, TransactionView body, boolean replay) { }
 
-    public TransactionView create(long accountId, String typeRaw, Draft draft) {
+    public CreateOutcome create(long accountId, String operationId, String typeRaw, Draft draft) {
         long userId = context.userId();
+        String key = operationKey(operationId);
         TransactionType type = type(typeRaw);
         var fields = fields(draft);
-        return transaction.execute(status -> {
-            var allocation = accounts.allocateFirstSaveOrder(accountId);
-            var category = categories.requireBookable(fields.categoryId(), type.name());
-            var ownedTags = tags.requireOwned(fields.tagIds(), type.name());
-            var businessTime = businessTime(fields.businessTime(), allocation.createdTime());
-            var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-            var saved = transactions.saveAndFlush(new TransactionEntity(userId, allocation.accountId(), type,
-                    fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category.id(), businessTime, now,
-                    allocation.firstSaveOrder(), blankToNull(fields.remark(), Integer.MAX_VALUE)));
-            replaceTags(saved.getId(), ownedTags);
-            return detail(saved, category.name(), ownedTags);
-        });
+        byte[] hash = requestHash(accountId, type, fields);
+        try {
+            return transaction.execute(status -> createOnce(userId, accountId, key, type, fields, hash));
+        } catch (DataIntegrityViolationException ex) {
+            var winner = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
+            if (winner == null) throw ex;
+            return transaction.execute(status -> outcome(winner, hash));
+        }
+    }
+
+    private CreateOutcome createOnce(long userId, long accountId, String key, TransactionType type, Parsed fields, byte[] hash) {
+        // Lock the account before touching idempotency. A pessimistic lock on a missing
+        // idempotency row takes an InnoDB gap lock and deadlocks with the account row lock.
+        accounts.lockForWrite(accountId);
+        var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
+        if (existing != null) return outcome(existing, hash);
+        var allocation = accounts.allocateFirstSaveOrder(accountId);
+        var category = categories.requireBookable(fields.categoryId(), type.name());
+        var ownedTags = tags.requireOwned(fields.tagIds(), type.name());
+        var businessTime = businessTime(fields.businessTime(), allocation.createdTime());
+        var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        var saved = transactions.saveAndFlush(new TransactionEntity(userId, allocation.accountId(), type,
+                fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category.id(), businessTime, now,
+                allocation.firstSaveOrder(), blankToNull(fields.remark(), Integer.MAX_VALUE)));
+        replaceTags(saved.getId(), ownedTags);
+        idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, hash, "CREATED", saved.getId(), now));
+        return new CreateOutcome(201, detail(saved, category.name(), ownedTags), false);
+    }
+
+    private CreateOutcome outcome(IdempotencyRecord record, byte[] hash) {
+        if (!record.sameRequest(hash)) {
+            throw new ApiFailure(409, "IDEMPOTENCY_CONFLICT", "同一个 Idempotency-Key 已用于不同的创建请求");
+        }
+        if (record.getResourceId() == null) {
+            throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在").header("Idempotent-Replay", "true");
+        }
+        var saved = transactions.findById(record.getResourceId()).filter(item -> item.getUserId() == context.userId()).orElse(null);
+        if (saved == null) {
+            throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在").header("Idempotent-Replay", "true");
+        }
+        return new CreateOutcome(200, view(saved), true);
+    }
+
+    private byte[] requestHash(long accountId, TransactionType type, Parsed fields) {
+        var tags = new ArrayList<>(fields.tagIds());
+        tags.sort(null);
+        var time = parseBusinessTime(fields.businessTime());
+        return TransactionRequestHash.sha256(accountId, type.name(), Money.format(fields.amount()), fields.categoryId(),
+                tags, TIME.format(time.atZone(BEIJING)), text(fields.name()), text(fields.remark()));
+    }
+
+    private static String operationKey(String raw) {
+        if (raw == null || raw.trim().isEmpty() || raw.trim().length() > 64) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "Idempotency-Key 不能为空且最长 64 个字符");
+        }
+        return raw.trim();
+    }
+
+    private static String text(String raw) {
+        if (raw == null) return "";
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? "" : trimmed;
     }
 
     @Transactional(readOnly = true)
@@ -216,7 +274,7 @@ public class TransactionService {
         }
     }
 
-    private LocalDateTime businessTime(String raw, LocalDateTime accountCreated) {
+    private LocalDateTime parseBusinessTime(String raw) {
         OffsetDateTime parsed;
         try { parsed = OffsetDateTime.parse(raw); }
         catch (DateTimeParseException | NullPointerException ex) {
@@ -225,7 +283,11 @@ public class TransactionService {
         if (!parsed.getOffset().equals(ZoneOffset.ofHours(8)) || parsed.getNano() != 0) {
             throw new ApiFailure(400, "VALIDATION_FAILED", "业务时间必须是带 +08:00 的秒级时间");
         }
-        var local = parsed.toLocalDateTime();
+        return parsed.toLocalDateTime();
+    }
+
+    private LocalDateTime businessTime(String raw, LocalDateTime accountCreated) {
+        var local = parseBusinessTime(raw);
         if (local.isBefore(accountCreated)) {
             throw new ApiFailure(409, "BUSINESS_RULE_VIOLATION", "交易时间不能早于资金账户创建时间",
                     List.of(new ApiErrors.Detail("businessTime", "BEFORE_ACCOUNT_CREATION")));

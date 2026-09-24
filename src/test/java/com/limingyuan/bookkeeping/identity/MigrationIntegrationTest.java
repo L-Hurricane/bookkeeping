@@ -22,7 +22,7 @@ class MigrationIntegrationTest {
                 .locations("classpath:db/migration").baselineOnMigrate(false).cleanDisabled(false).load();
         try {
             flyway.clean();
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
             flyway.validate();
             assertThat(flyway.migrate().migrationsExecuted).isZero();
             try (var connection = DriverManager.getConnection(url, username, password);
@@ -30,7 +30,7 @@ class MigrationIntegrationTest {
                  var rows = statement.executeQuery("SHOW TABLES")) {
                 var names = new ArrayList<String>();
                 while (rows.next()) names.add(rows.getString(1));
-                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "flyway_schema_history");
+                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "flyway_schema_history");
             }
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement();

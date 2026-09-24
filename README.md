@@ -196,6 +196,7 @@ java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
 - `V5__create_tags.sql`：tags、`UNIQUE(user_id, name)`、User FK 及按用户和类型查询的索引。
 - `V6__create_transactions.sql`：transactions、账户/分类复合外键、`UNIQUE(account_id, first_save_order)`。
 - `V7__create_transaction_tags.sql`：transaction_tags；删除交易时级联删除关联，删除标签时限制。
+- `V8__create_idempotency_records.sql`：Create Transaction 幂等记录，`UNIQUE(user_id, scope, operation_id)`，不引用业务资源外键。
 
 Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自动接管非空库；
 运行时 `clean-disabled=true` 禁止清库；Hibernate 仅 `validate`，SQL init 禁用。
@@ -213,4 +214,8 @@ v0.1 响应统一省略 null 字段，例如未填写的交易名称和备注不
 ## Phase 4A Review / Stop
 
 重点 Review：账户悲观锁、同一 MySQL 事务中的 First Save Order 与标签关联、编辑原子性、业务时间与排序。
-完成 Phase 4A 后停止；不实现 Idempotency、BalanceAdjustment、Ledger 或 Statistics。
+Phase 4B 为 Create Transaction 增加 `Idempotency-Key`。相同用户、`CREATE_TRANSACTION` 和作用域内的相同请求重放为 200，并带 `Idempotent-Replay: true`。
+相同 Key 的不同请求返回 `409 IDEMPOTENCY_CONFLICT`。交易删除后原 Idempotency Record 保留；同一 Key 与同一原始请求返回 `404 RESOURCE_NOT_FOUND` 和 `Idempotent-Replay: true`，不重新执行 Create。
+Replay 仍先获取 Account 悲观锁。
+v0.1 的 `UNIQUE(accounts.user_id)` 使每个用户只有一个账户，Create 又在 Account Lock 之后处理幂等，因此同一用户的正常 API 请求已由 Account Lock 串行化。`idempotency_records` 唯一约束冲突后的恢复分支，当前不能通过合法的多账户场景触发。现有恢复代码保持不变。将来解除单账户约束时，必须重新 Review 该分支并增加真实并发测试。
+不实现 BalanceAdjustment 幂等、Ledger 或 Statistics。等待 Human Gate 3。
