@@ -38,6 +38,7 @@ class IdentityIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired UserBootstrap bootstrap;
+    @Autowired com.limingyuan.bookkeeping.category.application.CategoryBootstrap categoryBootstrap;
     @Autowired UserRepository users;
     @Autowired SessionRepository sessions;
     @Autowired OpaqueTokens tokens;
@@ -61,6 +62,8 @@ class IdentityIntegrationTest {
     @AfterEach void removeOnlyOwnedFixtures() {
         for (long id : createdUsers) {
             jdbc.sql("DELETE FROM sessions WHERE user_id = :id").param("id", id).update();
+            jdbc.sql("DELETE FROM categories WHERE user_id = :id AND parent_id IS NOT NULL").param("id", id).update();
+            jdbc.sql("DELETE FROM categories WHERE user_id = :id").param("id", id).update();
             users.deleteById(id);
         }
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
@@ -205,7 +208,7 @@ class IdentityIntegrationTest {
                 .withProperty("bookkeeping.identity.bootstrap.password", secret);
         Instant now = Instant.parse("2026-09-24T03:00:00.123456Z");
         var runner = new UserBootstrap(environment, users, passwords,
-                java.time.Clock.fixed(now, java.time.ZoneOffset.ofHours(-7)), transactionManager);
+                java.time.Clock.fixed(now, java.time.ZoneOffset.ofHours(-7)), transactionManager, java.util.List.of(categoryBootstrap));
         runner.run(new org.springframework.boot.DefaultApplicationArguments());
         var created = users.findByUsername(name).orElseThrow();
         createdUsers.add(created.getId());
@@ -221,7 +224,7 @@ class IdentityIntegrationTest {
         var environment = new org.springframework.mock.env.MockEnvironment()
                 .withProperty("bookkeeping.identity.bootstrap.username", name)
                 .withProperty("bookkeeping.identity.bootstrap.password", password);
-        new UserBootstrap(environment, users, passwords, java.time.Clock.systemUTC(), transactionManager)
+        new UserBootstrap(environment, users, passwords, java.time.Clock.systemUTC(), transactionManager, java.util.List.of(categoryBootstrap))
                 .run(new org.springframework.boot.DefaultApplicationArguments());
         assertThat(users.findByUsername(name)).isEmpty();
     }

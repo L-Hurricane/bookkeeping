@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.identity.api;
 
 import jakarta.validation.constraints.*;
+import com.limingyuan.bookkeeping.common.api.StrictStringDeserializer;
 import java.nio.charset.StandardCharsets;
 import tools.jackson.databind.annotation.JsonDeserialize;
 

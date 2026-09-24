@@ -1,2 +1,2 @@
-/** account feature boundary; business implementation is deferred beyond Phase 0. */
+/** Single per-user account initialization and scoped reads. */
 package com.limingyuan.bookkeeping.account;

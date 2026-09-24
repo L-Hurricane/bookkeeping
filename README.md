@@ -1,7 +1,7 @@
-# Bookkeeping v0.1 — Phase 1 · Identity / Authentication
+# Bookkeeping v0.1 — Phase 2 · Account / Category
 
-当前包含工程骨架、预创建用户、Opaque Token + DB-backed Session 认证与 Health Check。
-正式基线位于 `docs/`；Gate 1 已通过，完成 Gate 2 人工 Review 前不进入 Phase 2。
+当前包含工程骨架、认证、账户初始化和固定分类查询。
+正式基线位于 `docs/`；Human Gate 2 已通过。本轮仅到 Phase 2，不进入 Tag / Transaction。
 
 ## 工程基线
 
@@ -80,7 +80,10 @@ curl --fail http://localhost:8080/actuator/health
 应用启动时幂等创建用户。已存在的用户名（包括排序规则等价名称）不会重复创建，
 也不会因环境变量变化而重置密码。缺失或不合法的 Bootstrap 配置会阻止启动，
 错误不会回显凭证。预创建完成后可关闭 Bootstrap 并移除初始密码配置。
-Category Bootstrap 留到 Phase 2，本阶段不创建任何分类或账户。
+用户 Bootstrap 通过 Identity 的 `UserPreparation` 应用接口，在同一事务内创建该用户的固定分类。
+Category 模块实现该接口，Identity 不反向依赖 Category。准备失败时用户与分类一并回滚。
+启动时还会为 Phase 1 已存在用户幂等补齐分类，与初始密码 Bootstrap 是否启用无关。
+分类准备按 User 行锁串行化；不创建 Account，账户只在明确初始化 Opening Balance 时创建。
 
 `POST /api/v1/auth/login` 接收 JSON 字符串字段 `username` / `password`。
 拒绝未知字段、数字/布尔值凭证、缺失字段及不合法长度。成功返回 200：
@@ -108,6 +111,35 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 所有认证错误遵守 `error.code/message/requestId` 结构，响应带 `X-Request-Id`。
 
 
+## Account / Category API
+
+以下三个接口均要求 Phase 1 的 Bearer Token，归属只取自 `TrustedUserContext`。
+请求中的 `userId` / `X-User-Id` 不参与数据归属；查询结果始终限制为当前用户。
+
+- `GET /api/v1/accounts`：初始化前返回 `{"items":[]}`；初始化后最多返回一个账户。
+- `POST /api/v1/accounts/initialize`：请求仅包含 `openingBalance` 十进制字符串，成功返回 201。
+  金额可正、可零、可负，最多两位小数，使用 BigDecimal，不接受 JSON Number、指数格式或舍入。
+  超过 `DECIMAL(19,2)` 技术容量返回 `400 VALIDATION_FAILED`。
+  名称固定“微信”、币种固定 `CNY`，`last_first_save_order=0`。
+  重复/并发重复初始化返回 `409 ACCOUNT_ALREADY_INITIALIZED`，数据库唯一约束是最终保证。
+- `GET /api/v1/categories?type=INCOME|EXPENSE`：返回当前用户指定类型的分类树；type 必填。
+  有子分类的一级节点 `bookable=false`，没有子分类的一级节点和子节点 `bookable=true`。
+
+账户的 `createdTime` 由初始化时的时钟转换为北京时间，精确到秒并返回 `+08:00`；
+`updated_at_utc` 使用 UTC 微秒。初始化请求不能指定名称、币种、归属、时间或计数器。
+本阶段没有 Transaction / BalanceAdjustment，因此 `currentBalance = openingBalance`。
+起始余额不提供修改或删除接口；不实现多账户、转账、完整余额聚合或账户管理。
+
+固定分类只来自 `docs/product/v0.1-product-requirements.md` §8.3 和 `v0.1-change-001.md` §2：
+
+- 收入：工资、奖金、其他收入、利息（4 个可记账一级分类）。
+- 支出：餐饮（早餐、午餐、晚餐、其他）；交通（公共交通、打车、其他）；
+  购物、居住、娱乐、医疗、其他支出。
+
+每用户共 18 行（11 个一级、7 个二级）。重复准备不改变已有 ID；缺失固定行可补齐，
+发现非基线分类或类型冲突则失败并回滚，不擅自删除/改写既有分类。
+不提供分类管理接口。`bookable` 派生，不作为数据库字段。
+
 ## 测试与打包
 
 测试自动激活 `test` profile，使用相同 MySQL、Flyway、JPA、Security 配置链路。
@@ -130,7 +162,9 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 测试覆盖密码编码校验、Token 随机性/Hash、到期边界、Bootstrap 幂等、
 真实 MySQL 唯一约束与会话持久化、空库迁移及重复迁移、Login/Logout、无效请求、
 用户上下文隔离、当前会话注销和日志敏感信息检查，并保留 Context / Health 回归。
-API 测试仅清理自己创建的随机测试用户/会话；迁移测试只清空独立的 migration 测试库。
+新增测试覆盖正/零/负余额、精确容量、创建时间、并发初始化、用户隔离、完整固定分类树、
+分类唯一约束、幂等准备、旧用户补齐和准备失败回滚。
+API 测试仅清理自己创建的随机测试用户及其账户/分类/会话；迁移测试只清空独立的 migration 测试库。
 未设置凭证或 MySQL 未就绪时测试应失败，不自动跳过、不使用 H2。
 测试中的身份探测 Controller 仅在 test source 中，不会打包，也不是正式 API。
 
@@ -146,6 +180,9 @@ java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
 
 - `V1__create_users.sql`：users、username 唯一约束。
 - `V2__create_sessions.sql`：sessions、User FK、Token Hash 唯一约束及用户/到期索引。
+- `V3__create_accounts.sql`：accounts、`UNIQUE(user_id)`、复合归属唯一键及 User FK。
+- `V4__create_categories.sql`：categories、父分类 FK、用户范围名称唯一键及类型查询索引。
+  `parent_scope_id` 是非空生成列 `COALESCE(parent_id, 0)`，避免根分类的 NULL 绕过唯一约束。
 
 Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自动接管非空库；
 运行时 `clean-disabled=true` 禁止清库；Hibernate 仅 `validate`，SQL init 禁用。
@@ -153,10 +190,11 @@ Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自
 
 identity 按 api / application / persistence / security 分包，公开可信用户上下文。
 common 仅包含 Request ID 与错误响应等技术能力，不依赖 identity。
-其余 account / category / tag / transaction / adjustment / ledger / statistics 保留骨架。
+account / category 各自保留模块内部的 API、应用服务与持久化边界；
+tag / transaction / adjustment / ledger / statistics 仍只有骨架。
 
-## Gate 2
+## Phase 2 Review / Stop
 
-人工 Review：Password handling、Token 生成/Hash、Session 查询/过期、认证过滤器、
-Trusted User Context、错误响应与日志、Bootstrap 幂等、两份 Migration 与实际测试结果。
-不实现 Account、Category Bootstrap 或后续业务能力；正式设计基线不修改。
+重点 Review：账户初始化与并发冲突映射、Trusted User Scope、金额精度和北京时间、
+V3/V4 约束、固定分类来源、用户 Bootstrap 与分类准备的事务衔接及幂等。
+完成 Phase 2 后停止；不实现 Tag、Transaction、Idempotency、Adjustment、Ledger 或 Statistics。

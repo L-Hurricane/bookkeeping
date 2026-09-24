@@ -13,6 +13,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
+@org.springframework.core.annotation.Order(0)
 @RestControllerAdvice(assignableTypes = AuthenticationController.class)
 public class AuthenticationExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(AuthenticationExceptionHandler.class);

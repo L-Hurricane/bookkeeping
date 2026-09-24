@@ -1,2 +1,2 @@
-/** category feature boundary; business implementation is deferred beyond Phase 0. */
+/** User-owned fixed categories, idempotent preparation, and scoped hierarchy queries. */
 package com.limingyuan.bookkeeping.category;

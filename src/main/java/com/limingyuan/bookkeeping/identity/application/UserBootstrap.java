@@ -16,20 +16,23 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
+@org.springframework.core.annotation.Order(0)
 public class UserBootstrap implements ApplicationRunner {
     private final Environment environment;
     private final UserRepository users;
     private final PasswordEncoder passwords;
     private final Clock clock;
     private final TransactionTemplate transaction;
+    private final java.util.List<UserPreparation> preparations;
 
     public UserBootstrap(Environment environment, UserRepository users, PasswordEncoder passwords,
-            Clock clock, PlatformTransactionManager transactionManager) {
+            Clock clock, PlatformTransactionManager transactionManager, java.util.List<UserPreparation> preparations) {
         this.environment = environment;
         this.users = users;
         this.passwords = passwords;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.preparations = java.util.List.copyOf(preparations);
     }
 
     @Override
@@ -53,10 +56,17 @@ public class UserBootstrap implements ApplicationRunner {
                     var now = LocalDateTime.ofInstant(clock.instant().truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC);
                     users.saveAndFlush(new UserEntity(normalized, passwords.encode(password), now));
                 }
+                long userId = users.findByUsername(normalized).orElseThrow().getId();
+                preparations.forEach(preparation -> preparation.prepare(userId));
             });
         } catch (DataIntegrityViolationException ex) {
             // A concurrent bootstrap may have won the username unique constraint. Never overwrite it.
             if (!users.existsByUsername(normalized)) throw new IllegalStateException("User bootstrap could not complete");
+            // Retry preparation in a fresh transaction; never swallow preparation constraint failures.
+            transaction.executeWithoutResult(status -> {
+                long userId = users.findByUsername(normalized).orElseThrow().getId();
+                preparations.forEach(preparation -> preparation.prepare(userId));
+            });
         }
     }
 }

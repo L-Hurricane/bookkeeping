@@ -1,2 +1,2 @@
-/** common feature boundary; business implementation is deferred beyond Phase 0. */
+/** Shared technical primitives, exact money parsing, and API infrastructure. */
 package com.limingyuan.bookkeeping.common;
