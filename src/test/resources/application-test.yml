@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:mysql://localhost:3306/bookkeeping_test}
+    username: ${TEST_DB_USERNAME}
+    password: ${TEST_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 2
