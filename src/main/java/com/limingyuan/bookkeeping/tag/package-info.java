@@ -1,2 +1,2 @@
-/** tag feature boundary; business implementation is deferred beyond Phase 0. */
+/** User-owned tags with an independent lifecycle and user-scoped name uniqueness. */
 package com.limingyuan.bookkeeping.tag;

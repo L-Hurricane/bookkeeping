@@ -1,7 +1,7 @@
-# Bookkeeping v0.1 — Phase 2 · Account / Category
+# Bookkeeping v0.1 — Phase 3 · Tag
 
-当前包含工程骨架、认证、账户初始化和固定分类查询。
-正式基线位于 `docs/`；Human Gate 2 已通过。本轮仅到 Phase 2，不进入 Tag / Transaction。
+当前包含工程骨架、认证、账户初始化、固定分类查询和独立 Tag。
+正式基线位于 `docs/`；Phase 2 已通过人工 Review。本轮仅到 Phase 3，不进入 Transaction。
 
 ## 工程基线
 
@@ -140,6 +140,15 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 发现非基线分类或类型冲突则失败并回滚，不擅自删除/改写既有分类。
 不提供分类管理接口。`bookable` 派生，不作为数据库字段。
 
+## Tag API
+
+`GET /api/v1/tags?type=INCOME|EXPENSE` 和 `POST /api/v1/tags` 要求 Bearer Token。
+归属只取自 `TrustedUserContext`。`type` 必填，只能是 `INCOME` 或 `EXPENSE`。
+名称只做 Trim，不改大小写、不做 Unicode compatibility normalization；Trim 后为空或超过 100 个字符返回 `400`。
+同一用户的名称全局唯一，收入和支出之间也不能重名，唯一性由 `UNIQUE(user_id, name)` 和 `utf8mb4_0900_ai_ci` 保证。
+重复或并发重复创建返回 `409 TAG_NAME_CONFLICT`。创建成功后 Tag 独立存在，不依赖 Transaction。
+不提供改名、删除或合并。
+
 ## 测试与打包
 
 测试自动激活 `test` profile，使用相同 MySQL、Flyway、JPA、Security 配置链路。
@@ -164,7 +173,8 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 用户上下文隔离、当前会话注销和日志敏感信息检查，并保留 Context / Health 回归。
 新增测试覆盖正/零/负余额、精确容量、创建时间、并发初始化、用户隔离、完整固定分类树、
 分类唯一约束、幂等准备、旧用户补齐和准备失败回滚。
-API 测试仅清理自己创建的随机测试用户及其账户/分类/会话；迁移测试只清空独立的 migration 测试库。
+新增测试覆盖 Tag 创建与按类型查询、跨类型重名、Collation 唯一性、跨用户同名、并发创建和未认证请求。
+API 测试仅清理自己创建的随机测试用户及其账户/分类/标签/会话；迁移测试只清空独立的 migration 测试库。
 未设置凭证或 MySQL 未就绪时测试应失败，不自动跳过、不使用 H2。
 测试中的身份探测 Controller 仅在 test source 中，不会打包，也不是正式 API。
 
@@ -183,6 +193,7 @@ java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
 - `V3__create_accounts.sql`：accounts、`UNIQUE(user_id)`、复合归属唯一键及 User FK。
 - `V4__create_categories.sql`：categories、父分类 FK、用户范围名称唯一键及类型查询索引。
   `parent_scope_id` 是非空生成列 `COALESCE(parent_id, 0)`，避免根分类的 NULL 绕过唯一约束。
+- `V5__create_tags.sql`：tags、`UNIQUE(user_id, name)`、User FK 及按用户和类型查询的索引。
 
 Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自动接管非空库；
 运行时 `clean-disabled=true` 禁止清库；Hibernate 仅 `validate`，SQL init 禁用。
@@ -190,11 +201,10 @@ Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自
 
 identity 按 api / application / persistence / security 分包，公开可信用户上下文。
 common 仅包含 Request ID 与错误响应等技术能力，不依赖 identity。
-account / category 各自保留模块内部的 API、应用服务与持久化边界；
-tag / transaction / adjustment / ledger / statistics 仍只有骨架。
+account / category / tag 各自保留模块内部的 API、应用服务与持久化边界；
+transaction / adjustment / ledger / statistics 仍只有骨架。
 
-## Phase 2 Review / Stop
+## Phase 3 Review / Stop
 
-重点 Review：账户初始化与并发冲突映射、Trusted User Scope、金额精度和北京时间、
-V3/V4 约束、固定分类来源、用户 Bootstrap 与分类准备的事务衔接及幂等。
-完成 Phase 2 后停止；不实现 Tag、Transaction、Idempotency、Adjustment、Ledger 或 Statistics。
+重点 Review：`UNIQUE(user_id, name)`、创建与重复冲突、Trusted User Context、并发重复创建。
+完成 Phase 3 后停止；不实现 Transaction、Transaction-Tag、Idempotency、Adjustment、Ledger 或 Statistics。

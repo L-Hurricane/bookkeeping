@@ -47,7 +47,7 @@ class BootstrapIntegrationTest {
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(entityManagerFactory.isOpen()).isTrue();
         assertThat(entityManagerFactory.getMetamodel().getEntities()).extracting(jakarta.persistence.metamodel.EntityType::getName)
-                .containsExactlyInAnyOrder("UserEntity", "SessionEntity", "AccountEntity", "CategoryEntity");
+                .containsExactlyInAnyOrder("UserEntity", "SessionEntity", "AccountEntity", "CategoryEntity", "TagEntity");
     }
 
     @Test
@@ -72,12 +72,12 @@ class BootstrapIntegrationTest {
         assertThat(flyway.getConfiguration().isBaselineOnMigrate()).isFalse();
         assertThat(flyway.getConfiguration().isCleanDisabled()).isTrue();
         flyway.validate();
-        assertThat(flyway.info().applied()).hasSize(4);
+        assertThat(flyway.info().applied()).hasSize(5);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbcClient.sql("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE()
-                """).query(String.class).list()).containsExactlyInAnyOrder("flyway_schema_history", "users", "sessions", "accounts", "categories");
+                """).query(String.class).list()).containsExactlyInAnyOrder("flyway_schema_history", "users", "sessions", "accounts", "categories", "tags");
     }
 
     @Test
