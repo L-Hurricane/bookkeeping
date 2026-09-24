@@ -5,3 +5,8 @@ spring:
     password: ${TEST_DB_PASSWORD}
     hikari:
       maximum-pool-size: 2
+
+bookkeeping:
+  identity:
+    bootstrap:
+      enabled: false

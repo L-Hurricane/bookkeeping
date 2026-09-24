@@ -1,10 +1,9 @@
-# Phase 0 migration directory
+# Identity migrations (Phase 1)
 
-Intentionally contains no migrations. Flyway can initialize and validate an empty
-MySQL schema without a marker migration; only its `flyway_schema_history` table
-may be created. V1 remains available for the Phase 1 users migration.
+V1 creates users; V2 creates sessions with its user foreign key, unique token hash,
+and lookup/expiry indexes. No credentials or fixture data are included.
 
-Automatic baselining and Flyway clean are disabled. Use a new, empty database;
-an existing non-empty schema must not be silently adopted. Hibernate validates
-the schema and never creates or updates it. Business migrations require the
-corresponding implementation phase and human review gate.
+Use a new empty schema or the existing Phase 0 Flyway history. Automatic baselining
+and runtime clean remain disabled; Hibernate validates and never generates schema.
+Only the disposable bookkeeping_migration_test schema permits clean in its test.
+No account, category, tag, transaction, adjustment or idempotency tables exist yet.

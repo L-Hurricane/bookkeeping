@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print = org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint.NONE)
 @ActiveProfiles("test")
 class BootstrapIntegrationTest {
 
@@ -42,11 +42,12 @@ class BootstrapIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void contextStartsWithTestProfileAndNoBusinessEntities() {
+    void contextStartsWithTestProfileAndIdentityEntities() {
         assertThat(environment.getActiveProfiles()).containsExactly("test");
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(entityManagerFactory.isOpen()).isTrue();
-        assertThat(entityManagerFactory.getMetamodel().getEntities()).isEmpty();
+        assertThat(entityManagerFactory.getMetamodel().getEntities()).extracting(jakarta.persistence.metamodel.EntityType::getName)
+                .containsExactlyInAnyOrder("UserEntity", "SessionEntity");
     }
 
     @Test
@@ -66,16 +67,17 @@ class BootstrapIntegrationTest {
     }
 
     @Test
-    void flywayInitializesWithoutBusinessMigrations() {
+    void flywayLoadsOnlyIdentityMigrations() {
         assertThat(flyway.getConfiguration().getDataSource()).isSameAs(dataSource);
         assertThat(flyway.getConfiguration().isBaselineOnMigrate()).isFalse();
         assertThat(flyway.getConfiguration().isCleanDisabled()).isTrue();
         flyway.validate();
-        assertThat(flyway.info().all()).isEmpty();
+        assertThat(flyway.info().applied()).hasSize(2);
+        assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbcClient.sql("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE()
-                """).query(String.class).list()).containsExactly("flyway_schema_history");
+                """).query(String.class).list()).containsExactlyInAnyOrder("flyway_schema_history", "users", "sessions");
     }
 
     @Test
@@ -87,9 +89,9 @@ class BootstrapIntegrationTest {
     }
 
     @Test
-    void otherEndpointsRemainClosedDuringBootstrap() throws Exception {
+    void otherEndpointsRequireAuthentication() throws Exception {
         for (var path : new String[] {"/actuator/env", "/api/v1/accounts", "/login"}) {
-            mockMvc.perform(get(path)).andExpect(status().isForbidden());
+            mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
     }
 }

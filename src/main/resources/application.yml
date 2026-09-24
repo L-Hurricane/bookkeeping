@@ -3,6 +3,9 @@ spring:
     name: bookkeeping
   profiles:
     default: local
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -21,6 +24,14 @@ spring:
     fail-on-missing-locations: true
     baseline-on-migrate: false
     clean-disabled: true
+
+bookkeeping:
+  identity:
+    session-ttl: ${SESSION_TTL:P7D}
+    bootstrap:
+      enabled: ${BOOTSTRAP_USER_ENABLED:false}
+      username: ${BOOTSTRAP_USERNAME:}
+      password: ${BOOTSTRAP_PASSWORD:}
 
 management:
   endpoints:

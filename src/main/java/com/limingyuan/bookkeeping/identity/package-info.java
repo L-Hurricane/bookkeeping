@@ -1,2 +1,2 @@
-/** identity feature boundary; business implementation is deferred beyond Phase 0. */
+/** User bootstrap, opaque database sessions, and trusted request identity. */
 package com.limingyuan.bookkeeping.identity;

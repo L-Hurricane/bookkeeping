@@ -1,0 +1,17 @@
+package com.limingyuan.bookkeeping.identity.api;
+
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+
+/** Credentials must be JSON strings; never coerce booleans or numbers into passwords. */
+public class StrictStringDeserializer extends ValueDeserializer<String> {
+    @Override
+    public String deserialize(JsonParser parser, DeserializationContext context) {
+        if (!parser.hasToken(JsonToken.VALUE_STRING)) {
+            return context.reportInputMismatch(String.class, "Expected a JSON string");
+        }
+        return parser.getString();
+    }
+}

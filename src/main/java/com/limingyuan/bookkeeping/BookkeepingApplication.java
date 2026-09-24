@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration;
 
-// Phase 0 has no users or login. Avoid Boot's generated development credentials.
+// Authentication uses our database sessions, never Boot's generated development user.
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 public class BookkeepingApplication {
 
