@@ -1,7 +1,7 @@
-# Bookkeeping v0.1 — Phase 3 · Tag
+# Bookkeeping v0.1 — Phase 4A · Transaction Core
 
-当前包含工程骨架、认证、账户初始化、固定分类查询和独立 Tag。
-正式基线位于 `docs/`；Phase 2 已通过人工 Review。本轮仅到 Phase 3，不进入 Transaction。
+当前包含工程骨架、认证、账户、固定分类、独立 Tag，以及 Transaction 的创建、查询、修改和删除。
+正式基线位于 `docs/`。本轮不实现 Idempotency，不进入 Phase 4B。
 
 ## 工程基线
 
@@ -194,6 +194,8 @@ java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
 - `V4__create_categories.sql`：categories、父分类 FK、用户范围名称唯一键及类型查询索引。
   `parent_scope_id` 是非空生成列 `COALESCE(parent_id, 0)`，避免根分类的 NULL 绕过唯一约束。
 - `V5__create_tags.sql`：tags、`UNIQUE(user_id, name)`、User FK 及按用户和类型查询的索引。
+- `V6__create_transactions.sql`：transactions、账户/分类复合外键、`UNIQUE(account_id, first_save_order)`。
+- `V7__create_transaction_tags.sql`：transaction_tags；删除交易时级联删除关联，删除标签时限制。
 
 Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自动接管非空库；
 运行时 `clean-disabled=true` 禁止清库；Hibernate 仅 `validate`，SQL init 禁用。
@@ -201,10 +203,14 @@ Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自
 
 identity 按 api / application / persistence / security 分包，公开可信用户上下文。
 common 仅包含 Request ID 与错误响应等技术能力，不依赖 identity。
-account / category / tag 各自保留模块内部的 API、应用服务与持久化边界；
-transaction / adjustment / ledger / statistics 仍只有骨架。
+account / category / tag / transaction 各自保留模块内部的 API、应用服务与持久化边界。
+Phase 4A 已实现 Transaction 的创建、查询、修改和删除。adjustment / ledger / statistics 仍只有骨架。
 
-## Phase 3 Review / Stop
+API JSON 使用 `spring.jackson.default-property-inclusion: non_null`。
+v0.1 响应统一省略 null 字段，例如未填写的交易名称和备注不会出现在 JSON 中。
+这是序列化策略，不改变业务字段是否存在。
 
-重点 Review：`UNIQUE(user_id, name)`、创建与重复冲突、Trusted User Context、并发重复创建。
-完成 Phase 3 后停止；不实现 Transaction、Transaction-Tag、Idempotency、Adjustment、Ledger 或 Statistics。
+## Phase 4A Review / Stop
+
+重点 Review：账户悲观锁、同一 MySQL 事务中的 First Save Order 与标签关联、编辑原子性、业务时间与排序。
+完成 Phase 4A 后停止；不实现 Idempotency、BalanceAdjustment、Ledger 或 Statistics。

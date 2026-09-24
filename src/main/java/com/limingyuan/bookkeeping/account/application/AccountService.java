@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -54,6 +55,39 @@ public class AccountService {
     private ApiFailure alreadyInitialized() {
         return new ApiFailure(409, "ACCOUNT_ALREADY_INITIALIZED", "资金账户已经初始化");
     }
+    public record LockedAccount(long id, LocalDateTime createdTime) { }
+
+    /** Account-row lock for a balance-changing write. Caller owns the MySQL transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public LockedAccount lockForWrite(long accountId) {
+        var account = locked(accountId);
+        return new LockedAccount(account.getId(), account.getCreatedTime());
+    }
+
+    /** Lock, then allocate the next immutable account-scoped order. Create only. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Allocation allocateFirstSaveOrder(long accountId) {
+        var account = locked(accountId);
+        var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        long order = account.allocateNextFirstSaveOrder(now);
+        accounts.saveAndFlush(account);
+        return new Allocation(account.getId(), account.getCreatedTime(), order);
+    }
+
+    public record Allocation(long accountId, LocalDateTime createdTime, long firstSaveOrder) { }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireOwned(long accountId) {
+        if (!accounts.existsByIdAndUserId(accountId, context.userId())) {
+            throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在");
+        }
+    }
+
+    private AccountEntity locked(long accountId) {
+        return accounts.lockByIdAndUserId(accountId, context.userId())
+                .orElseThrow(() -> new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在"));
+    }
+
     private AccountView view(AccountEntity account) {
         String balance = Money.format(account.getOpeningBalance());
         // Phase 2 has no transaction or adjustment facts to aggregate.

@@ -33,4 +33,11 @@ public class AccountEntity {
     public LocalDateTime getCreatedTime() { return createdTime; }
     public long getLastFirstSaveOrder() { return lastFirstSaveOrder; }
     public LocalDateTime getUpdatedAtUtc() { return updatedAtUtc; }
+
+    /** Next account-scoped order. Call only while this row is locked in the current transaction. */
+    public long allocateNextFirstSaveOrder(LocalDateTime updatedAtUtc) {
+        this.lastFirstSaveOrder++;
+        this.updatedAtUtc = updatedAtUtc;
+        return this.lastFirstSaveOrder;
+    }
 }

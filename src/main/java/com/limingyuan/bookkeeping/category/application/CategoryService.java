@@ -7,6 +7,7 @@ import com.limingyuan.bookkeeping.identity.TrustedUserContext;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -28,5 +29,30 @@ public class CategoryService {
                     .map(c -> new CategoryView(c.getId(), c.getName(), c.getType(), true, List.of())).toList();
             return new CategoryView(root.getId(), root.getName(), root.getType(), children.isEmpty(), children);
         }).toList();
+    }
+
+    public record BookableCategory(long id, String name) { }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BookableCategory requireBookable(long categoryId, String transactionType) {
+        var category = owned(categoryId);
+        CategoryType expected = CategoryType.valueOf(transactionType);
+        if (category.getType() != expected) {
+            throw new ApiFailure(409, "CATEGORY_TYPE_MISMATCH", "分类类型与交易类型不一致");
+        }
+        if (categories.existsByUserIdAndParentId(context.userId(), category.getId())) {
+            throw new ApiFailure(409, "CATEGORY_NOT_BOOKABLE", "该分类不能直接记账");
+        }
+        return new BookableCategory(category.getId(), category.getName());
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void requireVisible(long categoryId) {
+        owned(categoryId);
+    }
+
+    private CategoryEntity owned(long categoryId) {
+        return categories.findByIdAndUserId(categoryId, context.userId())
+                .orElseThrow(() -> new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在"));
     }
 }

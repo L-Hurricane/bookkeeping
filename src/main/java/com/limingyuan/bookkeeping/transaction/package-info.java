@@ -1,2 +1,2 @@
-/** transaction feature boundary; business implementation is deferred beyond Phase 0. */
+/** Income and expense transactions, account lock, and first-save order. */
 package com.limingyuan.bookkeeping.transaction;

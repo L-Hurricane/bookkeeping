@@ -17,7 +17,9 @@ public class CommonExceptionHandler {
 
     @ExceptionHandler(ApiFailure.class)
     ResponseEntity<ApiErrors.ErrorResponse> failure(ApiFailure ex, HttpServletRequest request) {
-        return response(request, ex.status(), ex.code(), ex.getMessage());
+        var details = ex.details().isEmpty() ? null : ex.details();
+        return ResponseEntity.status(ex.status()).header("Cache-Control", "no-store")
+                .body(errors.body(request, ex.code(), ex.getMessage(), details));
     }
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
             MissingServletRequestParameterException.class})
