@@ -1,7 +1,7 @@
 {
   "pages": [
-    "pages/login/index",
     "pages/bootstrap/index",
+    "pages/login/index",
     "pages/account-init/index",
     "pages/account-home/index"
   ],

@@ -1,5 +1,6 @@
 import { ApiError } from "../../http/client";
-import { saveSession } from "../../session/session";
+import { routeLoginShow } from "../../navigation/startup";
+import { restoreSession, saveSession } from "../../session/session";
 import { authApi, authNavigation } from "../../services/runtime";
 import { wechatStorage } from "../../storage/wechat-storage";
 
@@ -9,6 +10,12 @@ Page({
     password: "",
     submitting: false,
     errorMessage: "",
+  },
+
+  onShow() {
+    if (routeLoginShow(restoreSession(wechatStorage, new Date()) !== null) === "bootstrap") {
+      authNavigation.enterAuthenticatedHome();
+    }
   },
 
   onUsernameInput(event: WechatMiniprogram.Input) {
