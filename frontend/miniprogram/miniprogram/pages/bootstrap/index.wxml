@@ -1,4 +1,6 @@
 <view class="page">
   <text class="title">{{title}}</text>
   <text class="status">{{status}}</text>
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  <button class="logout" disabled="{{submitting}}" bindtap="onLogout">退出登录</button>
 </view>

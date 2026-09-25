@@ -5,5 +5,13 @@
     "moduleResolution": "Bundler",
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts", "miniprogram/config/**/*.ts"]
+  "include": [
+    "tests/**/*.ts",
+    "miniprogram/config/**/*.ts",
+    "miniprogram/session/**/*.ts",
+    "miniprogram/storage/key-value.ts",
+    "miniprogram/http/client.ts",
+    "miniprogram/navigation/auth-navigation.ts",
+    "miniprogram/services/auth.ts"
+  ]
 }

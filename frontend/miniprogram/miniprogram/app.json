@@ -1,5 +1,5 @@
 {
-  "pages": ["pages/bootstrap/index"],
+  "pages": ["pages/login/index", "pages/bootstrap/index"],
   "window": {
     "navigationBarTitleText": "个人记账",
     "navigationBarBackgroundColor": "#ffffff",
