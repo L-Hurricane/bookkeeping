@@ -33,6 +33,9 @@ bookkeeping:
       enabled: ${BOOTSTRAP_USER_ENABLED:false}
       username: ${BOOTSTRAP_USERNAME:}
       password: ${BOOTSTRAP_PASSWORD:}
+  acceptance-data:
+    enabled: ${ACCEPTANCE_DATA_ENABLED:false}
+    action: ${ACCEPTANCE_DATA_ACTION:}
 
 management:
   endpoints:
