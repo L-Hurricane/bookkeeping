@@ -1,7 +1,7 @@
-# Bookkeeping v0.1 — Phase 4A · Transaction Core
+# Bookkeeping v0.1
 
-当前包含工程骨架、认证、账户、固定分类、独立 Tag，以及 Transaction 的创建、查询、修改和删除。
-正式基线位于 `docs/`。本轮不实现 Idempotency，不进入 Phase 4B。
+当前后端包含认证、单账户、固定分类、独立标签、普通交易、交易幂等、当前余额、余额调整、月度流水，以及月度 / 分类 / 标签统计。
+正式基线位于 `docs/`。不包含微信小程序，也不包含 v0.2 功能。
 
 ## 工程基线
 
@@ -127,8 +127,8 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 
 账户的 `createdTime` 由初始化时的时钟转换为北京时间，精确到秒并返回 `+08:00`；
 `updated_at_utc` 使用 UTC 微秒。初始化请求不能指定名称、币种、归属、时间或计数器。
-本阶段没有 Transaction / BalanceAdjustment，因此 `currentBalance = openingBalance`。
-起始余额不提供修改或删除接口；不实现多账户、转账、完整余额聚合或账户管理。
+`currentBalance` 在查询时由起始余额、全部普通交易和余额调整派生，不单独保存。
+起始余额不提供修改或删除接口；不实现多账户、转账或账户管理。
 
 固定分类只来自 `docs/product/v0.1-product-requirements.md` §8.3 和 `v0.1-change-001.md` §2：
 
@@ -219,7 +219,7 @@ Phase 4B 为 Create Transaction 增加 `Idempotency-Key`。相同用户、`CREAT
 相同 Key 的不同请求返回 `409 IDEMPOTENCY_CONFLICT`。交易删除后原 Idempotency Record 保留；同一 Key 与同一原始请求返回 `404 RESOURCE_NOT_FOUND` 和 `Idempotent-Replay: true`，不重新执行 Create。
 Replay 仍先获取 Account 悲观锁。
 v0.1 的 `UNIQUE(accounts.user_id)` 使每个用户只有一个账户，Create 又在 Account Lock 之后处理幂等，因此同一用户的正常 API 请求已由 Account Lock 串行化。`idempotency_records` 唯一约束冲突后的恢复分支，当前不能通过合法的多账户场景触发。现有恢复代码保持不变。将来解除单账户约束时，必须重新 Review 该分支并增加真实并发测试。
-不实现 Ledger 或 Statistics。
+不实现 Ledger 或 Statistics。该句只描述当时的阶段边界；后续 Phase 6 / 7 已实现这两类查询。
 
 ## Phase 5 · BalanceAdjustment
 
@@ -228,3 +228,23 @@ v0.1 的 `UNIQUE(accounts.user_id)` 使每个用户只有一个账户，Create �
 ## Phase 6 · Ledger
 
 月度流水由普通交易和余额调整在查询时投影，不单独落表。排序为业务时间倒序、首次保存顺序倒序。当前余额与查询月份无关。流水中的收支摘要不包含余额调整。Statistics API 按同一月份和带符号金额口径查询，不单独落表。
+
+## 逻辑备份与恢复
+
+v0.1 使用单库逻辑备份。备份文件不得提交到 Git。备份可能包含用户财务数据、password hash，以及 session 等认证相关数据。真实部署时的备份存储、权限和加密按部署环境处理，本阶段不规定云存储或加密方案。不要把密码写进命令历史。下面的命令会提示输入密码。
+
+```sh
+mysqldump --single-transaction --no-tablespaces \
+  -h 127.0.0.1 -P 3306 -u "$DB_USERNAME" -p \
+  bookkeeping > bookkeeping-backup.sql
+```
+
+恢复目标必须是新建的、已确认没有业务数据、并且与当前正在运行的数据库隔离的恢复验证库。`CREATE DATABASE IF NOT EXISTS` 不会清空已有库。导入前确认目标库为空，或者确认它可以安全清空。不要把备份导入正在运行的生产库或真实数据库。Restore Drill 只在隔离库中执行。这份备份不含 `CREATE DATABASE`，导入目标由命令指定。
+
+```sh
+mysql -h 127.0.0.1 -P 3306 -u "$DB_USERNAME" -p \
+  -e "CREATE DATABASE IF NOT EXISTS bookkeeping_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+mysql -h 127.0.0.1 -P 3306 -u "$DB_USERNAME" -p bookkeeping_restore < bookkeeping-backup.sql
+```
+
+恢复后不能只检查表是否存在。当前数据量小，应做全量业务核对，至少包括各表行数，以及账户、交易、分类、标签关联、余额调整、首次保存顺序和用户归属。应用仍只 `validate`，不会在启动时重建表。数据量变大之后的校验方式不在 v0.1 本次范围内。
