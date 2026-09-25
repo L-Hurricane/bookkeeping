@@ -1,6 +1,9 @@
 <view class="page">
-  <text class="title">{{title}}</text>
-  <text class="status">{{status}}</text>
-  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
-  <button class="logout" disabled="{{submitting}}" bindtap="onLogout">退出登录</button>
+  <text class="title">个人记账</text>
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取账户</text>
+  <block wx:else>
+    <text class="error">{{errorMessage}}</text>
+    <button bindtap="onRetry">重新加载</button>
+  </block>
+  <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
 </view>

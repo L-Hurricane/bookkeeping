@@ -1,0 +1,13 @@
+<view class="page">
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取账户</text>
+  <block wx:elif="{{phase === 'ready'}}">
+    <text class="name">{{name}}</text>
+    <text class="label">当前余额</text>
+    <text class="balance">{{balanceLabel}}</text>
+  </block>
+  <block wx:else>
+    <text class="error">{{errorMessage}}</text>
+    <button bindtap="onRetry">重新加载</button>
+  </block>
+  <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
+</view>

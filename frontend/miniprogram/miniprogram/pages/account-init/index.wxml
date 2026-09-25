@@ -1,0 +1,9 @@
+<view class="page">
+  <text class="title">初始化资金账户</text>
+  <text class="label">账户</text>
+  <text class="value">微信</text>
+  <text class="label">起始余额</text>
+  <input class="field" type="text" placeholder="0.00" value="{{openingBalance}}" bindinput="onOpeningBalanceInput" />
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  <button disabled="{{submitting}}" bindtap="onSubmit">开始记账</button>
+</view>

@@ -1,5 +1,10 @@
 {
-  "pages": ["pages/login/index", "pages/bootstrap/index"],
+  "pages": [
+    "pages/login/index",
+    "pages/bootstrap/index",
+    "pages/account-init/index",
+    "pages/account-home/index"
+  ],
   "window": {
     "navigationBarTitleText": "个人记账",
     "navigationBarBackgroundColor": "#ffffff",

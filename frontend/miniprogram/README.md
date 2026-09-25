@@ -1,6 +1,6 @@
 # 个人记账 · 微信小程序
 
-Phase 0B 完成 HTTP Client、本地 Session，以及 Login / Logout。已登录后的临时页面仍是 Bootstrap。Account、Ledger 和其他业务页面还没有开始。
+Phase 0C 在登录之后查询唯一资金账户。没有账户时进入初始化页，已有账户时进入账户首页。Ledger 和其他业务页面还没有开始。
 
 设计基线：`docs/frontend/v0.1-frontend-design.md`。
 
@@ -49,15 +49,15 @@ curl --fail http://127.0.0.1:8080/actuator/health
 
 4. 用微信开发者工具导入 `frontend/miniprogram/`。
 5. 本地 Backend 是 `http://127.0.0.1:8080`。共享的 `project.config.json` 保持 `urlCheck: true`。联调时在开发者工具打开「详情 → 本地设置」，勾选「不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书」。这个选择写在本机的 `project.private.config.json`，该文件已忽略，不要提交。
-6. 编译后应进入登录页。输入已预创建的用户名和密码。成功后进入 Bootstrap，显示「个人记账 / Frontend Session Ready」，并有「退出登录」。
-7. 用错误密码登录，页面显示「用户名或密码错误」，用户名仍留在输入框中。
-8. 登录成功后点「退出登录」，回到登录页。
-9. 再次登录成功后，关闭并重新编译小程序。本地 Session 未过期时应直接进入 Bootstrap，而不是登录页。
+6. 编译后应进入登录页。输入已预创建的用户名和密码。成功后 Bootstrap 会读取账户。尚未初始化时进入「初始化资金账户」，只填写起始余额，例如 `0`、`100.00` 或 `-100.50`，然后点「开始记账」。成功后进入账户首页，账户名和当前余额来自 Backend。
+7. 已经初始化过时，登录后应直接进入账户首页，而不是再填起始余额。
+8. 用错误密码登录，页面显示「用户名或密码错误」，用户名仍留在输入框中。
+9. 在账户首页点「退出登录」，回到登录页。
+10. 再次登录成功后，关闭并重新编译小程序。本地 Session 未过期时应回到账户首页，而不是登录页。断网时 Bootstrap 应停留在错误状态并可以重新加载，不应进入初始化页。
 
 密码和 Token 不会写入源码，也不会打日志。生产 API Host 仍为空。
 
 ## 当前不做
 
-- Account 初始化与账户页
 - Ledger、Transaction、Category、Tag、Statistics、Balance Adjustment
 - Refresh Token、JWT、微信登录、注册、找回密码

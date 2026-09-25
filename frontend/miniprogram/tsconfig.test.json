@@ -12,6 +12,8 @@
     "miniprogram/storage/key-value.ts",
     "miniprogram/http/client.ts",
     "miniprogram/navigation/auth-navigation.ts",
-    "miniprogram/services/auth.ts"
+    "miniprogram/services/auth.ts",
+    "miniprogram/services/account.ts",
+    "miniprogram/account/**/*.ts"
   ]
 }
