@@ -198,6 +198,7 @@ java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
 - `V7__create_transaction_tags.sql`：transaction_tags；删除交易时级联删除关联，删除标签时限制。
 - `V8__create_idempotency_records.sql`：创建操作幂等记录，`UNIQUE(user_id, scope, operation_id)`，不引用业务资源外键。
 - `V9__create_balance_adjustments.sql`：余额调整差额，与交易共用账户内 `first_save_order` 唯一空间。
+- `V10__nullable_transaction_category.sql`：`transactions.category_id` 改为可空。空值表示未分类，不新增分类行。已有分类外键保留。
 
 Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自动接管非空库；
 运行时 `clean-disabled=true` 禁止清库；Hibernate 仅 `validate`，SQL init 禁用。
@@ -207,6 +208,7 @@ identity 按 api / application / persistence / security 分包，公开可信用
 common 仅包含 Request ID 与错误响应等技术能力，不依赖 identity。
 account / category / tag / transaction / adjustment 各自保留模块内部的 API、应用服务与持久化边界。
 Phase 4A 已实现 Transaction 的创建、查询、修改和删除。Phase 6 已实现按北京时间自然月查询的流水。Phase 7 已实现月度、分类和标签统计。
+v0.2 起交易分类可空。未分类交易出现在分类统计顶层的 `kind=UNCATEGORIZED` 分组，并用 `uncategorizedOnly=true` 下钻。`false` 或省略该参数都不启用未分类过滤。子分类没有 `kind`，`categoryId` 为非空分类编号。名称和分类都为空时不生成 displayName。
 
 API JSON 使用 `spring.jackson.default-property-inclusion: non_null`。
 v0.1 响应统一省略 null 字段，例如未填写的交易名称和备注不会出现在 JSON 中。

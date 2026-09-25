@@ -61,7 +61,7 @@ public class LedgerService {
                     SELECT 'TRANSACTION' AS kind, t.id, t.type AS transaction_type, t.amount, t.name,
                            t.category_id, c.name AS category_name, t.business_time, t.first_save_order
                     FROM transactions t
-                    JOIN categories c ON c.id = t.category_id
+                    LEFT JOIN categories c ON c.id = t.category_id
                     WHERE t.account_id = :accountId AND t.user_id = :userId
                       AND t.business_time >= :start AND t.business_time < :end
                     UNION ALL
@@ -86,7 +86,8 @@ public class LedgerService {
                         TIME.format(row.businessTime().atZone(BEIJING))));
             } else {
                 items.add(new LedgerItem(row.kind(), row.id(), row.transactionType(), displayName(row.name(), row.categoryName()),
-                        Money.format(row.amount()), new CategoryRef(row.categoryId(), row.categoryName()),
+                        Money.format(row.amount()),
+                        row.categoryId() == null ? null : new CategoryRef(row.categoryId(), row.categoryName()),
                         tags.getOrDefault(row.id(), List.of()), TIME.format(row.businessTime().atZone(BEIJING))));
             }
         }
@@ -129,7 +130,8 @@ public class LedgerService {
     }
 
     private static String displayName(String name, String categoryName) {
-        return name == null || name.isBlank() ? categoryName : name;
+        if (name != null && !name.isBlank()) return name;
+        return categoryName == null || categoryName.isBlank() ? null : categoryName;
     }
 
     private static YearMonth month(String raw) {

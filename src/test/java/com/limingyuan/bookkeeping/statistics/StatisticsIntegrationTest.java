@@ -238,6 +238,113 @@ class StatisticsIntegrationTest {
         assertThat(monthly("2026-10").path("transactionCount").asInt()).isEqualTo(1);
     }
 
+    @Test void uncategorizedGroupCoversMonthlyFactsWithoutBecomingACategory() throws Exception {
+        long transit = categoryId("EXPENSE", "公共交通");
+        long dining = transact("EXPENSE", "60.00", breakfast, "2026-09-10T08:00:00+08:00", List.of());
+        var open = mvc.perform(post("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EXPENSE\",\"amount\":\"20.00\",\"categoryId\":null,\"tagIds\":[" + takeout
+                                + "],\"businessTime\":\"2026-09-11T12:00:00+08:00\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        long uncategorized = json.readTree(open.getResponse().getContentAsString()).path("id").asLong();
+        long ride = transact("EXPENSE", "20.00", transit, "2026-09-12T08:00:00+08:00", List.of());
+        var summary = monthly("2026-09");
+        assertThat(summary.path("transactionCount").asInt()).isEqualTo(3);
+        assertThat(summary.path("netExpense").asText()).isEqualTo("100.00");
+        var items = categories("2026-09", "EXPENSE").path("items");
+        assertThat(items).extracting(item -> item.path("categoryName").asText()).containsExactly("餐饮", "交通", "未分类");
+        assertThat(items.get(0).path("kind").asText()).isEqualTo("CATEGORY");
+        assertThat(items.get(0).path("amount").asText()).isEqualTo("60.00");
+        assertThat(items.get(1).path("amount").asText()).isEqualTo("20.00");
+        assertThat(items.get(2).path("kind").asText()).isEqualTo("UNCATEGORIZED");
+        assertThat(items.get(2).path("categoryId").isMissingNode()).isTrue();
+        assertThat(items.get(2).path("amount").asText()).isEqualTo("20.00");
+        assertThat(items.get(2).path("transactionCount").asInt()).isEqualTo(1);
+        assertThat(items.get(2).path("children")).isEmpty();
+        var covered = java.math.BigDecimal.ZERO;
+        for (var item : items) covered = covered.add(new java.math.BigDecimal(item.path("amount").asText()));
+        assertThat(covered).isEqualByComparingTo(summary.path("netExpense").asText());
+        assertThat(tags("2026-09", "EXPENSE").path("items")).extracting(item -> item.path("tagName").asText()).contains("外卖");
+        assertThat(tags("2026-09", "EXPENSE").path("items").get(0).path("amount").asText()).isEqualTo("20.00");
+        var ledger = json.readTree(mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        var ids = new ArrayList<Long>();
+        ledger.path("items").forEach(item -> { if ("TRANSACTION".equals(item.path("kind").asText())) ids.add(item.path("id").asLong()); });
+        assertThat(ids).containsExactlyInAnyOrder(dining, uncategorized, ride);
+        var openEntry = ledger.path("items").findValues("id").stream().filter(node -> node.asLong() == uncategorized).findFirst();
+        assertThat(openEntry).isPresent();
+        for (var item : ledger.path("items")) {
+            if (item.path("id").asLong() == uncategorized) assertThat(item.has("category")).isFalse();
+        }
+        assertThat(ledger.path("currentBalance").asText()).isEqualTo("0.00");
+        var drill = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09").param("uncategorizedOnly", "true").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(drill.getResponse().getContentAsString()).path("items"))
+                .extracting(node -> node.path("id").asLong()).containsExactly(uncategorized);
+        var real = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09").param("categoryId", String.valueOf(breakfast)))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(real.getResponse().getContentAsString()).path("items"))
+                .extracting(node -> node.path("id").asLong()).containsExactly(dining);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM categories WHERE name = '未分类'").query(Long.class).single()).isZero();
+    }
+
+    @Test void categoryCanMoveToUncategorizedAndBackWithoutChangingIdentity() throws Exception {
+        long id = transact("EXPENSE", "30.00", lunch, "2026-09-21T12:00:00+08:00", List.of());
+        long order = jdbc.sql("SELECT first_save_order FROM transactions WHERE id = :id").param("id", id).query(Long.class).single();
+        assertThat(monthly("2026-09").path("netExpense").asText()).isEqualTo("30.00");
+        var initial = categories("2026-09", "EXPENSE").path("items");
+        assertThat(initial).extracting(item -> item.path("categoryName").asText()).containsExactly("餐饮");
+        assertThat(initial.get(0).path("amount").asText()).isEqualTo("30.00");
+        assertThat(initial.get(0).path("transactionCount").asInt()).isEqualTo(1);
+        assertThat(initial.get(0).path("children").get(0).path("categoryName").asText()).isEqualTo("午餐");
+        assertThat(initial.get(0).path("children").get(0).path("amount").asText()).isEqualTo("30.00");
+        assertThat(initial.get(0).path("children").get(0).has("kind")).isFalse();
+        assertThat(initial).extracting(item -> item.path("kind").asText()).doesNotContain("UNCATEGORIZED");
+        assertThat(ledgerBalance("2026-09")).isEqualTo("70.00");
+
+        editCategory(id, null);
+        assertThat(jdbc.sql("SELECT type, first_save_order FROM transactions WHERE id = :id").param("id", id)
+                .query((rs, row) -> rs.getString(1) + " " + rs.getLong(2)).single()).isEqualTo("EXPENSE " + order);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(1);
+        assertThat(monthly("2026-09").path("netExpense").asText()).isEqualTo("30.00");
+        assertThat(ledgerBalance("2026-09")).isEqualTo("70.00");
+        var cleared = categories("2026-09", "EXPENSE").path("items");
+        assertThat(cleared).extracting(item -> item.path("categoryName").asText()).containsExactly("未分类");
+        assertThat(cleared.get(0).path("kind").asText()).isEqualTo("UNCATEGORIZED");
+        assertThat(cleared.get(0).path("amount").asText()).isEqualTo("30.00");
+        assertThat(cleared.get(0).path("transactionCount").asInt()).isEqualTo(1);
+
+        editCategory(id, lunch);
+        assertThat(jdbc.sql("SELECT first_save_order FROM transactions WHERE id = :id").param("id", id).query(Long.class).single()).isEqualTo(order);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE id = :id").param("id", id).query(Long.class).single()).isEqualTo(1);
+        assertThat(monthly("2026-09").path("netExpense").asText()).isEqualTo("30.00");
+        assertThat(ledgerBalance("2026-09")).isEqualTo("70.00");
+        var restored = categories("2026-09", "EXPENSE").path("items");
+        assertThat(restored).extracting(item -> item.path("categoryName").asText()).containsExactly("餐饮");
+        assertThat(restored.get(0).path("kind").asText()).isEqualTo("CATEGORY");
+        assertThat(restored.get(0).path("amount").asText()).isEqualTo("30.00");
+        assertThat(restored.get(0).path("transactionCount").asInt()).isEqualTo(1);
+        assertThat(restored.get(0).path("children").get(0).path("categoryName").asText()).isEqualTo("午餐");
+        assertThat(restored.get(0).path("children").get(0).path("amount").asText()).isEqualTo("30.00");
+        assertThat(restored).extracting(item -> item.path("kind").asText()).doesNotContain("UNCATEGORIZED");
+    }
+
+    private void editCategory(long id, Long categoryId) throws Exception {
+        String category = categoryId == null ? "null" : categoryId.toString();
+        mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"30.00\",\"categoryId\":" + category + ",\"tagIds\":[],\"businessTime\":\"2026-09-21T12:00:00+08:00\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(id));
+    }
+
+    private String ledgerBalance(String month) throws Exception {
+        var ledger = json.readTree(mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", month)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        return ledger.path("currentBalance").asText();
+    }
+
     private JsonNode monthly(String month) throws Exception {
         return read("/statistics/monthly", month, null);
     }

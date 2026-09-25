@@ -72,7 +72,7 @@ class BootstrapIntegrationTest {
         assertThat(flyway.getConfiguration().isBaselineOnMigrate()).isFalse();
         assertThat(flyway.getConfiguration().isCleanDisabled()).isTrue();
         flyway.validate();
-        assertThat(flyway.info().applied()).hasSize(9);
+        assertThat(flyway.info().applied()).hasSize(10);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbcClient.sql("""
                 SELECT table_name FROM information_schema.tables

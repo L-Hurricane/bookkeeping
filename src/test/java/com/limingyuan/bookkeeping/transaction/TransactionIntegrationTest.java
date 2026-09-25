@@ -1,5 +1,6 @@
 package com.limingyuan.bookkeeping.transaction;
 
+import com.limingyuan.bookkeeping.common.CanonicalEncoding;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
@@ -389,6 +390,120 @@ class TransactionIntegrationTest {
                         .content(body("EXPENSE", "7", null, otherCategory, List.of(), "2026-09-14T09:00:00+08:00", null)))
                 .andExpect(status().isCreated()).andReturn();
         assertThat(json.readTree(foreign.getResponse().getContentAsString()).path("id").asLong()).isNotEqualTo(id);
+    }
+
+    @Test void categoryMayBeAbsentAndCanBeClearedOrAssignedLater() throws Exception {
+        String omitted = "{\"type\":\"EXPENSE\",\"amount\":\"30.00\",\"name\":\"午餐\",\"tagIds\":[" + expenseTag
+                + "],\"businessTime\":\"2026-09-18T12:00:00+08:00\"}";
+        var created = create(omitted, token);
+        long id = created.path("id").asLong();
+        assertThat(created.has("category")).isFalse();
+        assertThat(created.path("displayName").asText()).isEqualTo("午餐");
+        assertThat(created.path("tags").get(0).path("id").asLong()).isEqualTo(expenseTag);
+        assertThat(jdbc.sql("SELECT category_id FROM transactions WHERE id = :id").param("id", id).query(Long.class).optional()).isEmpty();
+        String explicitNull = "{\"type\":\"EXPENSE\",\"amount\":\"8.00\",\"tagIds\":[],\"businessTime\":\"2026-09-18T13:00:00+08:00\",\"categoryId\":null}";
+        var nameless = create(explicitNull, token);
+        assertThat(nameless.has("category")).isFalse();
+        assertThat(nameless.has("displayName")).isFalse();
+        assertThat(nameless.has("name")).isFalse();
+        var listed = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09")).andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(listed.getResponse().getContentAsString()).path("items"))
+                .extracting(node -> node.path("id").asLong()).contains(id, nameless.path("id").asLong());
+        var onlyNull = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09").param("uncategorizedOnly", "true")).andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(onlyNull.getResponse().getContentAsString()).path("items"))
+                .extracting(node -> node.path("id").asLong()).containsExactly(nameless.path("id").asLong(), id);
+        expect(404, body("EXPENSE", "1", null, 999999L, List.of(), "2026-09-18T14:00:00+08:00", null), token, "RESOURCE_NOT_FOUND");
+        expect(409, body("EXPENSE", "1", null, incomeCategory, List.of(), "2026-09-18T14:00:00+08:00", null), token, "CATEGORY_TYPE_MISMATCH");
+        expect(409, body("EXPENSE", "1", null, groupCategory, List.of(), "2026-09-18T14:00:00+08:00", null), token, "CATEGORY_NOT_BOOKABLE");
+        var other = newUser("foreign-category");
+        long foreignCategory = categoryId("EXPENSE", "早餐", other.token());
+        expect(404, body("EXPENSE", "1", null, foreignCategory, List.of(), "2026-09-18T14:00:00+08:00", null), token, "RESOURCE_NOT_FOUND");
+        long order = orderOf(id);
+        String savedAt = jdbc.sql("SELECT first_saved_at_utc FROM transactions WHERE id = :id").param("id", id).query(String.class).single();
+        var assigned = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(edit("30.00", "午餐", expenseCategory, List.of(expenseTag), "2026-09-18T12:00:00+08:00", null)))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(assigned.getResponse().getContentAsString()).path("category").path("id").asLong()).isEqualTo(expenseCategory);
+        var cleared = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"30.00\",\"name\":\"午餐\",\"categoryId\":null,\"tagIds\":[" + expenseTag
+                                + "],\"businessTime\":\"2026-09-18T12:00:00+08:00\"}"))
+                .andExpect(status().isOk()).andReturn();
+        var clearedBody = json.readTree(cleared.getResponse().getContentAsString());
+        assertThat(clearedBody.path("id").asLong()).isEqualTo(id);
+        assertThat(clearedBody.path("type").asText()).isEqualTo("EXPENSE");
+        assertThat(clearedBody.has("category")).isFalse();
+        assertThat(clearedBody.path("tags").get(0).path("id").asLong()).isEqualTo(expenseTag);
+        var keptNull = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + nameless.path("id").asLong())
+                        .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"8.00\",\"categoryId\":null,\"tagIds\":[],\"businessTime\":\"2026-09-18T13:00:00+08:00\"}"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(keptNull.getResponse().getContentAsString()).has("category")).isFalse();
+        assertThat(orderOf(id)).isEqualTo(order);
+        assertThat(jdbc.sql("SELECT first_saved_at_utc FROM transactions WHERE id = :id").param("id", id).query(String.class).single()).isEqualTo(savedAt);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(2);
+        var detail = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(detail.getResponse().getContentAsString()).has("category")).isFalse();
+        String key = "null-category";
+        String payload = "{\"type\":\"EXPENSE\",\"amount\":\"4.00\",\"categoryId\":null,\"tagIds\":[],\"businessTime\":\"2026-09-18T15:00:00+08:00\"}";
+        var first = submit(key, payload, token);
+        assertThat(first.getResponse().getStatus()).isEqualTo(201);
+        long nullId = json.readTree(first.getResponse().getContentAsString()).path("id").asLong();
+        var replay = submit(key, payload, token);
+        assertThat(replay.getResponse().getStatus()).isEqualTo(200);
+        assertThat(replay.getResponse().getHeader("Idempotent-Replay")).isEqualTo("true");
+        assertThat(json.readTree(replay.getResponse().getContentAsString()).path("id").asLong()).isEqualTo(nullId);
+        var conflict = submit(key, body("EXPENSE", "4.00", null, expenseCategory, List.of(), "2026-09-18T15:00:00+08:00", null), token);
+        assertThat(conflict.getResponse().getStatus()).isEqualTo(409);
+        assertThat(json.readTree(conflict.getResponse().getContentAsString()).path("error").path("code").asText()).isEqualTo("IDEMPOTENCY_CONFLICT");
+        mvc.perform(delete("/api/v1/accounts/" + accountId + "/transactions/" + nullId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        var deleted = submit(key, payload, token);
+        assertThat(deleted.getResponse().getStatus()).isEqualTo(404);
+        assertThat(deleted.getResponse().getHeader("Idempotent-Replay")).isEqualTo("true");
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09").param("categoryId", Long.toString(expenseCategory)).param("uncategorizedOnly", "true"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test void v01CategorizedHashStillReplaysAfterUpgrade() throws Exception {
+        String key = "v01-category-hash";
+        String payload = body("EXPENSE", "30.00", "午餐", expenseCategory, List.of(), "2026-09-19T12:00:00+08:00", null);
+        var created = submit(key, payload, token);
+        assertThat(created.getResponse().getStatus()).isEqualTo(201);
+        long id = json.readTree(created.getResponse().getContentAsString()).path("id").asLong();
+        jdbc.sql("DELETE FROM idempotency_records WHERE user_id = :id AND operation_id = :key")
+                .param("id", userId).param("key", key).update();
+        byte[] v01 = v01CategoryHash(accountId, "EXPENSE", "30.00", expenseCategory, List.of(),
+                "2026-09-19T12:00:00+08:00", "午餐", "");
+        jdbc.sql("""
+                INSERT INTO idempotency_records (user_id, scope, operation_id, request_hash, result_code, resource_id, created_at_utc)
+                VALUES (:userId, 'CREATE_TRANSACTION', :key, :hash, 'CREATED', :resourceId, '2026-09-19 04:00:00.000000')
+                """).param("userId", userId).param("key", key).param("hash", v01).param("resourceId", id).update();
+        var replay = submit(key, payload, token);
+        assertThat(replay.getResponse().getStatus()).isEqualTo(200);
+        assertThat(replay.getResponse().getHeader("Idempotent-Replay")).isEqualTo("true");
+        assertThat(json.readTree(replay.getResponse().getContentAsString()).path("id").asLong()).isEqualTo(id);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isEqualTo(1);
+    }
+
+    private static byte[] v01CategoryHash(long accountId, String type, String amount, long categoryId, List<Long> tagIds,
+            String businessTime, String name, String remark) {
+        var canonical = new java.io.ByteArrayOutputStream();
+        CanonicalEncoding.writeUtf8(canonical, Long.toString(accountId));
+        CanonicalEncoding.writeUtf8(canonical, type);
+        CanonicalEncoding.writeUtf8(canonical, amount);
+        CanonicalEncoding.writeUtf8(canonical, Long.toString(categoryId));
+        CanonicalEncoding.writeInt(canonical, tagIds.size());
+        for (Long tagId : tagIds) CanonicalEncoding.writeUtf8(canonical, Long.toString(tagId));
+        CanonicalEncoding.writeUtf8(canonical, businessTime);
+        CanonicalEncoding.writeUtf8(canonical, name);
+        CanonicalEncoding.writeUtf8(canonical, remark);
+        return CanonicalEncoding.sha256(canonical.toByteArray());
     }
 
     @Test void deleteRemovesAssociationsAndDoesNotReuseOrder() throws Exception {

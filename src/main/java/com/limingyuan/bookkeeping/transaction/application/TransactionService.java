@@ -64,7 +64,7 @@ public class TransactionService {
     public record TransactionListItem(long id, TransactionType type, String amount, String displayName,
             CategoryRef category, List<TagRef> tags, String businessTime) { }
     public record TransactionList(String month, List<TransactionListItem> items) { }
-    public record Draft(String amount, String name, long categoryId, List<Long> tagIds, String businessTime, String remark) { }
+    public record Draft(String amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark) { }
     public record CreateOutcome(int status, TransactionView body, boolean replay) { }
 
     public CreateOutcome create(long accountId, String operationId, String typeRaw, Draft draft) {
@@ -89,16 +89,16 @@ public class TransactionService {
         var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
         if (existing != null) return outcome(existing, hash);
         var allocation = accounts.allocateFirstSaveOrder(accountId);
-        var category = categories.requireBookable(fields.categoryId(), type.name());
+        var category = bookable(fields.categoryId(), type.name());
         var ownedTags = tags.requireOwned(fields.tagIds(), type.name());
         var businessTime = businessTime(fields.businessTime(), allocation.createdTime());
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         var saved = transactions.saveAndFlush(new TransactionEntity(userId, allocation.accountId(), type,
-                fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category.id(), businessTime, now,
+                fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime, now,
                 allocation.firstSaveOrder(), blankToNull(fields.remark(), Integer.MAX_VALUE)));
         replaceTags(saved.getId(), ownedTags);
         idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, hash, "CREATED", saved.getId(), now));
-        return new CreateOutcome(201, detail(saved, category.name(), ownedTags), false);
+        return new CreateOutcome(201, detail(saved, category == null ? null : category.name(), ownedTags), false);
     }
 
     private CreateOutcome outcome(IdempotencyRecord record, byte[] hash) {
@@ -146,15 +146,15 @@ public class TransactionService {
         return transaction.execute(status -> {
             var locked = accounts.lockForWrite(accountId);
             var current = load(accountId, transactionId);
-            var category = categories.requireBookable(fields.categoryId(), current.getType().name());
+            var category = bookable(fields.categoryId(), current.getType().name());
             var ownedTags = tags.requireOwned(fields.tagIds(), current.getType().name());
             var businessTime = businessTime(fields.businessTime(), locked.createdTime());
             var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-            current.edit(fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category.id(), businessTime,
+            current.edit(fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime,
                     blankToNull(fields.remark(), Integer.MAX_VALUE), now);
             transactions.saveAndFlush(current);
             replaceTags(current.getId(), ownedTags);
-            return detail(current, category.name(), ownedTags);
+            return detail(current, category == null ? null : category.name(), ownedTags);
         });
     }
 
@@ -169,27 +169,33 @@ public class TransactionService {
         });
     }
 
-    public TransactionList list(long accountId, String monthRaw, String typeRaw, Long categoryId, Long tagId) {
+    public TransactionList list(long accountId, String monthRaw, String typeRaw, Long categoryId, Boolean uncategorizedOnly, Long tagId) {
         var month = month(monthRaw);
         TransactionType type = typeRaw == null || typeRaw.isBlank() ? null : type(typeRaw);
+        boolean onlyUncategorized = Boolean.TRUE.equals(uncategorizedOnly);
+        if (onlyUncategorized && categoryId != null) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "categoryId 与 uncategorizedOnly 不能同时使用");
+        }
         return transaction.execute(status -> {
             accounts.requireOwned(accountId);
             if (categoryId != null) categories.requireVisible(categoryId);
             if (tagId != null) tags.requireVisible(tagId);
-            return query(accountId, month, type, categoryId, tagId);
+            return query(accountId, month, type, categoryId, onlyUncategorized, tagId);
         });
     }
 
-    private TransactionList query(long accountId, YearMonth month, TransactionType type, Long categoryId, Long tagId) {
+    private TransactionList query(long accountId, YearMonth month, TransactionType type, Long categoryId,
+            boolean uncategorizedOnly, Long tagId) {
         var sql = new StringBuilder("""
                 SELECT t.id, t.type, t.amount, t.name, t.category_id, c.name AS category_name, t.business_time
                 FROM transactions t
-                JOIN categories c ON c.id = t.category_id
+                LEFT JOIN categories c ON c.id = t.category_id
                 WHERE t.account_id = :accountId AND t.user_id = :userId
                   AND t.business_time >= :start AND t.business_time < :end
                 """);
         if (type != null) sql.append(" AND t.type = :type");
-        if (categoryId != null) sql.append(" AND t.category_id = :categoryId");
+        if (uncategorizedOnly) sql.append(" AND t.category_id IS NULL");
+        else if (categoryId != null) sql.append(" AND t.category_id = :categoryId");
         if (tagId != null) sql.append("""
                  AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = :tagId)
                 """);
@@ -200,13 +206,17 @@ public class TransactionService {
                 .param("start", month.atDay(1).atStartOfDay())
                 .param("end", month.plusMonths(1).atDay(1).atStartOfDay());
         if (type != null) query.param("type", type.name());
-        if (categoryId != null) query.param("categoryId", categoryId);
+        if (!uncategorizedOnly && categoryId != null) query.param("categoryId", categoryId);
         if (tagId != null) query.param("tagId", tagId);
-        var rows = query.query((rs, row) -> new TransactionListItem(rs.getLong("id"),
+        var rows = query.query((rs, row) -> {
+            Long storedCategoryId = rs.getObject("category_id", Long.class);
+            String categoryName = rs.getString("category_name");
+            return new TransactionListItem(rs.getLong("id"),
                 TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
-                displayName(rs.getString("name"), rs.getString("category_name")),
-                new CategoryRef(rs.getLong("category_id"), rs.getString("category_name")),
-                List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)))).list();
+                displayName(rs.getString("name"), categoryName),
+                storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
+                List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+        }).list();
         var items = new ArrayList<TransactionListItem>();
         // Phase 6 Ledger / read-model follow-up: tag names are loaded once per row. Leave this in Phase 4A.
         for (var row : rows) items.add(withTags(row));
@@ -231,9 +241,13 @@ public class TransactionService {
     }
 
     private TransactionView view(TransactionEntity entity) {
-        var category = categories.requireBookable(entity.getCategoryId(), entity.getType().name());
-        return detail(entity, category.name(), tags.requireOwned(tagRefs(entity.getId()).stream().map(TagRef::id).toList(),
+        var category = bookable(entity.getCategoryId(), entity.getType().name());
+        return detail(entity, category == null ? null : category.name(), tags.requireOwned(tagRefs(entity.getId()).stream().map(TagRef::id).toList(),
                 entity.getType().name()));
+    }
+
+    private CategoryService.BookableCategory bookable(Long categoryId, String transactionType) {
+        return categoryId == null ? null : categories.requireBookable(categoryId, transactionType);
     }
 
     private List<TagRef> tagRefs(long transactionId) {
@@ -249,15 +263,17 @@ public class TransactionService {
     private TransactionView detail(TransactionEntity entity, String categoryName, List<TagService.OwnedTag> ownedTags) {
         var tagRefs = ownedTags.stream().map(tag -> new TagRef(tag.id(), tag.name())).toList();
         return new TransactionView(entity.getId(), entity.getAccountId(), entity.getType(), Money.format(entity.getAmount()),
-                entity.getName(), displayName(entity.getName(), categoryName), new CategoryRef(entity.getCategoryId(), categoryName),
+                entity.getName(), displayName(entity.getName(), categoryName),
+                entity.getCategoryId() == null ? null : new CategoryRef(entity.getCategoryId(), categoryName),
                 tagRefs, TIME.format(entity.getBusinessTime().atZone(BEIJING)), entity.getRemark());
     }
 
     private static String displayName(String name, String categoryName) {
-        return name == null || name.isBlank() ? categoryName : name;
+        if (name != null && !name.isBlank()) return name;
+        return categoryName == null || categoryName.isBlank() ? null : categoryName;
     }
 
-    private record Parsed(BigDecimal amount, String name, long categoryId, List<Long> tagIds, String businessTime, String remark) { }
+    private record Parsed(BigDecimal amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark) { }
 
     private Parsed fields(Draft draft) {
         var amount = Money.parse(draft.amount());

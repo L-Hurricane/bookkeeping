@@ -19,7 +19,7 @@ public class TransactionController {
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String type,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String amount,
             @JsonDeserialize(using = StrictStringDeserializer.class) String name,
-            @NotNull Long categoryId,
+            Long categoryId,
             List<Long> tagIds,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String businessTime,
             @JsonDeserialize(using = StrictStringDeserializer.class) String remark) { }
@@ -27,7 +27,7 @@ public class TransactionController {
     public record EditRequest(
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String amount,
             @JsonDeserialize(using = StrictStringDeserializer.class) String name,
-            @NotNull Long categoryId,
+            Long categoryId,
             List<Long> tagIds,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String businessTime,
             @JsonDeserialize(using = StrictStringDeserializer.class) String remark) { }
@@ -62,8 +62,8 @@ public class TransactionController {
     @GetMapping
     public TransactionService.TransactionList list(@PathVariable long accountId, @RequestParam String month,
             @RequestParam(required = false) String type, @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Long tagId) {
-        return transactions.list(accountId, month, type, categoryId, tagId);
+            @RequestParam(required = false) Boolean uncategorizedOnly, @RequestParam(required = false) Long tagId) {
+        return transactions.list(accountId, month, type, categoryId, uncategorizedOnly, tagId);
     }
 
     private static TransactionService.Draft draft(String amount, String name, Long categoryId, List<Long> tagIds,

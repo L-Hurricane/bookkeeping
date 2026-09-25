@@ -32,7 +32,8 @@ public class StatisticsService {
 
     public record MonthlySummary(String month, int transactionCount, String netIncome, String netExpense, String surplus) { }
     public record CategoryChild(long categoryId, String categoryName, int transactionCount, String amount) { }
-    public record CategoryItem(long categoryId, String categoryName, int transactionCount, String amount, List<CategoryChild> children) { }
+    public record CategoryItem(String kind, Long categoryId, String categoryName, int transactionCount, String amount,
+            List<CategoryChild> children) { }
     public record CategoryStatistics(String month, String type, List<CategoryItem> items) { }
     public record TagItem(Long tagId, String tagName, int transactionCount, String amount) { }
     public record TagStatistics(String month, String type, boolean overlap, List<TagItem> items) { }
@@ -67,6 +68,7 @@ public class StatisticsService {
 
     private List<CategoryItem> categoryItems(long accountId, YearMonth month, String type) {
         var amounts = new LinkedHashMap<Long, Aggregate>();
+        var uncategorized = new Aggregate[] { null };
         jdbc.sql("""
                 SELECT category_id, COUNT(*) AS transaction_count, COALESCE(SUM(amount), 0) AS amount
                 FROM transactions
@@ -75,8 +77,13 @@ public class StatisticsService {
                 GROUP BY category_id
                 """).param("accountId", accountId).param("userId", context.userId()).param("type", type)
                 .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
-                .query((rs, row) -> amounts.put(rs.getLong("category_id"),
-                        new Aggregate(rs.getInt("transaction_count"), rs.getBigDecimal("amount")))).list();
+                .query((rs, row) -> {
+                    var aggregate = new Aggregate(rs.getInt("transaction_count"), rs.getBigDecimal("amount"));
+                    Long categoryId = rs.getObject("category_id", Long.class);
+                    if (categoryId == null) uncategorized[0] = aggregate;
+                    else amounts.put(categoryId, aggregate);
+                    return null;
+                }).list();
         var nodes = jdbc.sql("""
                 SELECT id, parent_id, name FROM categories
                 WHERE user_id = :userId AND type = :type
@@ -95,7 +102,7 @@ public class StatisticsService {
             var kids = children.getOrDefault(root.id(), List.of());
             if (kids.isEmpty()) {
                 var own = amounts.get(root.id());
-                if (own != null) items.add(new CategoryItem(root.id(), root.name(), own.count(), Money.format(own.amount()), null));
+                if (own != null) items.add(new CategoryItem("CATEGORY", root.id(), root.name(), own.count(), Money.format(own.amount()), null));
             } else {
                 var shown = new ArrayList<CategoryChild>();
                 int count = 0;
@@ -107,8 +114,12 @@ public class StatisticsService {
                     count += own.count();
                     amount = amount.add(own.amount());
                 }
-                if (!shown.isEmpty()) items.add(new CategoryItem(root.id(), root.name(), count, Money.format(amount), shown));
+                if (!shown.isEmpty()) items.add(new CategoryItem("CATEGORY", root.id(), root.name(), count, Money.format(amount), shown));
             }
+        }
+        if (uncategorized[0] != null) {
+            items.add(new CategoryItem("UNCATEGORIZED", null, "未分类", uncategorized[0].count(),
+                    Money.format(uncategorized[0].amount()), List.of()));
         }
         return items;
     }

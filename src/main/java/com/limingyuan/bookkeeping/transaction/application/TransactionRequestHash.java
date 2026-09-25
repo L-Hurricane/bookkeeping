@@ -8,13 +8,13 @@ import java.util.List;
 public final class TransactionRequestHash {
     private TransactionRequestHash() { }
 
-    public static byte[] sha256(long accountId, String type, String amount, long categoryId, List<Long> tagIds,
+    public static byte[] sha256(long accountId, String type, String amount, Long categoryId, List<Long> tagIds,
             String businessTime, String name, String remark) {
         var canonical = new ByteArrayOutputStream();
         CanonicalEncoding.writeUtf8(canonical, Long.toString(accountId));
         CanonicalEncoding.writeUtf8(canonical, type);
         CanonicalEncoding.writeUtf8(canonical, amount);
-        CanonicalEncoding.writeUtf8(canonical, Long.toString(categoryId));
+        CanonicalEncoding.writeUtf8(canonical, categoryId == null ? "" : Long.toString(categoryId));
         CanonicalEncoding.writeInt(canonical, tagIds.size());
         for (Long tagId : tagIds) CanonicalEncoding.writeUtf8(canonical, Long.toString(tagId));
         CanonicalEncoding.writeUtf8(canonical, businessTime);
