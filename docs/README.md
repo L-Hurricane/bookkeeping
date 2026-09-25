@@ -25,6 +25,7 @@ Across engineering stages, later confirmed baselines concretize earlier stages b
 - `architecture/` — architecture framing, reviewed options, confirmed baseline, ADRs
 - `design/` — Confirmed Data Model and API Baselines
 - `implementation/` — Implementation Plan and current Codex task
+- `frontend/` — WeChat Mini Program frontend design baseline
 
 ## Codex usage
 

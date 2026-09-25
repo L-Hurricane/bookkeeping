@@ -1,0 +1,24 @@
+{
+  "name": "bookkeeping-miniprogram",
+  "version": "0.0.0",
+  "private": true,
+  "description": "WeChat Mini Program client for personal bookkeeping. Phase 0A bootstrap only.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "lint": "eslint .",
+    "test": "node --import tsx --test tests/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.18.0",
+    "eslint": "^10.11.0",
+    "miniprogram-api-typings": "^4.1.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0"
+  }
+}

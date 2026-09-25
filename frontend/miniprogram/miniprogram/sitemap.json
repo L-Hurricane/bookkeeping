@@ -1,0 +1,9 @@
+{
+  "desc": "Phase 0A bootstrap sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}
