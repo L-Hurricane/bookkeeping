@@ -206,7 +206,7 @@ Migration 不包含用户数据或密码。`baseline-on-migrate=false` 防止自
 identity 按 api / application / persistence / security 分包，公开可信用户上下文。
 common 仅包含 Request ID 与错误响应等技术能力，不依赖 identity。
 account / category / tag / transaction / adjustment 各自保留模块内部的 API、应用服务与持久化边界。
-Phase 4A 已实现 Transaction 的创建、查询、修改和删除。ledger / statistics 仍只有骨架。
+Phase 4A 已实现 Transaction 的创建、查询、修改和删除。Phase 6 已实现按北京时间自然月查询的流水。statistics 仍只有骨架。
 
 API JSON 使用 `spring.jackson.default-property-inclusion: non_null`。
 v0.1 响应统一省略 null 字段，例如未填写的交易名称和备注不会出现在 JSON 中。
@@ -224,3 +224,7 @@ v0.1 的 `UNIQUE(accounts.user_id)` 使每个用户只有一个账户，Create �
 ## Phase 5 · BalanceAdjustment
 
 当前余额在查询时聚合，不落独立字段。Create BalanceAdjustment 在账户锁内按提交时余额计算差额；差额为 0 时不建记录，并以 `NO_CHANGE` 幂等结果重放。等待 Human Gate 4。
+
+## Phase 6 · Ledger
+
+月度流水由普通交易和余额调整在查询时投影，不单独落表。排序为业务时间倒序、首次保存顺序倒序。当前余额与查询月份无关。流水中的收支摘要不包含余额调整。不实现 Statistics API。

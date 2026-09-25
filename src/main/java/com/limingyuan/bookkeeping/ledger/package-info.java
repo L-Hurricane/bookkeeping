@@ -1,2 +1,2 @@
-/** ledger feature boundary; business implementation is deferred beyond Phase 0. */
+/** Monthly ledger read model. Entries are projected from transactions and balance adjustments. */
 package com.limingyuan.bookkeeping.ledger;
