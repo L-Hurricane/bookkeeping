@@ -58,6 +58,29 @@ describe("http client", () => {
     assert.equal(seen[0]?.header.Authorization, "Bearer opaque-token");
     assert.equal(seen[1]?.header.Authorization, undefined);
     assert.equal(seen[1]?.data, JSON.stringify({ username: "demo", password: "secret" }));
+    assert.equal(seen[1]?.header["Idempotency-Key"], undefined);
+  });
+
+  it("sends an extra Idempotency-Key without replacing client headers", async () => {
+    const storage = memoryStorage();
+    saveSession(storage, activeSession);
+    const { http, seen } = clientFor(storage, () => ({ statusCode: 201, data: { id: 1 } }));
+    await http.request({
+      method: "POST",
+      path: "/api/v1/accounts/1001/transactions",
+      body: { amount: "30" },
+      authenticated: true,
+      headers: {
+        "Idempotency-Key": "a14f",
+        Authorization: "Bearer stolen",
+        "Content-Type": "text/plain",
+        Accept: "text/html",
+      },
+    });
+    assert.equal(seen[0]?.header["Idempotency-Key"], "a14f");
+    assert.equal(seen[0]?.header.Authorization, "Bearer opaque-token");
+    assert.equal(seen[0]?.header["Content-Type"], "application/json");
+    assert.equal(seen[0]?.header.Accept, "application/json");
   });
 
   it("maps the backend error shape", async () => {

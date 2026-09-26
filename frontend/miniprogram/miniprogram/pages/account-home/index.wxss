@@ -74,6 +74,17 @@
   border-bottom: 1rpx solid #ececec;
 }
 
+.row.post-save-highlight {
+  background: #f6f3ea;
+}
+
+.locate-miss {
+  display: block;
+  margin-top: 16rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
 .row-main,
 .row-side {
   display: flex;

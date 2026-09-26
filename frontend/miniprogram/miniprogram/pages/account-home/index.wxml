@@ -37,8 +37,9 @@
       <button bindtap="onRetry">重新加载</button>
     </block>
     <block wx:elif="{{phase === 'ready'}}">
+      <text class="locate-miss" wx:if="{{locateMiss}}">{{locateMiss}}</text>
       <text class="empty" wx:if="{{empty}}">本月暂无记录</text>
-      <view class="row {{item.kind}}" wx:for="{{rows}}" wx:key="key">
+      <view id="{{item.key}}" class="row {{item.kind}} {{highlightKey === item.key ? 'post-save-highlight' : ''}}" wx:for="{{rows}}" wx:key="key">
         <view class="row-main">
           <text class="row-title">{{item.title}}</text>
           <text class="row-detail" wx:if="{{item.detail}}">{{item.detail}}</text>

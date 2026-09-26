@@ -1,7 +1,7 @@
 import { createLoadGuard } from "../../account/load-guard";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
-import { categoryApi, tagApi } from "../../services/runtime";
+import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
 import type { Tag } from "../../tag/tag";
 import {
   applyNow,
@@ -14,7 +14,9 @@ import {
   resolveBusinessTimeEdit,
   type BusinessTimeDraft,
 } from "../../transaction/business-time";
-import { createTransactionForm, validateTransactionAmount } from "../../transaction/form";
+import { createTransactionForm, validateTransactionAmount, type PostSaveResult } from "../../transaction/form";
+import { handoffPostSave } from "../../ledger/post-save";
+import { createIdempotencyKey, readRandomBytes } from "../../transaction/idempotency";
 import { parseCreatePageContext } from "../../transaction/navigation";
 import {
   amountFeedback,
@@ -41,13 +43,32 @@ import {
   visibleCreateTagError,
   type CategoryRow,
 } from "../../transaction/reference";
+import {
+  alertBeforeUnloadMessage,
+  applySubmitOutcome,
+  canSave,
+  classifySubmitError,
+  editingSubmission,
+  interactionLocked,
+  openSubmission,
+  prepareSave,
+  PREPARE_MESSAGE,
+  retryAttempt,
+  UNCERTAIN_HINT,
+  UNCERTAIN_MESSAGE,
+  WAIT_TAG_MESSAGE,
+  type SubmissionState,
+} from "../../transaction/submission";
 import type { TransactionType } from "../../transaction/transaction";
 
-// Phase 0E-3 wires Transaction submission.
 Page({
   loadGuard: createLoadGuard(),
   form: createTransactionForm(new Date()),
+  accountId: 0,
   accountCreatedTime: "",
+  submission: editingSubmission(),
+  preparingSave: false,
+  postSaveCompleted: false,
   categories: { EXPENSE: emptyBucket<CategoryNode>(), INCOME: emptyBucket<CategoryNode>() },
   tags: { EXPENSE: emptyBucket<Tag>(), INCOME: emptyBucket<Tag>() },
   composers: { EXPENSE: emptyComposer(), INCOME: emptyComposer() },
@@ -81,6 +102,12 @@ Page({
     tagError: "",
     tagInputLocked: false,
     tagCreateInFlight: false,
+    formLocked: false,
+    saveDisabled: false,
+    submitError: "",
+    submissionPhase: "editing" as SubmissionState["phase"],
+    uncertain: false,
+    uncertainHint: UNCERTAIN_HINT,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -89,6 +116,7 @@ Page({
       this.setData({ contextInvalid: true });
       return;
     }
+    this.accountId = context.accountId;
     this.accountCreatedTime = context.accountCreatedTime;
     this.form = createTransactionForm(new Date());
     this.publishForm();
@@ -103,6 +131,9 @@ Page({
   },
 
   onType(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
     const next = transactionType(event.currentTarget.dataset["type"]);
     if (next === null) {
       return;
@@ -110,6 +141,7 @@ Page({
     const previous = this.form.type;
     const switched = switchCreateType(this.form, next);
     this.form = switched.form;
+    this.forgetSubmitError();
     if (switched.clearTagDraft) {
       this.composers[previous] = retireComposer(this.composers[previous]);
       this.setData({ selectorOpen: false });
@@ -124,27 +156,39 @@ Page({
   },
 
   onAmountInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     this.form = { ...this.form, amount: event.detail.value };
-    this.setData({ amount: event.detail.value });
+    this.setData({ amount: event.detail.value, submitError: "" });
   },
 
   onAmountBlur() {
+    if (!this.canEdit()) {
+      return;
+    }
     const validation = validateTransactionAmount(this.form.amount);
     this.setData({ amountError: amountFeedback(this.form.amount, validation) ?? "" });
   },
 
   onNameInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     this.form = { ...this.form, name: event.detail.value };
-    this.setData({ name: event.detail.value });
+    this.setData({ name: event.detail.value, submitError: "" });
   },
 
   onRemarkInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     this.form = { ...this.form, remark: event.detail.value };
-    this.setData({ remark: event.detail.value });
+    this.setData({ remark: event.detail.value, submitError: "" });
   },
 
   onOpenCategories() {
-    if (this.categories[this.form.type].phase !== "ready") {
+    if (!this.canEdit() || this.categories[this.form.type].phase !== "ready") {
       return;
     }
     this.setData({ selectorOpen: true });
@@ -155,36 +199,50 @@ Page({
   },
 
   onChooseCategory(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
     const raw = event.currentTarget.dataset["id"];
     const categoryId = raw === "" || raw === undefined ? null : Number(raw);
     this.form = { ...this.form, categoryId: categoryId !== null && Number.isSafeInteger(categoryId) ? categoryId : null };
+    this.forgetSubmitError();
     this.setData({ selectorOpen: false });
     this.publishForm();
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
     const tagId = Number(event.currentTarget.dataset["id"]);
     this.form = {
       ...this.form,
       selectedTagIds: toggleTagSelection(this.form.selectedTagIds, tagId, this.tags[this.form.type].items),
     };
+    this.forgetSubmitError();
     this.publishForm();
   },
 
   onOpenTagComposer() {
+    if (!this.canEdit()) {
+      return;
+    }
     const type = this.form.type;
     this.composers[type] = openComposer(this.composers[type]);
     this.publishForm();
   },
 
   onTagDraft(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     const type = this.form.type;
     this.composers[type] = editComposer(this.composers[type], event.detail.value);
     this.setData({ tagDraft: event.detail.value });
   },
 
   async onCreateTag() {
-    if (this.tagCreateInFlight) {
+    if (!this.canEdit() || this.tagCreateInFlight) {
       return;
     }
     const submittedType = this.form.type;
@@ -212,6 +270,7 @@ Page({
           ...this.form,
           selectedTagIds: applyOwnedSelection(this.form.selectedTagIds, this.form.type, created),
         };
+        this.forgetSubmitError();
       }
       this.composers[submittedType] = settleCreateTagComposer(this.composers[submittedType], requestGeneration, { status: "success" });
       this.publishForm();
@@ -238,6 +297,9 @@ Page({
   },
 
   onOpenTime() {
+    if (!this.canEdit()) {
+      return;
+    }
     const draft = businessTimeDraft(this.form.businessTime);
     if (draft === null) {
       return;
@@ -253,36 +315,55 @@ Page({
   },
 
   onTimeDate(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     this.timeDraft = { date: event.detail.value, time: this.timeDraft?.time ?? "" };
     this.setData({ timeDate: event.detail.value });
   },
 
   onTimeClock(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
     this.timeDraft = { date: this.timeDraft?.date ?? "", time: event.detail.value };
     this.setData({ timeClock: event.detail.value });
   },
 
   onTimeNow() {
+    if (!this.canEdit()) {
+      return;
+    }
     this.timeDraft = applyNow(new Date());
     this.setData({ timeDate: this.timeDraft.date, timeClock: this.timeDraft.time });
   },
 
   onTimeToday() {
+    if (!this.canEdit()) {
+      return;
+    }
     const draft = this.timeDraft ?? { date: "", time: "" };
     this.timeDraft = applyToday(draft, new Date());
     this.setData({ timeDate: this.timeDraft.date });
   },
 
   onTimeYesterday() {
+    if (!this.canEdit()) {
+      return;
+    }
     const draft = this.timeDraft ?? { date: "", time: "" };
     this.timeDraft = applyYesterday(draft, new Date());
     this.setData({ timeDate: this.timeDraft.date });
   },
 
   onConfirmTime() {
+    if (!this.canEdit()) {
+      return;
+    }
     const draft = this.timeDraft ?? { date: this.data.timeDate, time: this.data.timeClock };
     const resolved = resolveBusinessTimeEdit("confirm", this.form.businessTime, draft, this.accountCreatedTime);
     this.form = { ...this.form, businessTime: resolved.businessTime };
+    this.forgetSubmitError();
     this.timeDraft = resolved.open ? draft : null;
     this.setData({ timeEditorOpen: resolved.open, timeDraftError: resolved.error });
     if (!resolved.open) {
@@ -310,7 +391,88 @@ Page({
     void this.loadTags(this.form.type);
   },
 
+  async onSave() {
+    const intent = prepareSave(this.submission.phase, this.tagCreateInFlight, this.form, this.accountId, this.accountCreatedTime);
+    if (intent.status === "blocked" || this.preparingSave) {
+      return;
+    }
+    if (intent.status === "wait-tag") {
+      this.setData({ submitError: WAIT_TAG_MESSAGE });
+      return;
+    }
+    if (intent.status === "invalid") {
+      this.setData({ submitError: intent.message });
+      return;
+    }
+    this.preparingSave = true;
+    this.publishLock();
+    const opened = await openSubmission(this.submission, intent.snapshot, () =>
+      createIdempotencyKey((length) => readRandomBytes(length, wx)),
+    );
+    if (!this.loadGuard.pageAlive) {
+      return;
+    }
+    if (opened.error.length > 0 || opened.state.phase !== "submitting") {
+      this.preparingSave = false;
+      this.publishLock();
+      this.setData({ submitError: PREPARE_MESSAGE });
+      return;
+    }
+    this.submission = opened.state;
+    this.preparingSave = false;
+    this.publishSubmission();
+    await this.sendAttempt();
+  },
+
+  async onRetryConfirm() {
+    const next = retryAttempt(this.submission);
+    if (next === null) {
+      return;
+    }
+    this.submission = next;
+    this.publishSubmission();
+    await this.sendAttempt();
+  },
+
   onCancel() {
+    if (this.preparingSave) {
+      wx.showModal({ title: "请稍候", content: "正在准备保存，请稍候", showCancel: false, confirmText: "知道了" });
+      return;
+    }
+    const phase = this.submission.phase;
+    if (phase === "submitting") {
+      wx.showModal({ title: "正在保存", content: "正在保存，请稍候", showCancel: false, confirmText: "知道了" });
+      return;
+    }
+    if (phase === "uncertain") {
+      wx.showModal({
+        title: UNCERTAIN_MESSAGE,
+        content: "离开后请到流水中确认本次记录是否已保存。",
+        confirmText: "离开",
+        cancelText: "继续确认",
+        success: (result) => {
+          if (result.confirm) {
+            wx.disableAlertBeforeUnload();
+            wx.navigateBack();
+          }
+        },
+      });
+      return;
+    }
+    if (phase === "success") {
+      if (!this.postSaveCompleted) {
+        this.returnAfterSave();
+        return;
+      }
+      wx.disableAlertBeforeUnload();
+      wx.navigateBack();
+      return;
+    }
+    if (phase === "conflict") {
+      wx.disableAlertBeforeUnload();
+      wx.navigateBack();
+      return;
+    }
     wx.showModal({
       title: "放弃本次记账？",
       confirmText: "放弃",
@@ -389,6 +551,75 @@ Page({
     }
   },
 
+  async sendAttempt() {
+    const attempt = this.submission.attempt;
+    if (attempt === null || this.submission.phase !== "submitting") {
+      return;
+    }
+    try {
+      const transaction = await transactionApi.createTransaction(attempt.snapshot, attempt.idempotencyKey);
+      if (!this.loadGuard.pageAlive || this.submission.attempt !== attempt) {
+        return;
+      }
+      this.submission = applySubmitOutcome(this.submission, { kind: "success", transaction });
+    } catch (error) {
+      if (!this.loadGuard.pageAlive || this.submission.attempt !== attempt) {
+        return;
+      }
+      this.submission = applySubmitOutcome(this.submission, classifySubmitError(error));
+    }
+    this.publishSubmission();
+    this.returnAfterSave();
+  },
+
+  publishLock() {
+    this.setData({
+      formLocked: interactionLocked(this.submission.phase, this.preparingSave),
+      saveDisabled: !canSave(this.submission.phase, this.tagCreateInFlight, this.preparingSave),
+    });
+  },
+
+  forgetSubmitError() {
+    if (this.data.submitError !== "") {
+      this.setData({ submitError: "" });
+    }
+  },
+
+  publishSubmission() {
+    this.setData({
+      formLocked: interactionLocked(this.submission.phase, this.preparingSave),
+      saveDisabled: !canSave(this.submission.phase, this.tagCreateInFlight, this.preparingSave),
+      submitError: this.submission.error,
+      submissionPhase: this.submission.phase,
+      uncertain: this.submission.phase === "uncertain",
+    });
+    this.syncLeaveAlert();
+  },
+
+  syncLeaveAlert() {
+    const message = alertBeforeUnloadMessage(this.submission.phase);
+    if (message === null) {
+      wx.disableAlertBeforeUnload();
+      return;
+    }
+    wx.enableAlertBeforeUnload({ message });
+  },
+
+  returnAfterSave() {
+    const decision = handoffPostSave(this.submission.phase, this.submission.postSave, this.postSaveCompleted);
+    if (decision.result === null) {
+      return;
+    }
+    this.postSaveCompleted = true;
+    emitTransactionCreated(this, decision.result);
+    wx.disableAlertBeforeUnload();
+    wx.navigateBack();
+  },
+
+  canEdit(): boolean {
+    return !interactionLocked(this.submission.phase, this.preparingSave);
+  },
+
   publishForm() {
     const type = this.form.type;
     const categories = this.categories[type];
@@ -412,6 +643,8 @@ Page({
       tagError: this.composers[type].error,
       tagInputLocked: this.tagRequest?.type === type && this.tagRequest.generation === this.composers[type].generation,
       tagCreateInFlight: this.tagCreateInFlight,
+      formLocked: interactionLocked(this.submission.phase, this.preparingSave),
+      saveDisabled: !canSave(this.submission.phase, this.tagCreateInFlight, this.preparingSave),
       businessTimeText: businessTimeDisplay(this.form.businessTime) ?? "",
       timeError: isBusinessTimeAllowed(this.form.businessTime, this.accountCreatedTime) ? "" : "交易时间不得早于账户创建时间",
       futureHint: isFutureBusinessTime(this.form.businessTime, new Date())
@@ -434,4 +667,13 @@ function transactionType(value: unknown): TransactionType | null {
 
 function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
+}
+
+function emitTransactionCreated(page: object, result: PostSaveResult): void {
+  const owner = page as { getOpenerEventChannel?: () => { emit?: (name: string, data: PostSaveResult) => void } };
+  const channel = owner.getOpenerEventChannel?.();
+  if (channel === undefined || typeof channel.emit !== "function") {
+    return;
+  }
+  channel.emit("transactionCreated", { transactionId: result.transactionId, targetMonth: result.targetMonth });
 }

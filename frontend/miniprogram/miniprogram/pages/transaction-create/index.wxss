@@ -9,6 +9,10 @@
   gap: 16rpx;
 }
 
+.locked {
+  pointer-events: none;
+}
+
 .type {
   padding: 12rpx 28rpx;
   border-radius: 999rpx;

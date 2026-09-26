@@ -8,6 +8,7 @@ import { createAuthApi, type AuthApi } from "./auth";
 import { createCategoryApi, type CategoryApi } from "./category";
 import { createLedgerApi, type LedgerApi } from "./ledger";
 import { createTagApi, type TagApi } from "./tag";
+import { createTransactionApi, type TransactionApi } from "./transaction";
 
 export const authNavigation: AuthNavigation = createAuthNavigation({
   currentRoute() {
@@ -35,3 +36,4 @@ export const accountApi: AccountApi = createAccountApi(http);
 export const ledgerApi: LedgerApi = createLedgerApi(http);
 export const categoryApi: CategoryApi = createCategoryApi(http);
 export const tagApi: TagApi = createTagApi(http);
+export const transactionApi: TransactionApi = createTransactionApi(http);

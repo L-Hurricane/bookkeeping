@@ -3,26 +3,26 @@
   <button bindtap="onBackHome">返回</button>
 </view>
 <view class="page" wx:else>
-  <view class="types">
+  <view class="types {{formLocked ? 'locked' : ''}}">
     <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
     <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
   </view>
   <text class="amount-label">金额</text>
-  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
+  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
   <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
   <text class="label">名称</text>
-  <input class="field" type="text" value="{{name}}" bindinput="onNameInput" />
+  <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
   <text class="label">分类</text>
   <view wx:if="{{categoryPhase === 'loading'}}"><text class="hint">正在读取分类</text></view>
   <view wx:elif="{{categoryPhase === 'error'}}">
     <text class="error">分类加载失败</text>
     <button bindtap="onRetryCategories">重新加载</button>
-    <view class="choice" bindtap="onChooseCategory" data-id="">未分类 ></view>
+    <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onChooseCategory" data-id="">未分类 ></view>
   </view>
-  <view wx:else class="choice" bindtap="onOpenCategories">{{categoryText}} ></view>
+  <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
   <text class="label">标签</text>
   <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
-  <view class="chips" wx:if="{{tagChips.length}}">
+  <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
     <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
   </view>
   <view wx:if="{{tagPhase === 'error'}}">
@@ -30,22 +30,25 @@
     <button bindtap="onRetryTags">重新加载</button>
   </view>
   <view class="composer" wx:if="{{tagPhase !== 'loading'}}">
-    <text wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
+    <text class="{{formLocked ? 'locked' : ''}}" wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
     <block wx:else>
-      <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked}}" bindinput="onTagDraft" />
-      <button disabled="{{tagCreateInFlight}}" bindtap="onCreateTag">创建</button>
+      <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked || formLocked}}" bindinput="onTagDraft" />
+      <button disabled="{{tagCreateInFlight || formLocked}}" bindtap="onCreateTag">创建</button>
     </block>
     <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
   </view>
   <text class="label">交易时间</text>
-  <view class="choice" bindtap="onOpenTime">{{businessTimeText}} ></view>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTime">{{businessTimeText}} ></view>
   <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
   <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
   <text class="label">备注</text>
-  <input class="field" type="text" value="{{remark}}" bindinput="onRemarkInput" />
+  <input class="field" type="text" value="{{remark}}" disabled="{{formLocked}}" bindinput="onRemarkInput" />
+  <text class="error" wx:if="{{submitError}}">{{submitError}}</text>
+  <text class="hint" wx:if="{{uncertain}}">{{uncertainHint}}</text>
+  <button wx:if="{{uncertain}}" bindtap="onRetryConfirm">重试确认</button>
   <view class="actions">
     <button class="cancel" bindtap="onCancel">取消</button>
-    <button class="save" disabled="true">保存</button>
+    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
   </view>
   <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseCategories"></view>
@@ -65,10 +68,10 @@
     <view class="panel">
       <text class="editor-title">编辑交易时间</text>
       <text class="label">日期</text>
-      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" bindinput="onTimeDate" />
+      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" />
       <text class="label">时间</text>
-      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" bindinput="onTimeClock" />
-      <view class="shortcuts">
+      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" />
+      <view class="shortcuts {{formLocked ? 'locked' : ''}}">
         <text class="shortcut" bindtap="onTimeNow">现在</text>
         <text class="shortcut" bindtap="onTimeToday">今天</text>
         <text class="shortcut" bindtap="onTimeYesterday">昨天</text>

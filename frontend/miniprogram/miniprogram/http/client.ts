@@ -47,6 +47,7 @@ export interface HttpRequestOptions {
   readonly path: string;
   readonly body?: unknown;
   readonly authenticated: boolean;
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface HttpClientDependencies {
@@ -77,6 +78,7 @@ export function createHttpClient(dependencies: HttpClientDependencies): HttpClie
         }
         header.Authorization = `Bearer ${session.token}`;
       }
+      applyCallerHeaders(header, options.headers);
 
       let response: HttpTransportResponse;
       try {
@@ -109,6 +111,22 @@ export function createHttpClient(dependencies: HttpClientDependencies): HttpClie
       throw error;
     },
   };
+}
+
+function applyCallerHeaders(header: Record<string, string>, extra: Readonly<Record<string, string>> | undefined): void {
+  if (extra === undefined) {
+    return;
+  }
+  for (const [name, value] of Object.entries(extra)) {
+    if (!isReservedHeader(name)) {
+      header[name] = value;
+    }
+  }
+}
+
+function isReservedHeader(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return normalized === "authorization" || normalized === "content-type" || normalized === "accept";
 }
 
 function readAuthenticatedSession(dependencies: HttpClientDependencies): Session | null {

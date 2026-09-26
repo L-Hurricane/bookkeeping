@@ -20,6 +20,7 @@
     "miniprogram/services/ledger.ts",
     "miniprogram/services/category.ts",
     "miniprogram/services/tag.ts",
+    "miniprogram/services/transaction.ts",
     "miniprogram/transaction/**/*.ts",
     "miniprogram/category/**/*.ts",
     "miniprogram/tag/**/*.ts"

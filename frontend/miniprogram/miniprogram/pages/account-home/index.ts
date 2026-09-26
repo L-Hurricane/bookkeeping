@@ -3,6 +3,21 @@ import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout 
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
 import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
+import {
+  acceptTransactionCreated,
+  canRunLocate,
+  centeredScrollTop,
+  changeSelectedMonth,
+  clearHighlight,
+  finishHighlight,
+  HIGHLIGHT_MS,
+  idleHighlight,
+  nextLocateGeneration,
+  settleLedger,
+  startHighlight,
+  type LocatedTransaction,
+} from "../../ledger/post-save";
+import type { PostSaveResult } from "../../transaction/form";
 import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
 import { validateBusinessTime } from "../../transaction/business-time";
 import { canOpenCreateTransaction, transactionCreatePath } from "../../transaction/navigation";
@@ -14,6 +29,10 @@ Page({
   accountId: 0,
   accountCreatedTime: "",
   currency: "",
+  pendingPostSave: null as PostSaveResult | null,
+  highlight: idleHighlight(),
+  highlightTimer: null as number | null,
+  locateGeneration: 0,
 
   data: {
     phase: "account-loading" as "account-loading" | "account-error" | "ledger-loading" | "ready" | "ledger-error",
@@ -29,6 +48,8 @@ Page({
     errorMessage: "",
     loggingOut: false,
     logoutErrorMessage: "",
+    highlightKey: "",
+    locateMiss: "",
   },
 
   onShow() {
@@ -40,6 +61,7 @@ Page({
 
   onUnload() {
     this.loadGuard.pageAlive = false;
+    this.stopLocateFeedback();
   },
 
   async loadAccount() {
@@ -97,8 +119,11 @@ Page({
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth)) {
         return;
       }
-      this.setData({
-        phase: "ready",
+      const settlement = settleLedger(this.pendingPostSave, "success", ledger.items);
+      this.pendingPostSave = settlement.pending;
+      const locate = settlement.locate;
+      const ledgerView = {
+        phase: "ready" as const,
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
         monthLabel: formatMonthLabel(ledger.month),
         incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
@@ -108,6 +133,22 @@ Page({
         rows: ledgerRows(ledger.items),
         empty: ledger.items.length === 0,
         errorMessage: "",
+        locateMiss: settlement.missMessage,
+        highlightKey: locate === null ? this.highlight.key : locate.key,
+      };
+      if (locate === null) {
+        this.setData(ledgerView);
+        return;
+      }
+      this.highlight = startHighlight(this.highlight, locate.key);
+      this.locateGeneration = nextLocateGeneration(this.locateGeneration);
+      const captured = this.locateGeneration;
+      this.setData(ledgerView, () => {
+        if (!canRunLocate(this.loadGuard.pageAlive, captured, this.locateGeneration)) {
+          return;
+        }
+        this.queueScroll(locate, captured);
+        this.armHighlightTimer(this.highlight.generation);
       });
     } catch (error) {
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth) || isUnauthorized(error)) {
@@ -122,7 +163,26 @@ Page({
     if (!canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
-    wx.navigateTo({ url: transactionCreatePath(this.accountId, this.accountCreatedTime) });
+    wx.navigateTo({
+      url: transactionCreatePath(this.accountId, this.accountCreatedTime),
+      events: {
+        transactionCreated: (result: unknown) => {
+          this.receiveTransactionCreated(result);
+        },
+      },
+    });
+  },
+
+  receiveTransactionCreated(payload: unknown) {
+    const current = this.locateNavigation();
+    const next = acceptTransactionCreated(current, payload);
+    if (next === current) {
+      return;
+    }
+    this.selectedMonth = next.selectedMonth;
+    this.pendingPostSave = next.pending;
+    this.stopLocateFeedback();
+    this.setData({ highlightKey: "", locateMiss: "" });
   },
 
   onPreviousMonth() {
@@ -135,10 +195,14 @@ Page({
 
   changeMonth(month: string) {
     const selectedMonth = selectedMonthDuringLogout(this.loadGuard.loggingOut, this.selectedMonth, month);
-    if (selectedMonth === this.selectedMonth) {
+    const next = changeSelectedMonth(this.locateNavigation(), selectedMonth);
+    if (next.selectedMonth === this.selectedMonth) {
       return;
     }
-    this.selectedMonth = selectedMonth;
+    this.selectedMonth = next.selectedMonth;
+    this.pendingPostSave = next.pending;
+    this.stopLocateFeedback();
+    this.setData({ highlightKey: "", locateMiss: "" });
     void this.loadLedger();
   },
 
@@ -170,4 +234,98 @@ Page({
       }
     }
   },
+
+  locateNavigation() {
+    return { selectedMonth: this.selectedMonth, pending: this.pendingPostSave, highlightKey: this.highlight.key };
+  },
+
+  queueScroll(locate: LocatedTransaction, generation: number) {
+    if (!canRunLocate(this.loadGuard.pageAlive, generation, this.locateGeneration)) {
+      return;
+    }
+    if (locate.disposition === "top") {
+      wx.pageScrollTo({ scrollTop: 0, duration: 300 });
+      return;
+    }
+    wx.createSelectorQuery()
+      .select(`#${locate.key}`)
+      .boundingClientRect()
+      .selectViewport()
+      .boundingClientRect()
+      .selectViewport()
+      .scrollOffset()
+      .exec((result) => {
+        if (!canRunLocate(this.loadGuard.pageAlive, generation, this.locateGeneration)) {
+          return;
+        }
+        const measurement = readScrollMeasurement(result);
+        if (measurement === null) {
+          return;
+        }
+        wx.pageScrollTo({
+          scrollTop: centeredScrollTop(
+            measurement.scrollTop + measurement.top,
+            measurement.height,
+            measurement.viewportHeight,
+          ),
+          duration: 300,
+        });
+      });
+  },
+
+  armHighlightTimer(generation: number) {
+    this.stopHighlightTimer();
+    this.highlightTimer = setTimeout(() => {
+      this.highlightTimer = null;
+      this.highlight = finishHighlight(this.highlight, generation);
+      if (this.loadGuard.pageAlive) {
+        this.setData({ highlightKey: this.highlight.key });
+      }
+    }, HIGHLIGHT_MS);
+  },
+
+  stopHighlightTimer() {
+    if (this.highlightTimer === null) {
+      return;
+    }
+    clearTimeout(this.highlightTimer);
+    this.highlightTimer = null;
+  },
+
+  stopLocateFeedback() {
+    this.locateGeneration = nextLocateGeneration(this.locateGeneration);
+    this.highlight = clearHighlight(this.highlight);
+    this.stopHighlightTimer();
+  },
 });
+
+function readScrollMeasurement(result: unknown): { top: number; height: number; viewportHeight: number; scrollTop: number } | null {
+  if (!Array.isArray(result) || result.length < 3) {
+    return null;
+  }
+  const rect = readBox(result[0]);
+  const viewport = readBox(result[1]);
+  const scroll = readScroll(result[2]);
+  if (rect === null || viewport === null || scroll === null) {
+    return null;
+  }
+  return { top: rect.top, height: rect.height, viewportHeight: viewport.height, scrollTop: scroll.scrollTop };
+}
+
+function readBox(value: unknown): { top: number; height: number } | null {
+  if (!isRecord(value) || typeof value.top !== "number" || typeof value.height !== "number") {
+    return null;
+  }
+  return { top: value.top, height: value.height };
+}
+
+function readScroll(value: unknown): { scrollTop: number } | null {
+  if (!isRecord(value) || typeof value.scrollTop !== "number") {
+    return null;
+  }
+  return { scrollTop: value.scrollTop };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
