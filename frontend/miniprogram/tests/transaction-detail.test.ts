@@ -149,7 +149,8 @@ describe("transaction edit", () => {
     assert.equal(saved.postSave?.transactionId, 4001);
     const home = acceptTransactionCreated({ selectedMonth: "2026-09", pending: null, highlightKey: "" }, saved.postSave);
     assert.equal(home.selectedMonth, "2026-08");
-    assert.equal(home.pending?.transactionId, 4001);
+    assert.equal(home.pending?.kind, "transaction");
+    assert.equal(home.pending?.recordId, 4001);
     const otherType = apiFor(() => ({ statusCode: 200, data: { ...responseBody(), type: "INCOME" } }));
     await assert.rejects(() => otherType.updateTransaction(built.value), TransactionResponseError);
     const mismatch = apiFor(() => ({ statusCode: 200, data: { ...responseBody(), id: 9 } }));

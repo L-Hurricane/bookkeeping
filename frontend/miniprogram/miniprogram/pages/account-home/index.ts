@@ -4,7 +4,9 @@ import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout 
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
 import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
 import {
+  acceptAdjustmentCreated,
   acceptTransactionCreated,
+  applyAcceptedLocate,
   canRunLocate,
   centeredScrollTop,
   changeSelectedMonth,
@@ -15,11 +17,12 @@ import {
   nextLocateGeneration,
   settleLedger,
   startHighlight,
+  type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import type { PostSaveResult } from "../../transaction/form";
 import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
 import { validateBusinessTime } from "../../transaction/business-time";
+import { adjustmentCreatePath, adjustmentDetailPath, canOpenAdjustmentDetail, canOpenBalanceAdjustment } from "../../balance-adjustment/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
 
@@ -29,7 +32,7 @@ Page({
   accountId: 0,
   accountCreatedTime: "",
   currency: "",
-  pendingPostSave: null as PostSaveResult | null,
+  pendingPostSave: null as LedgerLocateIntent | null,
   highlight: idleHighlight(),
   highlightTimer: null as number | null,
   locateGeneration: 0,
@@ -173,9 +176,30 @@ Page({
     });
   },
 
+  onAdjust() {
+    if (!canOpenBalanceAdjustment(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({
+      url: adjustmentCreatePath(this.accountId, this.accountCreatedTime),
+      events: {
+        balanceAdjustmentCreated: (result: unknown) => {
+          this.receiveAdjustmentCreated(result);
+        },
+      },
+    });
+  },
+
   onOpenRecord(event: WechatMiniprogram.BaseEvent) {
     const kind = event.currentTarget.dataset["kind"];
     const recordId = Number(event.currentTarget.dataset["id"]);
+    if (typeof kind === "string" && canOpenAdjustmentDetail(kind, this.loadGuard.loggingOut)) {
+      if (!Number.isSafeInteger(recordId) || recordId <= 0) {
+        return;
+      }
+      wx.navigateTo({ url: adjustmentDetailPath(this.accountId, recordId) });
+      return;
+    }
     if (typeof kind !== "string" || !canOpenTransactionDetail(kind, this.loadGuard.loggingOut)) {
       return;
     }
@@ -192,10 +216,18 @@ Page({
     });
   },
 
+  receiveAdjustmentCreated(payload: unknown) {
+    const current = this.locateNavigation();
+    this.receiveLocate(current, acceptAdjustmentCreated(current, payload));
+  },
+
   receiveTransactionCreated(payload: unknown) {
     const current = this.locateNavigation();
-    const next = acceptTransactionCreated(current, payload);
-    if (next === current) {
+    this.receiveLocate(current, acceptTransactionCreated(current, payload));
+  },
+
+  receiveLocate(current: ReturnType<typeof this.locateNavigation>, next: ReturnType<typeof acceptTransactionCreated>) {
+    if (applyAcceptedLocate(current, next) === null) {
       return;
     }
     this.selectedMonth = next.selectedMonth;

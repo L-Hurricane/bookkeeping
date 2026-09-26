@@ -109,8 +109,15 @@
   color: #b42318;
 }
 
+.adjust {
+  margin-top: 12rpx;
+  background: transparent;
+  color: #666666;
+  font-size: 28rpx;
+}
+
 .create {
-  margin-top: 28rpx;
+  margin-top: 12rpx;
   background: #111111;
   color: #ffffff;
 }

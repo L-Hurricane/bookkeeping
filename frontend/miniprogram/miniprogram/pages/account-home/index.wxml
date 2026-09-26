@@ -9,6 +9,7 @@
       <text class="name">{{name}}</text>
       <text class="label">当前余额</text>
       <text class="balance">{{balanceLabel}}</text>
+      <button class="adjust" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
       <button class="create" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
     </view>
     <view class="month">

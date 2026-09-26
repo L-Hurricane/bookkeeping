@@ -4,7 +4,9 @@ import { createLoadGuard, beginLoad } from "../miniprogram/account/load-guard";
 import { canApplyLedgerResult, ledgerPath, type LedgerEntry } from "../miniprogram/ledger/ledger";
 import {
   LOCATE_MISS_MESSAGE,
+  acceptAdjustmentCreated,
   acceptTransactionCreated,
+  applyAcceptedLocate,
   centeredScrollTop,
   canRunLocate,
   changeSelectedMonth,
@@ -12,6 +14,7 @@ import {
   finishHighlight,
   handoffPostSave,
   idleHighlight,
+  locateLedgerRecord,
   locateTransaction,
   nextLocateGeneration,
   parsePostSaveResult,
@@ -26,7 +29,7 @@ const home = { selectedMonth: "2026-09", pending: null, highlightKey: "" };
 describe("post-save handoff", () => {
   it("accepts one valid result and ignores an invalid payload", () => {
     const accepted = acceptTransactionCreated(home, saved);
-    assert.deepEqual(accepted.pending, saved);
+    assert.deepEqual(accepted.pending, { kind: "transaction", recordId: 4001, targetMonth: "2026-08" });
     assert.equal(accepted.selectedMonth, "2026-08");
     assert.equal(ledgerPath(1001, accepted.selectedMonth), "/api/v1/accounts/1001/ledger?month=2026-08");
     assert.equal(acceptTransactionCreated(home, { transactionId: 0, targetMonth: "2026-08" }), home);
@@ -87,6 +90,32 @@ describe("ledger locate", () => {
     assert.equal(canRunLocate(true, scheduled, afterSwitch), false);
     assert.equal(canRunLocate(false, afterSwitch, afterSwitch), false);
     assert.equal(canRunLocate(true, afterSwitch, afterSwitch), true);
+  });
+
+  it("locates an adjustment by kind and id, including the same id as a transaction", () => {
+    const intent = { kind: "adjustment" as const, recordId: 5001, targetMonth: "2026-08" };
+    const accepted = acceptAdjustmentCreated(home, intent);
+    assert.equal(accepted.selectedMonth, "2026-08");
+    assert.deepEqual(accepted.pending, intent);
+    const items = [transaction(5001), adjustment(5001)];
+    assert.equal(locateLedgerRecord(items, intent)?.key, "adjustment-5001");
+    assert.equal(locateTransaction(items, 5001)?.key, "transaction-5001");
+    const failed = settleLedger(accepted.pending, "error", items);
+    assert.equal(failed.pending, accepted.pending);
+    const found = settleLedger(failed.pending, "success", items);
+    assert.equal(found.pending, null);
+    assert.equal(found.locate?.key, "adjustment-5001");
+    assert.equal(found.locate?.disposition, "center");
+    const switched = changeSelectedMonth(accepted, "2026-09");
+    assert.equal(switched.pending, null);
+    const highlighted = startHighlight(idleHighlight(), found.locate?.key ?? "");
+    assert.equal(highlighted.key, "adjustment-5001");
+    assert.equal(acceptAdjustmentCreated(home, { kind: "transaction", recordId: 5001, targetMonth: "2026-08" }), home);
+  });
+
+  it("keeps the current navigation when a locate payload is invalid", () => {
+    assert.equal(applyAcceptedLocate(home, acceptTransactionCreated(home, { transactionId: 0, targetMonth: "2026-08" })), null);
+    assert.equal(applyAcceptedLocate(home, acceptAdjustmentCreated(home, { recordId: 5001, targetMonth: "2026-08" })), null);
   });
 
   it("does not let an older highlight timer clear a newer highlight", () => {

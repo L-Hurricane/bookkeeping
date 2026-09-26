@@ -1,0 +1,31 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx;
+  box-sizing: border-box;
+}
+
+.label,
+.hint {
+  display: block;
+  margin-top: 28rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.amount {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 56rpx;
+  font-weight: 600;
+}
+
+.delete {
+  margin-top: 48rpx;
+  background: #ffffff;
+  color: #b42318;
+}
+
+.error {
+  color: #b42318;
+  font-size: 26rpx;
+}

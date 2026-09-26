@@ -1,0 +1,115 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx calc(180rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.label,
+.hint {
+  display: block;
+  margin-top: 28rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.balance,
+.preview {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 48rpx;
+  font-weight: 600;
+}
+
+.amount,
+.field,
+.choice {
+  margin-top: 8rpx;
+}
+
+.amount {
+  font-size: 48rpx;
+  font-weight: 600;
+}
+
+.field {
+  width: 100%;
+}
+
+.locked {
+  pointer-events: none;
+}
+
+.actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.cancel {
+  background: #f3f3f3;
+  color: #111111;
+}
+
+.save {
+  background: #111111;
+  color: #ffffff;
+}
+
+.mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.backdrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(17, 17, 17, 0.4);
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.editor-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.shortcuts,
+.editor-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.shortcut {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f3f3f3;
+}
+
+.error {
+  color: #b42318;
+  font-size: 26rpx;
+}
