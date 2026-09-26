@@ -7,7 +7,9 @@
     "pages/transaction-create/index",
     "pages/transaction-detail/index",
     "pages/balance-adjustment-create/index",
-    "pages/balance-adjustment-detail/index"
+    "pages/balance-adjustment-detail/index",
+    "pages/statistics/index",
+    "pages/statistics-detail/index"
   ],
   "window": {
     "navigationBarTitleText": "个人记账",

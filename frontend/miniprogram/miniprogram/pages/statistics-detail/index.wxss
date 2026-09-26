@@ -1,0 +1,42 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.title,
+.row-title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.status,
+.empty,
+.row-detail {
+  display: block;
+  margin-top: 12rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #ececec;
+}
+
+.row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.amount {
+  font-size: 30rpx;
+}
+
+.error {
+  color: #b42318;
+}

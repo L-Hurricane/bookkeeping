@@ -22,6 +22,8 @@
     "miniprogram/services/tag.ts",
     "miniprogram/services/transaction.ts",
     "miniprogram/services/balance-adjustment.ts",
+    "miniprogram/services/statistics.ts",
+    "miniprogram/statistics/**/*.ts",
     "miniprogram/balance-adjustment/**/*.ts",
     "miniprogram/transaction/**/*.ts",
     "miniprogram/category/**/*.ts",

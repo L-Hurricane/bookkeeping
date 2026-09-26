@@ -109,6 +109,13 @@
   color: #b42318;
 }
 
+.statistics {
+  margin-top: 8rpx;
+  background: transparent;
+  color: #666666;
+  font-size: 28rpx;
+}
+
 .adjust {
   margin-top: 12rpx;
   background: transparent;

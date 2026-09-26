@@ -17,6 +17,7 @@
       <text class="month-label">{{monthLabel}}</text>
       <text class="month-step" bindtap="onNextMonth">›</text>
     </view>
+    <button class="statistics" disabled="{{loggingOut}}" bindtap="onStatistics">统计</button>
     <view class="summary" wx:if="{{phase === 'ready'}}">
       <view class="summary-item">
         <text class="label">收入</text>

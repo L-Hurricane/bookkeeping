@@ -1,0 +1,18 @@
+<view class="page">
+  <text class="title" wx:if="{{title}}">{{title}}</text>
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取明细</text>
+  <block wx:elif="{{phase === 'error'}}">
+    <text class="error">{{errorMessage}}</text>
+    <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
+  </block>
+  <block wx:elif="{{phase === 'ready'}}">
+    <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
+    <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenTransaction">
+      <view class="row-main">
+        <text class="row-title">{{item.title}}</text>
+        <text class="row-detail">{{item.timeLabel}}</text>
+      </view>
+      <text class="amount">{{item.amountLabel}}</text>
+    </view>
+  </block>
+</view>

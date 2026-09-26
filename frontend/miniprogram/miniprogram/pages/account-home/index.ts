@@ -23,6 +23,8 @@ import {
 import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
 import { validateBusinessTime } from "../../transaction/business-time";
 import { adjustmentCreatePath, adjustmentDetailPath, canOpenAdjustmentDetail, canOpenBalanceAdjustment } from "../../balance-adjustment/navigation";
+import { statisticsPagePath } from "../../statistics/drilldown";
+import { canOpenStatistics } from "../../statistics/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
 
@@ -173,6 +175,15 @@ Page({
           this.receiveTransactionCreated(result);
         },
       },
+    });
+  },
+
+  onStatistics() {
+    if (!canOpenStatistics(this.data.phase, this.loadGuard.loggingOut) || this.selectedMonth.length === 0 || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({
+      url: statisticsPagePath(this.accountId, this.selectedMonth, this.accountCreatedTime),
     });
   },
 

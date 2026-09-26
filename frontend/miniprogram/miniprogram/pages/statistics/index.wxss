@@ -1,0 +1,96 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.month,
+.types {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.types {
+  margin-top: 24rpx;
+  justify-content: flex-start;
+  gap: 24rpx;
+}
+
+.month-step,
+.month-label {
+  font-size: 32rpx;
+}
+
+.month-label,
+.section,
+.row-title {
+  font-weight: 600;
+}
+
+.type {
+  color: #666666;
+  font-size: 30rpx;
+}
+
+.type.selected {
+  color: #111111;
+  font-weight: 600;
+}
+
+.summary {
+  margin-top: 32rpx;
+  display: flex;
+  justify-content: space-between;
+}
+
+.summary-item,
+.row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.label,
+.status,
+.count,
+.row-detail,
+.note,
+.empty {
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.section {
+  display: block;
+  margin-top: 36rpx;
+  font-size: 30rpx;
+}
+
+.note,
+.empty,
+.status,
+.count {
+  display: block;
+  margin-top: 12rpx;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #ececec;
+}
+
+.row.depth-1 {
+  padding-left: 32rpx;
+}
+
+.amount {
+  font-size: 30rpx;
+}
+
+.error {
+  color: #b42318;
+}

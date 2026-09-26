@@ -1,0 +1,69 @@
+<view class="page">
+  <block wx:if="{{invalid}}">
+    <text class="error">{{errorMessage}}</text>
+  </block>
+  <block wx:else>
+    <view class="month">
+      <text class="month-step" bindtap="onPreviousMonth">‹</text>
+      <text class="month-label">{{monthLabel}}</text>
+      <text class="month-step" bindtap="onNextMonth">›</text>
+    </view>
+    <view class="types">
+      <text class="type {{type === 'EXPENSE' ? 'selected' : ''}}" data-type="EXPENSE" bindtap="onSelectType">支出</text>
+      <text class="type {{type === 'INCOME' ? 'selected' : ''}}" data-type="INCOME" bindtap="onSelectType">收入</text>
+    </view>
+    <text class="status" wx:if="{{phase === 'loading'}}">正在读取统计</text>
+    <block wx:elif="{{phase === 'error'}}">
+      <text class="error">{{errorMessage}}</text>
+      <button bindtap="onRetry">重新加载</button>
+    </block>
+    <block wx:elif="{{phase === 'ready'}}">
+      <view class="summary">
+        <view class="summary-item">
+          <text class="label">收入</text>
+          <text>{{incomeLabel}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">支出</text>
+          <text>{{expenseLabel}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">结余</text>
+          <text>{{surplusLabel}}</text>
+        </view>
+      </view>
+      <text class="count">{{countLabel}}</text>
+      <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
+      <block wx:else>
+        <text class="section">分类</text>
+        <text class="empty" wx:if="{{categoryEmpty}}">暂无分类</text>
+        <block wx:for="{{categories}}" wx:key="key">
+          <view wx:if="{{item.drillKind}}" class="row depth-{{item.depth}}" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+            <view class="row-main">
+              <text class="row-title">{{item.title}}</text>
+              <text class="row-detail">{{item.countLabel}}</text>
+            </view>
+            <text class="amount">{{item.amountLabel}}</text>
+          </view>
+          <view wx:else class="row aggregate depth-{{item.depth}}">
+            <view class="row-main">
+              <text class="row-title">{{item.title}}</text>
+              <text class="row-detail">{{item.countLabel}}</text>
+            </view>
+            <text class="amount">{{item.amountLabel}}</text>
+          </view>
+        </block>
+        <text class="section">标签</text>
+        <text class="note" wx:if="{{overlapNote}}">{{overlapNote}}</text>
+        <text class="empty" wx:if="{{tagEmpty}}">暂无标签</text>
+        <view class="row" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+          <view class="row-main">
+            <text class="row-title">{{item.title}}</text>
+            <text class="row-detail">{{item.countLabel}}</text>
+          </view>
+          <text class="amount">{{item.amountLabel}}</text>
+        </view>
+      </block>
+    </block>
+  </block>
+</view>
