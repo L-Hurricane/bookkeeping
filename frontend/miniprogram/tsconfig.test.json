@@ -17,6 +17,9 @@
     "miniprogram/services/account.ts",
     "miniprogram/account/**/*.ts",
     "miniprogram/ledger/**/*.ts",
-    "miniprogram/services/ledger.ts"
+    "miniprogram/services/ledger.ts",
+    "miniprogram/transaction/**/*.ts",
+    "miniprogram/category/**/*.ts",
+    "miniprogram/tag/**/*.ts"
   ]
 }

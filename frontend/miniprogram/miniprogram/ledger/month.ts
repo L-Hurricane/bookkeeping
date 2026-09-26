@@ -1,9 +1,28 @@
 const MONTH_PATTERN = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-export function currentBeijingMonth(now: Date): string {
+export function beijingWallClock(now: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
   const beijing = new Date(now.getTime() + BEIJING_OFFSET_MS);
-  return formatMonth(beijing.getUTCFullYear(), beijing.getUTCMonth() + 1);
+  return {
+    year: beijing.getUTCFullYear(),
+    month: beijing.getUTCMonth() + 1,
+    day: beijing.getUTCDate(),
+    hour: beijing.getUTCHours(),
+    minute: beijing.getUTCMinutes(),
+    second: beijing.getUTCSeconds(),
+  };
+}
+
+export function currentBeijingMonth(now: Date): string {
+  const beijing = beijingWallClock(now);
+  return formatMonth(beijing.year, beijing.month);
 }
 
 export function previousMonth(month: string): string {
