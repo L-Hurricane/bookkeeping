@@ -30,7 +30,7 @@ export class ApiError extends Error {
 
 export interface HttpTransportRequest {
   readonly url: string;
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "PUT" | "DELETE";
   readonly header: Record<string, string>;
   readonly data?: string;
 }
@@ -43,7 +43,7 @@ export interface HttpTransportResponse {
 export type HttpTransport = (request: HttpTransportRequest) => Promise<HttpTransportResponse>;
 
 export interface HttpRequestOptions {
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "PUT" | "DELETE";
   readonly path: string;
   readonly body?: unknown;
   readonly authenticated: boolean;

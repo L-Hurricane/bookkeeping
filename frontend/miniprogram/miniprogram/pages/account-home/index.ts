@@ -20,7 +20,7 @@ import {
 import type { PostSaveResult } from "../../transaction/form";
 import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
 import { validateBusinessTime } from "../../transaction/business-time";
-import { canOpenCreateTransaction, transactionCreatePath } from "../../transaction/navigation";
+import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
 
 Page({
@@ -167,6 +167,25 @@ Page({
       url: transactionCreatePath(this.accountId, this.accountCreatedTime),
       events: {
         transactionCreated: (result: unknown) => {
+          this.receiveTransactionCreated(result);
+        },
+      },
+    });
+  },
+
+  onOpenRecord(event: WechatMiniprogram.BaseEvent) {
+    const kind = event.currentTarget.dataset["kind"];
+    const recordId = Number(event.currentTarget.dataset["id"]);
+    if (typeof kind !== "string" || !canOpenTransactionDetail(kind, this.loadGuard.loggingOut)) {
+      return;
+    }
+    if (!Number.isSafeInteger(recordId) || recordId <= 0 || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({
+      url: transactionDetailPath(this.accountId, recordId, this.accountCreatedTime, this.selectedMonth),
+      events: {
+        transactionUpdated: (result: unknown) => {
           this.receiveTransactionCreated(result);
         },
       },

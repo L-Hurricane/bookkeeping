@@ -1,0 +1,136 @@
+<view class="page" wx:if="{{screen === 'invalid'}}">
+  <text class="error">交易页面参数无效</text>
+  <button bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'loading'}}">
+  <text class="hint">正在读取交易</text>
+</view>
+<view class="page" wx:elif="{{screen === 'error'}}">
+  <text class="error">{{errorMessage}}</text>
+  <button bindtap="onRetryDetail">重新加载</button>
+  <button bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'missing'}}">
+  <text class="error">交易不存在或已删除</text>
+  <button bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'delete-uncertain'}}">
+  <text class="error">删除结果尚未确认</text>
+  <text class="hint">请重试确认。重复删除不会创建另一笔记录。</text>
+  <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
+  <button disabled="{{deleteLocked}}" bindtap="onRetryDelete">重试确认</button>
+  <button disabled="{{deleteLocked}}" bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'detail'}}">
+  <view class="hero">
+    <text class="type-label">{{typeLabel}}</text>
+    <text class="title">{{title}}</text>
+    <text class="amount">{{amountLabel}}</text>
+  </view>
+  <view class="fact">
+    <text class="label">分类</text>
+    <text>{{categoryLabel}}</text>
+  </view>
+  <view class="fact">
+    <text class="label">标签</text>
+    <view class="chips" wx:if="{{tagNames.length}}">
+      <text class="chip" wx:for="{{tagNames}}" wx:key="*this">{{item}}</text>
+    </view>
+    <text class="placeholder" wx:else>—</text>
+  </view>
+  <view class="fact">
+    <text class="label">交易时间</text>
+    <text>{{businessTimeLabel}}</text>
+  </view>
+  <view class="fact">
+    <text class="label">备注</text>
+    <text>{{remarkLabel}}</text>
+  </view>
+  <text class="error" wx:if="{{actionError}}">{{actionError}}</text>
+  <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
+  <view class="actions">
+    <button class="edit" disabled="{{deleteLocked}}" bindtap="onEdit">编辑</button>
+    <button class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除</button>
+  </view>
+</view>
+<view class="page" wx:elif="{{screen === 'edit'}}">
+  <text class="label">交易类型</text>
+  <text>{{typeLabel}}</text>
+  <text class="hint">已保存后不可修改</text>
+  <text class="label">金额</text>
+  <input class="amount" type="text" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
+  <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
+  <text class="label">名称</text>
+  <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
+  <text class="label">分类</text>
+  <text class="hint" wx:if="{{categoryPhase === 'loading'}}">正在读取分类</text>
+  <block wx:elif="{{categoryPhase === 'error'}}">
+    <text class="error">分类加载失败</text>
+    <button bindtap="onRetryCategories">重新加载</button>
+  </block>
+  <view wx:if="{{categoryPhase === 'ready'}}" class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
+  <text wx:else>{{categoryText}}</text>
+  <text class="label">标签</text>
+  <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
+  <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
+    <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
+  </view>
+  <view wx:if="{{tagPhase === 'error'}}">
+    <text class="error">标签加载失败</text>
+    <button bindtap="onRetryTags">重新加载</button>
+  </view>
+  <view class="composer" wx:if="{{tagPhase !== 'loading'}}">
+    <text class="{{formLocked ? 'locked' : ''}}" wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
+    <block wx:else>
+      <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked || formLocked}}" bindinput="onTagDraft" />
+      <button disabled="{{tagCreateInFlight || formLocked}}" bindtap="onCreateTag">创建</button>
+    </block>
+    <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
+  </view>
+  <text class="label">交易时间</text>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTime">{{businessTimeText}} ></view>
+  <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
+  <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
+  <text class="label">备注</text>
+  <input class="field" type="text" value="{{remark}}" disabled="{{formLocked}}" bindinput="onRemarkInput" />
+  <text class="error" wx:if="{{submitError}}">{{submitError}}</text>
+  <text class="hint" wx:if="{{uncertain}}">请重试确认，系统会更新同一笔交易，不会新建一笔。</text>
+  <button wx:if="{{uncertain}}" bindtap="onRetryUpdate">重试确认</button>
+  <view class="actions">
+    <button class="cancel" bindtap="onCancelEdit">取消</button>
+    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
+  </view>
+  <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseCategories"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" bindtap="onChooseCategory" data-id="">未分类</view>
+        <block wx:for="{{categoryRows}}" wx:key="key">
+          <text class="group" wx:if="{{item.kind === 'group'}}">{{item.label}}</text>
+          <view class="choice child" wx:else data-id="{{item.id}}" bindtap="onChooseCategory">{{item.label}}</view>
+        </block>
+      </scroll-view>
+      <button bindtap="onCloseCategories">关闭</button>
+    </view>
+  </view>
+  <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelTime"></view>
+    <view class="panel">
+      <text class="editor-title">编辑交易时间</text>
+      <text class="label">日期</text>
+      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" />
+      <text class="label">时间</text>
+      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" />
+      <view class="shortcuts {{formLocked ? 'locked' : ''}}">
+        <text class="shortcut" bindtap="onTimeNow">现在</text>
+        <text class="shortcut" bindtap="onTimeToday">今天</text>
+        <text class="shortcut" bindtap="onTimeYesterday">昨天</text>
+      </view>
+      <text class="error" wx:if="{{timeDraftError}}">{{timeDraftError}}</text>
+      <view class="editor-actions">
+        <button bindtap="onCancelTime">取消</button>
+        <button class="save" bindtap="onConfirmTime">确定</button>
+      </view>
+    </view>
+  </view>
+</view>

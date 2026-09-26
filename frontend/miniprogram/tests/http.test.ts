@@ -83,6 +83,31 @@ describe("http client", () => {
     assert.equal(seen[0]?.header.Accept, "application/json");
   });
 
+  it("sends PUT with a body and DELETE without a body", async () => {
+    const storage = memoryStorage();
+    saveSession(storage, activeSession);
+    const { http, seen } = clientFor(storage, (request) => ({ statusCode: request.method === "DELETE" ? 204 : 200, data: "" }));
+    await http.request({ method: "GET", path: "/api/v1/accounts/1001/transactions/4001", authenticated: true });
+    await http.request({
+      method: "PUT",
+      path: "/api/v1/accounts/1001/transactions/4001",
+      body: { amount: "30.00", tagIds: [1] },
+      authenticated: true,
+    });
+    await http.request({ method: "DELETE", path: "/api/v1/accounts/1001/transactions/4001", authenticated: true });
+    assert.equal(seen[0]?.method, "GET");
+    assert.equal(seen[0]?.header["Content-Type"], undefined);
+    assert.equal(seen[0]?.header.Authorization, "Bearer opaque-token");
+    assert.equal(seen[1]?.method, "PUT");
+    assert.equal(seen[1]?.data, JSON.stringify({ amount: "30.00", tagIds: [1] }));
+    assert.equal(seen[1]?.header["Content-Type"], "application/json");
+    assert.equal(seen[1]?.header.Authorization, "Bearer opaque-token");
+    assert.equal(seen[2]?.method, "DELETE");
+    assert.equal(seen[2]?.data, undefined);
+    assert.equal(seen[2]?.header["Content-Type"], undefined);
+    assert.equal(seen[2]?.header.Authorization, "Bearer opaque-token");
+  });
+
   it("maps the backend error shape", async () => {
     const { http } = clientFor(memoryStorage(), () => ({
       statusCode: 400,

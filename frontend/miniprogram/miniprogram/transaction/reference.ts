@@ -70,10 +70,7 @@ export function categoryRows(categories: readonly CategoryNode[]): CategoryRow[]
   return rows;
 }
 
-export function categoryLabel(categories: readonly CategoryNode[], categoryId: number | null): string {
-  if (categoryId === null) {
-    return "未分类";
-  }
+export function resolveCategoryLabel(categories: readonly CategoryNode[], categoryId: number): string | null {
   for (const root of categories) {
     if (root.children.length === 0 && root.bookable && root.id === categoryId) {
       return root.name;
@@ -84,7 +81,14 @@ export function categoryLabel(categories: readonly CategoryNode[], categoryId: n
       }
     }
   }
-  return "未分类";
+  return null;
+}
+
+export function categoryLabel(categories: readonly CategoryNode[], categoryId: number | null): string {
+  if (categoryId === null) {
+    return "未分类";
+  }
+  return resolveCategoryLabel(categories, categoryId) ?? "未分类";
 }
 
 export function mergeTagLists(local: readonly Tag[], incoming: readonly Tag[]): Tag[] {

@@ -78,6 +78,7 @@ describe("ledger contract", () => {
     const rows = ledgerRows(ledger?.items ?? []);
     assert.equal(rows[0]?.typeLabel, "调整");
     assert.equal(rows[0]?.amountLabel, "¥37.50");
+    assert.equal(rows[1]?.recordId, 2);
     assert.equal(rows[1]?.typeLabel, "支出");
     assert.equal(rows[1]?.amountLabel, "¥-20.00");
     assert.equal(rows[1]?.detail, "未分类 外卖");

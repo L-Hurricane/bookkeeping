@@ -51,6 +51,7 @@ export interface Ledger {
 }
 
 export interface LedgerRow {
+  readonly recordId: number;
   readonly key: string;
   readonly kind: "transaction" | "adjustment";
   readonly title: string;
@@ -107,6 +108,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
   return items.map((item) => {
     if (item.kind === "BALANCE_ADJUSTMENT") {
       return {
+        recordId: item.id,
         key: `adjustment-${item.id}`,
         kind: "adjustment",
         title: item.displayName,
@@ -119,6 +121,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
     const tags = item.tags.map((tag) => tag.name).join(" ");
     const category = item.category === null ? "未分类" : item.category.name;
     return {
+      recordId: item.id,
       key: `transaction-${item.id}`,
       kind: "transaction",
       title: item.displayName === null || item.displayName.length === 0 ? "未命名交易" : item.displayName,
