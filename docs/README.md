@@ -27,14 +27,10 @@ Across engineering stages, later confirmed baselines concretize earlier stages b
 - `implementation/` — Implementation Plan and current Codex task
 - `frontend/` — WeChat Mini Program frontend design baseline
 
-## Codex usage
+## Agent usage
 
-Do not read every document on every task.
+AI coding agents start at the repository `AGENTS.md`, then `docs/implementation/ai-engineering-rules.md`.
 
-For Phase 0, start with:
+Do not read every document on every task. `docs/implementation/v0.1-first-codex-task.md` is the historical Phase 0 handoff, not the default entry for a later task.
 
-`docs/implementation/v0.1-first-codex-task.md`
-
-That task identifies the minimum baseline documents required for the phase.
-
-Historical drafts, superseded intermediate files, clickable prototypes, and UI visual artifacts are intentionally not included in this Codex engineering-context bundle.
+Historical drafts, superseded intermediate files, clickable prototypes, and UI visual artifacts are intentionally not included in this engineering-context bundle.

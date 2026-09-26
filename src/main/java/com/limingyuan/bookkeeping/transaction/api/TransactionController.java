@@ -62,8 +62,9 @@ public class TransactionController {
     @GetMapping
     public TransactionService.TransactionList list(@PathVariable long accountId, @RequestParam String month,
             @RequestParam(required = false) String type, @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Boolean uncategorizedOnly, @RequestParam(required = false) Long tagId) {
-        return transactions.list(accountId, month, type, categoryId, uncategorizedOnly, tagId);
+            @RequestParam(required = false) Boolean uncategorizedOnly, @RequestParam(required = false) Long tagId,
+            @RequestParam(required = false) Boolean untaggedOnly) {
+        return transactions.list(accountId, month, type, categoryId, uncategorizedOnly, tagId, untaggedOnly);
     }
 
     private static TransactionService.Draft draft(String amount, String name, Long categoryId, List<Long> tagIds,

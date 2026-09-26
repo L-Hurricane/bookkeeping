@@ -169,23 +169,28 @@ public class TransactionService {
         });
     }
 
-    public TransactionList list(long accountId, String monthRaw, String typeRaw, Long categoryId, Boolean uncategorizedOnly, Long tagId) {
+    public TransactionList list(long accountId, String monthRaw, String typeRaw, Long categoryId, Boolean uncategorizedOnly,
+            Long tagId, Boolean untaggedOnly) {
         var month = month(monthRaw);
         TransactionType type = typeRaw == null || typeRaw.isBlank() ? null : type(typeRaw);
         boolean onlyUncategorized = Boolean.TRUE.equals(uncategorizedOnly);
+        boolean onlyUntagged = Boolean.TRUE.equals(untaggedOnly);
         if (onlyUncategorized && categoryId != null) {
             throw new ApiFailure(400, "VALIDATION_FAILED", "categoryId 与 uncategorizedOnly 不能同时使用");
+        }
+        if (onlyUntagged && tagId != null) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "tagId 与 untaggedOnly 不能同时使用");
         }
         return transaction.execute(status -> {
             accounts.requireOwned(accountId);
             if (categoryId != null) categories.requireVisible(categoryId);
             if (tagId != null) tags.requireVisible(tagId);
-            return query(accountId, month, type, categoryId, onlyUncategorized, tagId);
+            return query(accountId, month, type, categoryId, onlyUncategorized, tagId, onlyUntagged);
         });
     }
 
     private TransactionList query(long accountId, YearMonth month, TransactionType type, Long categoryId,
-            boolean uncategorizedOnly, Long tagId) {
+            boolean uncategorizedOnly, Long tagId, boolean untaggedOnly) {
         var sql = new StringBuilder("""
                 SELECT t.id, t.type, t.amount, t.name, t.category_id, c.name AS category_name, t.business_time
                 FROM transactions t
@@ -198,6 +203,9 @@ public class TransactionService {
         else if (categoryId != null) sql.append(" AND t.category_id = :categoryId");
         if (tagId != null) sql.append("""
                  AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = :tagId)
+                """);
+        else if (untaggedOnly) sql.append("""
+                 AND NOT EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id)
                 """);
         sql.append(" ORDER BY t.business_time DESC, t.first_save_order DESC");
         var query = jdbc.sql(sql.toString())

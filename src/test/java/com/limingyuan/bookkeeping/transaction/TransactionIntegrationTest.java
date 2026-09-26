@@ -506,6 +506,33 @@ class TransactionIntegrationTest {
         return CanonicalEncoding.sha256(canonical.toByteArray());
     }
 
+    @Test void untaggedOnlySelectsTransactionsWithoutTagAssociations() throws Exception {
+        long none = create(body("EXPENSE", "3.00", "无标签", expenseCategory, List.of(), "2026-09-03T12:00:00+08:00", null), token).path("id").asLong();
+        long one = create(body("EXPENSE", "4.00", "一个标签", expenseCategory, List.of(expenseTag), "2026-09-02T12:00:00+08:00", null), token).path("id").asLong();
+        long many = create(body("EXPENSE", "5.00", "多个标签", expenseCategory, List.of(expenseTag, otherExpenseTag), "2026-09-01T12:00:00+08:00", null), token).path("id").asLong();
+        long income = create(body("INCOME", "6.00", "收入无标签", incomeCategory, List.of(), "2026-09-04T12:00:00+08:00", null), token).path("id").asLong();
+        assertThat(ids("2026-09", Map.of("untaggedOnly", "true"))).containsExactly(income, none);
+        assertThat(ids("2026-09", Map.of("type", "EXPENSE", "untaggedOnly", "true"))).containsExactly(none);
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-09").param("tagId", Long.toString(expenseTag)).param("untaggedOnly", "true"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        assertThat(ids("2026-09", Map.of())).containsExactly(income, none, one, many);
+        assertThat(ids("2026-09", Map.of("untaggedOnly", "false"))).containsExactly(income, none, one, many);
+        var other = newUser("untagged-scope");
+        long otherAccount = initialize(other.token());
+        jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", otherAccount).update();
+        long otherCategory = categoryId("EXPENSE", "早餐", other.token());
+        var foreign = mvc.perform(post("/api/v1/accounts/" + otherAccount + "/transactions").header("Authorization", "Bearer " + other.token())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXPENSE", "7.00", "他人无标签", otherCategory, List.of(), "2026-09-05T12:00:00+08:00", null)))
+                .andExpect(status().isCreated()).andReturn();
+        long foreignId = json.readTree(foreign.getResponse().getContentAsString()).path("id").asLong();
+        assertThat(ids("2026-09", Map.of("untaggedOnly", "true"))).doesNotContain(foreignId);
+        assertThat(ids("2026-09", Map.of("tagId", Long.toString(expenseTag)))).containsExactly(one, many);
+        assertThat(ids("2026-09", Map.of("categoryId", Long.toString(expenseCategory)))).containsExactly(none, one, many);
+        assertThat(ids("2026-09", Map.of("uncategorizedOnly", "true"))).isEmpty();
+    }
+
     @Test void deleteRemovesAssociationsAndDoesNotReuseOrder() throws Exception {
         var created = create(body("EXPENSE", "8", null, expenseCategory, List.of(expenseTag), "2026-09-03T10:00:00+08:00", null), token);
         long id = created.path("id").asLong();
@@ -522,6 +549,15 @@ class TransactionIntegrationTest {
         mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + other.token()).param("month", "2026-09"))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").param("month", "2026-09")).andExpect(status().isUnauthorized());
+    }
+
+    private List<Long> ids(String month, Map<String, String> params) throws Exception {
+        var request = get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token).param("month", month);
+        for (var param : params.entrySet()) request.param(param.getKey(), param.getValue());
+        var listed = mvc.perform(request).andExpect(status().isOk()).andReturn();
+        var ids = new ArrayList<Long>();
+        json.readTree(listed.getResponse().getContentAsString()).path("items").forEach(node -> ids.add(node.path("id").asLong()));
+        return ids;
     }
 
     private String body(String type, String amount, String name, long categoryId, List<Long> tagIds, String time, String remark) throws Exception {
