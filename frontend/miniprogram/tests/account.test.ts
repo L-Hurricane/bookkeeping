@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseAccount, routeAfterAccountQuery, type Account } from "../miniprogram/account/account";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../miniprogram/account/load-guard";
+import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout } from "../miniprogram/account/logout-view";
 import { normalizeOpeningBalance } from "../miniprogram/account/opening-balance";
 import { createHttpClient, type HttpTransportRequest, type HttpTransportResponse } from "../miniprogram/http/client";
 import { saveSession } from "../miniprogram/session/session";
@@ -79,6 +80,48 @@ describe("account load guard", () => {
     assert.notEqual(next, null);
     assert.notEqual(next, oldGeneration);
     assert.equal(canApplyLoadResult(guard, next ?? 0), true);
+  });
+});
+
+describe("logout failure", () => {
+  it("keeps the current account or ledger read state", () => {
+    const loading = logoutFailureView({ phase: "account-loading", accountId: 0, rows: [] });
+    assert.equal(loading.phase, "account-loading");
+    assert.equal(loading.accountId, 0);
+    assert.equal(loading.loggingOut, false);
+    assert.equal(loading.logoutErrorMessage, "退出失败，请稍后重试");
+
+    const ready = logoutFailureView({
+      phase: "ready",
+      rows: [{ title: "九月支出" }],
+      balanceLabel: "¥1300.00",
+    });
+    assert.equal(ready.phase, "ready");
+    assert.deepEqual(ready.rows, [{ title: "九月支出" }]);
+    assert.equal(ready.balanceLabel, "¥1300.00");
+    assert.notEqual(ready.phase, "ledger-error");
+  });
+
+  it("resumes a new load after logout failure and leaves finished states alone", () => {
+    const guard = createLoadGuard();
+    const oldGeneration = beginLoad(guard);
+    assert.equal(beginLogout(guard), true);
+    endLogout(guard);
+    assert.equal(canApplyLoadResult(guard, oldGeneration ?? 0), false);
+    const next = beginLoad(guard);
+    assert.equal(canApplyLoadResult(guard, next ?? 0), true);
+
+    assert.equal(resumeAfterLogoutFailure("account-loading"), "account");
+    assert.equal(resumeAfterLogoutFailure("ledger-loading"), "ledger");
+    assert.equal(resumeAfterLogoutFailure("ready"), null);
+    assert.equal(resumeAfterLogoutFailure("account-error"), null);
+    assert.equal(resumeAfterLogoutFailure("ledger-error"), null);
+  });
+
+  it("keeps the selected month unchanged while logout is in progress", () => {
+    assert.equal(selectedMonthDuringLogout(true, "2026-09", "2026-08"), "2026-09");
+    assert.equal(selectedMonthDuringLogout(true, "2026-09", "2026-10"), "2026-09");
+    assert.equal(selectedMonthDuringLogout(false, "2026-09", "2026-08"), "2026-08");
   });
 });
 

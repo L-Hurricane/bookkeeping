@@ -1,10 +1,13 @@
 .page {
   min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.header {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16rpx;
+  gap: 8rpx;
 }
 
 .name {
@@ -13,12 +16,82 @@
 }
 
 .label,
-.status {
+.status,
+.count,
+.row-detail,
+.row-time {
   color: #666666;
+  font-size: 26rpx;
 }
 
 .balance {
-  font-size: 48rpx;
+  font-size: 56rpx;
+  font-weight: 600;
+}
+
+.month {
+  margin-top: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.month-step {
+  width: 64rpx;
+  text-align: center;
+  font-size: 40rpx;
+  color: #333333;
+}
+
+.month-label {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.summary {
+  margin-top: 24rpx;
+  display: flex;
+  justify-content: space-between;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.count,
+.empty,
+.status {
+  margin-top: 16rpx;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #ececec;
+}
+
+.row-main,
+.row-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.row-side {
+  align-items: flex-end;
+}
+
+.row-title,
+.amount {
+  font-size: 30rpx;
+}
+
+.type.adjustment {
+  color: #8a4b08;
 }
 
 .error {
@@ -26,5 +99,5 @@
 }
 
 .logout {
-  margin-top: 24rpx;
+  margin-top: 32rpx;
 }

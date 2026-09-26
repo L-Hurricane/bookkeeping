@@ -1,6 +1,6 @@
 # 个人记账 · 微信小程序
 
-Phase 0C 在登录之后查询唯一资金账户。没有账户时进入初始化页，已有账户时进入账户首页。Ledger 和其他业务页面还没有开始。
+Phase 0D 在账户首页读取只读月度流水。可以切换自然月，查看 Backend 返回的当前余额、月度总计和流水。记一笔、流水详情、余额调整操作和独立统计页还没有开始。
 
 设计基线：`docs/frontend/v0.1-frontend-design.md`。
 
@@ -59,5 +59,7 @@ curl --fail http://127.0.0.1:8080/actuator/health
 
 ## 当前不做
 
-- Ledger、Transaction、Category、Tag、Statistics、Balance Adjustment
+- 记一笔、流水详情、流水新增/编辑/删除
+- 余额调整的新增/删除
+- 独立统计页、分类管理、标签管理
 - Refresh Token、JWT、微信登录、注册、找回密码

@@ -5,6 +5,7 @@ import { createAuthNavigation, type AuthNavigation } from "../navigation/auth-na
 import { wechatStorage } from "../storage/wechat-storage";
 import { createAccountApi, type AccountApi } from "./account";
 import { createAuthApi, type AuthApi } from "./auth";
+import { createLedgerApi, type LedgerApi } from "./ledger";
 
 export const authNavigation: AuthNavigation = createAuthNavigation({
   currentRoute() {
@@ -29,3 +30,4 @@ const http = createHttpClient({
 
 export const authApi: AuthApi = createAuthApi(http, wechatStorage);
 export const accountApi: AccountApi = createAccountApi(http);
+export const ledgerApi: LedgerApi = createLedgerApi(http);

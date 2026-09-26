@@ -1,13 +1,55 @@
 <view class="page">
-  <text class="status" wx:if="{{phase === 'loading'}}">正在读取账户</text>
-  <block wx:elif="{{phase === 'ready'}}">
-    <text class="name">{{name}}</text>
-    <text class="label">当前余额</text>
-    <text class="balance">{{balanceLabel}}</text>
-  </block>
-  <block wx:else>
+  <text class="status" wx:if="{{phase === 'account-loading'}}">正在读取账户</text>
+  <block wx:elif="{{phase === 'account-error'}}">
     <text class="error">{{errorMessage}}</text>
     <button bindtap="onRetry">重新加载</button>
   </block>
+  <block wx:else>
+    <view class="header">
+      <text class="name">{{name}}</text>
+      <text class="label">当前余额</text>
+      <text class="balance">{{balanceLabel}}</text>
+    </view>
+    <view class="month">
+      <text class="month-step" bindtap="onPreviousMonth">‹</text>
+      <text class="month-label">{{monthLabel}}</text>
+      <text class="month-step" bindtap="onNextMonth">›</text>
+    </view>
+    <view class="summary" wx:if="{{phase === 'ready'}}">
+      <view class="summary-item">
+        <text class="label">收入</text>
+        <text>{{incomeLabel}}</text>
+      </view>
+      <view class="summary-item">
+        <text class="label">支出</text>
+        <text>{{expenseLabel}}</text>
+      </view>
+      <view class="summary-item">
+        <text class="label">结余</text>
+        <text>{{surplusLabel}}</text>
+      </view>
+    </view>
+    <text class="count" wx:if="{{phase === 'ready'}}">{{countLabel}}</text>
+    <text class="status" wx:if="{{phase === 'ledger-loading'}}">正在读取流水</text>
+    <block wx:elif="{{phase === 'ledger-error'}}">
+      <text class="error">{{errorMessage}}</text>
+      <button bindtap="onRetry">重新加载</button>
+    </block>
+    <block wx:elif="{{phase === 'ready'}}">
+      <text class="empty" wx:if="{{empty}}">本月暂无记录</text>
+      <view class="row {{item.kind}}" wx:for="{{rows}}" wx:key="key">
+        <view class="row-main">
+          <text class="row-title">{{item.title}}</text>
+          <text class="row-detail" wx:if="{{item.detail}}">{{item.detail}}</text>
+          <text class="row-time">{{item.timeLabel}}</text>
+        </view>
+        <view class="row-side">
+          <text class="type {{item.kind}}">{{item.typeLabel}}</text>
+          <text class="amount">{{item.amountLabel}}</text>
+        </view>
+      </view>
+    </block>
+  </block>
+  <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
   <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
 </view>
