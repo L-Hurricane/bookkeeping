@@ -15,24 +15,28 @@ const account: Account = {
 
 describe("startup navigation", () => {
   it("sends bootstrap without a session to login and does not query accounts", () => {
-    const queried: string[] = [];
-    const destination = routeBootstrap(false);
-    if (destination === "query-accounts") {
-      queried.push("accounts");
-    }
-    assert.equal(destination, "login");
-    assert.deepEqual(queried, []);
+    assert.equal(routeBootstrap(false), "login");
   });
 
-  it("queries accounts when bootstrap has a session and opens home or init", () => {
-    assert.equal(routeBootstrap(true), "query-accounts");
+  it("sends bootstrap with a session to account home without querying accounts", () => {
+    assert.equal(routeBootstrap(true), "home");
     assert.equal(routeAfterAccountQuery([account]).destination, "home");
     assert.equal(routeAfterAccountQuery([]).destination, "init");
   });
 
-  it("sends login back to bootstrap when a session is already valid", () => {
-    assert.equal(routeLoginShow(true), "bootstrap");
+  it("sends login with an existing session straight to account home", () => {
+    assert.equal(routeLoginShow(true), "home");
     assert.equal(routeLoginShow(false), "stay");
+    const urls: string[] = [];
+    const navigation = createAuthNavigation({
+      currentRoute: () => "pages/login/index",
+      reLaunch(url, done) {
+        urls.push(url);
+        done();
+      },
+    });
+    navigation.enterAuthenticatedHome();
+    assert.deepEqual(urls, ["/pages/account-home/index"]);
   });
 
   it("does not relaunch from app launch", () => {

@@ -1,0 +1,83 @@
+<view class="page" wx:if="{{contextInvalid}}">
+  <text class="error">记账页面参数无效</text>
+  <button bindtap="onBackHome">返回</button>
+</view>
+<view class="page" wx:else>
+  <view class="types">
+    <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
+    <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
+  </view>
+  <text class="amount-label">金额</text>
+  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
+  <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
+  <text class="label">名称</text>
+  <input class="field" type="text" value="{{name}}" bindinput="onNameInput" />
+  <text class="label">分类</text>
+  <view wx:if="{{categoryPhase === 'loading'}}"><text class="hint">正在读取分类</text></view>
+  <view wx:elif="{{categoryPhase === 'error'}}">
+    <text class="error">分类加载失败</text>
+    <button bindtap="onRetryCategories">重新加载</button>
+    <view class="choice" bindtap="onChooseCategory" data-id="">未分类 ></view>
+  </view>
+  <view wx:else class="choice" bindtap="onOpenCategories">{{categoryText}} ></view>
+  <text class="label">标签</text>
+  <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
+  <view class="chips" wx:if="{{tagChips.length}}">
+    <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
+  </view>
+  <view wx:if="{{tagPhase === 'error'}}">
+    <text class="error">标签加载失败</text>
+    <button bindtap="onRetryTags">重新加载</button>
+  </view>
+  <view class="composer" wx:if="{{tagPhase !== 'loading'}}">
+    <text wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
+    <block wx:else>
+      <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked}}" bindinput="onTagDraft" />
+      <button disabled="{{tagCreateInFlight}}" bindtap="onCreateTag">创建</button>
+    </block>
+    <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
+  </view>
+  <text class="label">交易时间</text>
+  <view class="choice" bindtap="onOpenTime">{{businessTimeText}} ></view>
+  <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
+  <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
+  <text class="label">备注</text>
+  <input class="field" type="text" value="{{remark}}" bindinput="onRemarkInput" />
+  <view class="actions">
+    <button class="cancel" bindtap="onCancel">取消</button>
+    <button class="save" disabled="true">保存</button>
+  </view>
+  <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseCategories"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" bindtap="onChooseCategory" data-id="">未分类</view>
+        <block wx:for="{{categoryRows}}" wx:key="key">
+          <text class="group" wx:if="{{item.kind === 'group'}}">{{item.label}}</text>
+          <view class="choice child" wx:else data-id="{{item.id}}" bindtap="onChooseCategory">{{item.label}}</view>
+        </block>
+      </scroll-view>
+      <button bindtap="onCloseCategories">关闭</button>
+    </view>
+  </view>
+  <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelTime"></view>
+    <view class="panel">
+      <text class="editor-title">编辑交易时间</text>
+      <text class="label">日期</text>
+      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" bindinput="onTimeDate" />
+      <text class="label">时间</text>
+      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" bindinput="onTimeClock" />
+      <view class="shortcuts">
+        <text class="shortcut" bindtap="onTimeNow">现在</text>
+        <text class="shortcut" bindtap="onTimeToday">今天</text>
+        <text class="shortcut" bindtap="onTimeYesterday">昨天</text>
+      </view>
+      <text class="error" wx:if="{{timeDraftError}}">{{timeDraftError}}</text>
+      <view class="editor-actions">
+        <button bindtap="onCancelTime">取消</button>
+        <button class="save" bindtap="onConfirmTime">确定</button>
+      </view>
+    </view>
+  </view>
+</view>

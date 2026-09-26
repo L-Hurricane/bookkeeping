@@ -1,13 +1,13 @@
-export type BootstrapEntry = "login" | "query-accounts";
-export type LoginShowEntry = "stay" | "bootstrap";
+export type BootstrapEntry = "login" | "home";
+export type LoginShowEntry = "stay" | "home";
 
-/** Bootstrap owns session routing. App launch does not choose a page. */
+/** Bootstrap only chooses Login or Account Home. App launch does not choose a page. */
 export function routeBootstrap(hasValidSession: boolean): BootstrapEntry {
-  return hasValidSession ? "query-accounts" : "login";
+  return hasValidSession ? "home" : "login";
 }
 
 export function routeLoginShow(hasValidSession: boolean): LoginShowEntry {
-  return hasValidSession ? "bootstrap" : "stay";
+  return hasValidSession ? "home" : "stay";
 }
 
 export function appLaunchRedirect(): null {

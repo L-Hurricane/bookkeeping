@@ -15,11 +15,3 @@
 .status {
   color: #666666;
 }
-
-.error {
-  color: #b42318;
-}
-
-.logout {
-  margin-top: 24rpx;
-}

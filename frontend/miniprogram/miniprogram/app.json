@@ -3,7 +3,8 @@
     "pages/bootstrap/index",
     "pages/login/index",
     "pages/account-init/index",
-    "pages/account-home/index"
+    "pages/account-home/index",
+    "pages/transaction-create/index"
   ],
   "window": {
     "navigationBarTitleText": "个人记账",

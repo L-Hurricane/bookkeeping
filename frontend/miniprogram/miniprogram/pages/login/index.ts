@@ -13,7 +13,7 @@ Page({
   },
 
   onShow() {
-    if (routeLoginShow(restoreSession(wechatStorage, new Date()) !== null) === "bootstrap") {
+    if (routeLoginShow(restoreSession(wechatStorage, new Date()) !== null) === "home") {
       authNavigation.enterAuthenticatedHome();
     }
   },

@@ -4,12 +4,15 @@ import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout 
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
 import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
 import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
+import { validateBusinessTime } from "../../transaction/business-time";
+import { canOpenCreateTransaction, transactionCreatePath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
 
 Page({
   loadGuard: createLoadGuard(),
   selectedMonth: "",
   accountId: 0,
+  accountCreatedTime: "",
   currency: "",
 
   data: {
@@ -60,6 +63,7 @@ Page({
         return;
       }
       this.accountId = route.account.id;
+      this.accountCreatedTime = route.account.createdTime;
       this.currency = route.account.currency;
       this.showAccount(route.account);
       void this.loadLedger();
@@ -112,6 +116,13 @@ Page({
       const errorMessage = error instanceof LedgerResponseError ? "流水数据不符合约定" : "流水读取失败，请稍后重试";
       this.setData({ phase: "ledger-error", errorMessage });
     }
+  },
+
+  onCreate() {
+    if (!canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({ url: transactionCreatePath(this.accountId, this.accountCreatedTime) });
   },
 
   onPreviousMonth() {

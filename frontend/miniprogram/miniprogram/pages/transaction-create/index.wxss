@@ -1,0 +1,161 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx calc(180rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.types {
+  display: flex;
+  gap: 16rpx;
+}
+
+.type {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #f0f0f0;
+}
+
+.type.active {
+  background: #111111;
+  color: #ffffff;
+}
+
+.amount-label,
+.label {
+  display: block;
+  margin-top: 28rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.amount {
+  margin-top: 8rpx;
+  font-size: 56rpx;
+  font-weight: 600;
+}
+
+.field,
+.choice {
+  margin-top: 8rpx;
+}
+
+.field {
+  width: 100%;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 8rpx;
+}
+
+.chip {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f3f3f3;
+}
+
+.chip.selected {
+  background: #111111;
+  color: #ffffff;
+}
+
+.composer {
+  margin-top: 20rpx;
+}
+
+.actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.cancel {
+  background: #f3f3f3;
+  color: #111111;
+}
+
+.save {
+  background: #111111;
+  color: #ffffff;
+}
+
+.group {
+  display: block;
+  margin-top: 20rpx;
+  color: #666666;
+}
+
+.child {
+  padding-left: 24rpx;
+}
+
+.mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.backdrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(17, 17, 17, 0.4);
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70vh;
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.panel-list {
+  height: 56vh;
+}
+
+.editor-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.shortcuts,
+.editor-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.shortcut {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f3f3f3;
+}
+
+.error {
+  color: #b42318;
+  font-size: 26rpx;
+}
+
+.hint {
+  color: #666666;
+  font-size: 26rpx;
+}

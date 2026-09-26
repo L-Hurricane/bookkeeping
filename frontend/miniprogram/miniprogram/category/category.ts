@@ -64,7 +64,10 @@ function parseRoot(value: unknown): CategoryNode | null {
 }
 
 function parseChild(value: unknown): CategoryChild | null {
-  if (!isRecord(value) || "children" in value) {
+  if (!isRecord(value)) {
+    return null;
+  }
+  if ("children" in value && (!Array.isArray(value.children) || value.children.length !== 0)) {
     return null;
   }
   return parseFields(value);

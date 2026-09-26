@@ -98,6 +98,14 @@
   color: #b42318;
 }
 
+.create {
+  margin-top: 28rpx;
+  background: #111111;
+  color: #ffffff;
+}
+
 .logout {
   margin-top: 32rpx;
+  background: transparent;
+  color: #666666;
 }

@@ -1,7 +1,7 @@
 const LOGIN_ROUTE = "pages/login/index";
 const LOGIN_URL = "/pages/login/index";
-const AUTHENTICATED_HOME_ROUTE = "pages/bootstrap/index";
-const AUTHENTICATED_HOME_URL = "/pages/bootstrap/index";
+const AUTHENTICATED_HOME_ROUTE = "pages/account-home/index";
+const AUTHENTICATED_HOME_URL = "/pages/account-home/index";
 
 export interface AuthNavigationDependencies {
   currentRoute: () => string | undefined;
