@@ -133,6 +133,9 @@ Page({
   },
 
   onUnload() {
+    if (this.deletePhase === "deleting" || this.deletePhase === "uncertain" || this.update.phase === "submitting" || this.update.phase === "uncertain") {
+      emitListStale(this);
+    }
     this.loadGuard.pageAlive = false;
     wx.disableAlertBeforeUnload();
   },
@@ -508,6 +511,7 @@ Page({
         success: (result) => {
           if (result.confirm) {
             wx.disableAlertBeforeUnload();
+            emitListStale(this);
             wx.navigateBack();
           }
         },
@@ -664,6 +668,7 @@ Page({
   leaveAfterDelete() {
     this.deletePhase = "idle";
     wx.disableAlertBeforeUnload();
+    emitListStale(this);
     wx.navigateBack();
   },
 
@@ -776,6 +781,15 @@ function editAlertMessage(phase: UpdateState["phase"]): string | null {
     return "保存结果尚未确认。离开后请到流水中确认本次修改是否已保存。";
   }
   return null;
+}
+
+function emitListStale(page: object): void {
+  const owner = page as { getOpenerEventChannel?: () => { emit?: (name: string, data: Record<string, never>) => void } };
+  const channel = owner.getOpenerEventChannel?.();
+  if (channel === undefined || typeof channel.emit !== "function") {
+    return;
+  }
+  channel.emit("listStale", {});
 }
 
 function emitTransactionUpdated(page: object, result: { transactionId: number; targetMonth: string }): void {

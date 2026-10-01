@@ -12,6 +12,7 @@
     "miniprogram/storage/key-value.ts",
     "miniprogram/http/client.ts",
     "miniprogram/navigation/auth-navigation.ts",
+    "miniprogram/navigation/scroll-restore.ts",
     "miniprogram/navigation/startup.ts",
     "miniprogram/services/auth.ts",
     "miniprogram/services/account.ts",

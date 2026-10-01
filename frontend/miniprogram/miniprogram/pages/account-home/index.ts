@@ -27,6 +27,7 @@ import { statisticsPagePath } from "../../statistics/drilldown";
 import { canOpenStatistics } from "../../statistics/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
+import { noteListStale, noteSavedTransaction, showOpenList, type DetailReturn, type OpenList } from "../../navigation/scroll-restore";
 
 Page({
   loadGuard: createLoadGuard(),
@@ -38,6 +39,9 @@ Page({
   highlight: idleHighlight(),
   highlightTimer: null as number | null,
   locateGeneration: 0,
+  pageScrollTop: 0,
+  detailReturn: null as DetailReturn | null,
+  scrollRestoreGeneration: 0,
 
   data: {
     phase: "account-loading" as "account-loading" | "account-error" | "ledger-loading" | "ready" | "ledger-error",
@@ -61,7 +65,26 @@ Page({
     if (this.selectedMonth.length === 0) {
       this.selectedMonth = currentBeijingMonth(new Date());
     }
+    const shown = showOpenList(this.openList());
+    this.detailReturn = shown.state.visit;
+    if (shown.show.refresh === "keep") {
+      return;
+    }
+    if (shown.show.refresh === "background-refresh") {
+      void this.loadLedger("background", shown.show.scrollTop);
+      return;
+    }
+    if (shown.show.scope === "ledger") {
+      void this.loadLedger("replace");
+      return;
+    }
     void this.loadAccount();
+  },
+
+  onPageScroll(event: WechatMiniprogram.Page.IPageScrollOption) {
+    if (Number.isFinite(event.scrollTop) && event.scrollTop >= 0) {
+      this.pageScrollTop = event.scrollTop;
+    }
   },
 
   onUnload() {
@@ -111,14 +134,18 @@ Page({
     });
   },
 
-  async loadLedger() {
+  async loadLedger(presentation: "replace" | "background" = "replace", restoreScrollTop: number | null = null) {
     const month = this.selectedMonth;
     const accountId = this.accountId;
+    const background = presentation === "background" && this.data.phase === "ready";
+    const scrollRestoreGeneration = ++this.scrollRestoreGeneration;
     const generation = beginLoad(this.loadGuard);
     if (generation === null) {
       return;
     }
-    this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "" });
+    if (!background) {
+      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "" });
+    }
     try {
       const ledger = await ledgerApi.getLedger(accountId, month);
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth)) {
@@ -127,6 +154,8 @@ Page({
       const settlement = settleLedger(this.pendingPostSave, "success", ledger.items);
       this.pendingPostSave = settlement.pending;
       const locate = settlement.locate;
+      const explicitLocate = this.pendingPostSave !== null || locate !== null;
+      const restoreTop = background && !explicitLocate ? restoreScrollTop : null;
       const ledgerView = {
         phase: "ready" as const,
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
@@ -142,7 +171,12 @@ Page({
         highlightKey: locate === null ? this.highlight.key : locate.key,
       };
       if (locate === null) {
-        this.setData(ledgerView);
+        this.setData(ledgerView, () => {
+          if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
+            return;
+          }
+          this.restoreListScroll(restoreTop);
+        });
         return;
       }
       this.highlight = startHighlight(this.highlight, locate.key);
@@ -157,6 +191,9 @@ Page({
       });
     } catch (error) {
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth) || isUnauthorized(error)) {
+        return;
+      }
+      if (background && this.data.phase === "ready") {
         return;
       }
       const errorMessage = error instanceof LedgerResponseError ? "流水数据不符合约定" : "流水读取失败，请稍后重试";
@@ -217,14 +254,42 @@ Page({
     if (!Number.isSafeInteger(recordId) || recordId <= 0 || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
+    this.detailReturn = { dirty: false, context: this.selectedMonth, scrollTop: this.pageScrollTop };
     wx.navigateTo({
       url: transactionDetailPath(this.accountId, recordId, this.accountCreatedTime, this.selectedMonth),
       events: {
         transactionUpdated: (result: unknown) => {
-          this.receiveTransactionCreated(result);
+          this.captureTransactionUpdate(result);
+        },
+        listStale: () => {
+          this.detailReturn = noteListStale(this.openList()).visit;
         },
       },
     });
+  },
+
+  openList(): OpenList {
+    return {
+      month: this.selectedMonth,
+      locateMonth: this.pendingPostSave === null ? null : this.pendingPostSave.targetMonth,
+      visit: this.detailReturn,
+    };
+  },
+
+  captureTransactionUpdate(result: unknown) {
+    const current = this.locateNavigation();
+    const next = acceptTransactionCreated(current, result);
+    const accepted = applyAcceptedLocate(current, next);
+    const pending = accepted?.pending ?? null;
+    const listed = noteSavedTransaction(this.openList(), pending?.targetMonth ?? null);
+    this.detailReturn = listed.visit;
+    this.selectedMonth = listed.month;
+    if (pending === null) {
+      return;
+    }
+    this.pendingPostSave = pending;
+    this.stopLocateFeedback();
+    this.setData({ highlightKey: "", locateMiss: "" });
   },
 
   receiveAdjustmentCreated(payload: unknown) {
@@ -263,6 +328,9 @@ Page({
     }
     this.selectedMonth = next.selectedMonth;
     this.pendingPostSave = next.pending;
+    this.detailReturn = null;
+    this.pageScrollTop = 0;
+    this.scrollRestoreGeneration += 1;
     this.stopLocateFeedback();
     this.setData({ highlightKey: "", locateMiss: "" });
     void this.loadLedger();
@@ -295,6 +363,14 @@ Page({
         void this.loadLedger();
       }
     }
+  },
+
+  restoreListScroll(scrollTop: number | null) {
+    if (scrollTop === null || !this.loadGuard.pageAlive) {
+      return;
+    }
+    this.pageScrollTop = scrollTop;
+    wx.pageScrollTo({ scrollTop, duration: 0 });
   },
 
   locateNavigation() {
