@@ -1,7 +1,12 @@
 # Bookkeeping v0.1
 
-当前后端包含认证、单账户、固定分类、独立标签、普通交易、交易幂等、当前余额、余额调整、月度流水，以及月度 / 分类 / 标签统计。
-正式基线位于 `docs/`。v0.2 可选交易分类变更当前生效。微信小程序前端已完成到 Phase 0G：登录与会话、账户初始化与首页、月度流水、交易的创建 / 详情 / 编辑 / 删除、余额调整的创建 / 详情 / 删除。独立统计页可按月查看收支、分类和标签，并下钻对应交易。
+Bookkeeping v0.1 — Feature Complete
+
+已完成的范围：用户名密码认证、单个微信账户、起始余额与当前余额、收入 / 支出交易、可选分类、标签、交易的创建 / 详情 / 编辑 / 删除、余额调整、月度流水、月度统计、分类统计、标签统计、统计下钻，以及微信小程序前端。
+
+Feature Complete does not mean Production Ready. 当前没有配置正式公网 Backend 或 Production Deployment。
+
+正式基线位于 `docs/`。v0.2 可选交易分类变更当前生效。
 
 AI Coding Agent: read `AGENTS.md` first.
 
@@ -227,7 +232,7 @@ v0.1 的 `UNIQUE(accounts.user_id)` 使每个用户只有一个账户，Create �
 
 ## Phase 5 · BalanceAdjustment
 
-当前余额在查询时聚合，不落独立字段。Create BalanceAdjustment 在账户锁内按提交时余额计算差额；差额为 0 时不建记录，并以 `NO_CHANGE` 幂等结果重放。等待 Human Gate 4。
+当前余额在查询时聚合，不落独立字段。Create BalanceAdjustment 在账户锁内按提交时余额计算差额；差额为 0 时不建记录，并以 `NO_CHANGE` 幂等结果重放。Human Gate 4 已通过。
 
 ## Phase 6 · Ledger
 
