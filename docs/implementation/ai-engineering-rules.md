@@ -20,7 +20,14 @@ Frontend: `docs/frontend/v0.1-frontend-design.md`.
 
 Implementation sequence: `docs/implementation/v0.1-implementation-plan.md`. Execution history: `docs/implementation/v0.1-execution-log.md`.
 
-A file in `docs/changes/` overrides a baseline only when it is marked `Status: Accepted`, or a later equivalent Current/Accepted status defined by the project. Draft, Proposed, and Deprecated documents do not override. An accepted change overrides only the rule it explicitly changes. `docs/changes/v0.2-optional-transaction-category.md` is `Status: Accepted` and changes Transaction Category from exactly one to zero or one. It does not reopen the rest of v0.1.
+A file in `docs/changes/` overrides a baseline only when it is marked `Status: Accepted`, or a later equivalent Current/Accepted status defined by the project. Draft, Proposed, and Deprecated documents do not override. An accepted change overrides only the rule it explicitly changes. `docs/changes/v0.2-optional-transaction-category.md` is `Status: Accepted` and changes Transaction Category from exactly one to zero or one. It does not reopen the rest of v0.1. `docs/changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md` is `Status: Accepted` and adds Pre-analysis Data Freshness Check for AI Monthly Analysis generation. It does not change v0.1 bookkeeping semantics.
+
+AI Monthly Analysis baselines do not replace the v0.1 sources above and do not change bookkeeping semantics:
+
+- Product Baseline, Frozen / Accepted: `docs/product/v0.2-ai-monthly-analysis.md`.
+- Accepted CR-001 Change: `docs/changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md`. This is not v0.1 CR-001.
+- Domain Baseline, Confirmed: `docs/domain/v0.2-ai-monthly-analysis.md`. Domain Impact Review PASS.
+- Architecture Review, in progress: `docs/architecture/v0.2-ai-monthly-analysis.md`. Confirmed decisions so far. Architecture Baseline is not finalized.
 
 A task prompt may select the feature, narrow the scope, and name the technical action. It may not silently replace a frozen product, domain, architecture, API, or data-semantics rule.
 

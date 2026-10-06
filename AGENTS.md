@@ -27,6 +27,13 @@ A file in `docs/changes/` overrides a baseline only when it is marked `Status: A
 | Execution history | `docs/implementation/v0.1-execution-log.md` |
 | Agent workflow | `docs/implementation/ai-engineering-rules.md` |
 
+AI 月度分析（AI Monthly Analysis）是 v0.2 的支持能力。下面这些文档不覆盖上表里的 v0.1 权威，也不改变已冻结的记账语义：
+
+- Product Baseline，Frozen / Accepted：`docs/product/v0.2-ai-monthly-analysis.md`。
+- Accepted CR-001 Change：`docs/changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md`。这是分析前数据新鲜度确认（Pre-analysis Data Freshness Check），不是 `docs/product/v0.1-change-001.md`。
+- Domain Baseline，Confirmed：`docs/domain/v0.2-ai-monthly-analysis.md`。
+- Architecture Review，IN PROGRESS；Architecture Baseline NOT FINALIZED：`docs/architecture/v0.2-ai-monthly-analysis.md`。
+
 A task prompt may name the feature, narrow the scope, and set this round’s goal. It does not silently override a frozen product, domain, architecture, API, or data-semantics decision. If it conflicts with a baseline, stop that part, report `Conflict / Required Decision`, and wait. Do not choose.
 
 ## How much to read

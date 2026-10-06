@@ -27,6 +27,15 @@ Across engineering stages, later confirmed baselines concretize earlier stages b
 - `implementation/` — Implementation Plan and current Codex task
 - `frontend/` — WeChat Mini Program frontend design baseline
 
+## v0.2 AI Monthly Analysis
+
+These files add the AI Monthly Analysis supporting capability. They do not override v0.1 bookkeeping semantics. Optional Transaction Category remains `changes/v0.2-optional-transaction-category.md`.
+
+- `product/v0.2-ai-monthly-analysis.md` — Product Baseline, Frozen / Accepted.
+- `changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md` — Accepted CR-001 Change: Pre-analysis Data Freshness Check. Not v0.1 CR-001.
+- `domain/v0.2-ai-monthly-analysis.md` — Domain Baseline, Confirmed.
+- `architecture/v0.2-ai-monthly-analysis.md` — Architecture Review in progress. Architecture Baseline not finalized.
+
 ## Agent usage
 
 AI coding agents start at the repository `AGENTS.md`, then `docs/implementation/ai-engineering-rules.md`.
