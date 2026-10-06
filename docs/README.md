@@ -34,7 +34,7 @@ These files add the AI Monthly Analysis supporting capability. They do not overr
 - `product/v0.2-ai-monthly-analysis.md` — Product Baseline, Frozen / Accepted.
 - `changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md` — Accepted CR-001 Change: Pre-analysis Data Freshness Check. Not v0.1 CR-001.
 - `domain/v0.2-ai-monthly-analysis.md` — Domain Baseline, Confirmed.
-- `architecture/v0.2-ai-monthly-analysis.md` — Architecture Review in progress. Architecture Baseline not finalized.
+- `architecture/v0.2-ai-monthly-analysis.md` — Architecture Baseline, Confirmed. Next is AI-specific Design, not started. A01–A66 stay in that file.
 
 ## Agent usage
 

@@ -27,7 +27,7 @@ AI Monthly Analysis baselines do not replace the v0.1 sources above and do not c
 - Product Baseline, Frozen / Accepted: `docs/product/v0.2-ai-monthly-analysis.md`.
 - Accepted CR-001 Change: `docs/changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md`. This is not v0.1 CR-001.
 - Domain Baseline, Confirmed: `docs/domain/v0.2-ai-monthly-analysis.md`. Domain Impact Review PASS.
-- Architecture Review, in progress: `docs/architecture/v0.2-ai-monthly-analysis.md`. Confirmed decisions so far. Architecture Baseline is not finalized.
+- Architecture Baseline, Confirmed: `docs/architecture/v0.2-ai-monthly-analysis.md`. Architecture Impact Review PASS. A01–A66 stay in that file. Next is AI-specific Design, not started.
 
 A task prompt may select the feature, narrow the scope, and name the technical action. It may not silently replace a frozen product, domain, architecture, API, or data-semantics rule.
 
