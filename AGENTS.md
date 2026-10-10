@@ -32,7 +32,8 @@ AI 月度分析（AI Monthly Analysis）是 v0.2 的支持能力。下面这些�
 - Product Baseline，Frozen / Accepted：`docs/product/v0.2-ai-monthly-analysis.md`。
 - Accepted CR-001 Change：`docs/changes/v0.2-ai-monthly-analysis-cr-001-pre-analysis-freshness.md`。这是分析前数据新鲜度确认（Pre-analysis Data Freshness Check），不是 `docs/product/v0.1-change-001.md`。
 - Domain Baseline，Confirmed：`docs/domain/v0.2-ai-monthly-analysis.md`。
-- Architecture Baseline，Confirmed：`docs/architecture/v0.2-ai-monthly-analysis.md`。Architecture Impact Review PASS。A01–A66 只以该文件为准。后续是 AI-specific Design，尚未开始。
+- Architecture Baseline，Confirmed：`docs/architecture/v0.2-ai-monthly-analysis.md`。Architecture Impact Review PASS。A01–A66 只以该文件为准，本记录不修改它。
+- T2 报告组合记录：`docs/design/v0.2-ai-monthly-analysis-report-composition.md`。它只说明四章节如何由 Java 与两字段模型输出组合，不覆盖 Product、Domain 或 Architecture。
 
 A task prompt may name the feature, narrow the scope, and set this round’s goal. It does not silently override a frozen product, domain, architecture, API, or data-semantics decision. If it conflicts with a baseline, stop that part, report `Conflict / Required Decision`, and wait. Do not choose.
 
