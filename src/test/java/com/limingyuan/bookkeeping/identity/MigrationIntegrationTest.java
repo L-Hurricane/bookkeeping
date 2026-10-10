@@ -51,7 +51,7 @@ class MigrationIntegrationTest {
                         WHERE u.username = 'v10-upgrade'
                         """);
             }
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -92,7 +92,7 @@ class MigrationIntegrationTest {
                  var rows = statement.executeQuery("SHOW TABLES")) {
                 var names = new ArrayList<String>();
                 while (rows.next()) names.add(rows.getString(1));
-                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments", "flyway_schema_history");
+                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments", "analysis_snapshots", "analysis_quota_days", "analysis_generations", "analysis_user_locks", "flyway_schema_history");
             }
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement();

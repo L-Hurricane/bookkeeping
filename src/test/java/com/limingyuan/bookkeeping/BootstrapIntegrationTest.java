@@ -72,12 +72,12 @@ class BootstrapIntegrationTest {
         assertThat(flyway.getConfiguration().isBaselineOnMigrate()).isFalse();
         assertThat(flyway.getConfiguration().isCleanDisabled()).isTrue();
         flyway.validate();
-        assertThat(flyway.info().applied()).hasSize(10);
+        assertThat(flyway.info().applied()).hasSize(11);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(jdbcClient.sql("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE()
-                """).query(String.class).list()).containsExactlyInAnyOrder("flyway_schema_history", "users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments");
+                """).query(String.class).list()).containsExactlyInAnyOrder("flyway_schema_history", "users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments", "analysis_snapshots", "analysis_quota_days", "analysis_generations", "analysis_user_locks");
     }
 
     @Test
