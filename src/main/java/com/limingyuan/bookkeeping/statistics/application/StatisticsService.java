@@ -66,7 +66,7 @@ public class StatisticsService {
         });
     }
 
-    private List<CategoryItem> categoryItems(long accountId, YearMonth month, String type) {
+    List<CategoryItem> categoryItems(long accountId, YearMonth month, String type) {
         var amounts = new LinkedHashMap<Long, Aggregate>();
         var uncategorized = new Aggregate[] { null };
         jdbc.sql("""
@@ -166,7 +166,25 @@ public class StatisticsService {
                 .single();
     }
 
-    private static YearMonth month(String raw) {
+    record SignedTotals(BigDecimal income, BigDecimal expense, int incomeCount, int expenseCount) { }
+
+    SignedTotals signedTotals(long accountId, YearMonth month) {
+        return jdbc.sql("""
+                SELECT COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) AS net_income,
+                       COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) AS net_expense,
+                       COUNT(CASE WHEN type = 'INCOME' THEN 1 END) AS income_count,
+                       COUNT(CASE WHEN type = 'EXPENSE' THEN 1 END) AS expense_count
+                FROM transactions
+                WHERE account_id = :accountId AND user_id = :userId
+                  AND business_time >= :start AND business_time < :end
+                """).param("accountId", accountId).param("userId", context.userId())
+                .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
+                .query((rs, row) -> new SignedTotals(rs.getBigDecimal("net_income"), rs.getBigDecimal("net_expense"),
+                        rs.getInt("income_count"), rs.getInt("expense_count")))
+                .single();
+    }
+
+    static YearMonth month(String raw) {
         try { return YearMonth.parse(raw); }
         catch (DateTimeParseException | NullPointerException ex) {
             throw new ApiFailure(400, "VALIDATION_FAILED", "月份必须为 YYYY-MM");
