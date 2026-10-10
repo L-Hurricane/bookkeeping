@@ -36,6 +36,13 @@ bookkeeping:
   acceptance-data:
     enabled: ${ACCEPTANCE_DATA_ENABLED:false}
     action: ${ACCEPTANCE_DATA_ACTION:}
+  analysis:
+    dashscope:
+      base-url: ${DASHSCOPE_BASE_URL:}
+      api-key: ${DASHSCOPE_API_KEY:}
+      model: ${DASHSCOPE_MODEL:qwen3.7-flash}
+      timeout: ${DASHSCOPE_TIMEOUT:PT60S}
+      max-completion-tokens: ${DASHSCOPE_MAX_COMPLETION_TOKENS:2048}
 
 management:
   endpoints:

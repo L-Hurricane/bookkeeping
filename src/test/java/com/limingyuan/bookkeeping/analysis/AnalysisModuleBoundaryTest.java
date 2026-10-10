@@ -18,6 +18,8 @@ class AnalysisModuleBoundaryTest {
         assertThat(analysisImports).noneMatch(line -> line.contains("Repository"));
         assertThat(analysisImports).noneMatch(line -> line.contains("JdbcClient"));
         assertThat(analysisImports).noneMatch(line -> line.contains("springframework.jdbc"));
+        assertThat(importsUnder(analysis.resolve("application")))
+                .noneMatch(line -> line.contains("com.limingyuan.bookkeeping.analysis.infrastructure"));
 
         var coreImports = new ArrayList<String>();
         try (var walk = Files.walk(root)) {
