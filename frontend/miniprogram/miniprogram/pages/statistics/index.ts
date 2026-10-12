@@ -3,6 +3,7 @@ import { formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
 import { ApiError } from "../../http/client";
 import { statisticsApi } from "../../services/runtime";
 import { StatisticsResponseError } from "../../services/statistics";
+import { monthlyAnalysisPagePath } from "../../analysis/navigation";
 import { statisticsDetailPath } from "../../statistics/drilldown";
 import { parseStatisticsContext, type StatisticsPageContext } from "../../statistics/navigation";
 import {
@@ -95,6 +96,14 @@ Page({
       return;
     }
     void this.load(this.screen.month, this.screen.type);
+  },
+
+  onOpenAnalysis() {
+    const context = this.context;
+    if (context === null) {
+      return;
+    }
+    wx.navigateTo({ url: monthlyAnalysisPagePath(context.accountId, this.screen.month) });
   },
 
   onOpenRow(event: WechatMiniprogram.BaseEvent) {

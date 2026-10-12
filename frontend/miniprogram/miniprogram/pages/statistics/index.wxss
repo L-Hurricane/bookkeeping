@@ -94,3 +94,10 @@
 .error {
   color: #b42318;
 }
+
+.analysis-entry {
+  margin-top: 24rpx;
+  background: transparent;
+  color: #111111;
+  font-size: 28rpx;
+}

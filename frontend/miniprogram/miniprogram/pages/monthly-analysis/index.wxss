@@ -1,0 +1,56 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.month-step,
+.month-label {
+  font-size: 32rpx;
+}
+
+.month-label,
+.section {
+  font-weight: 600;
+}
+
+.status,
+.notice {
+  display: block;
+  margin-top: 24rpx;
+  color: #666666;
+  font-size: 28rpx;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.section {
+  display: block;
+  margin-top: 36rpx;
+  font-size: 30rpx;
+}
+
+.section-body {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 30rpx;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.error {
+  color: #b42318;
+}
+
+.retry {
+  margin-top: 24rpx;
+  background: transparent;
+  color: #111111;
+  font-size: 28rpx;
+}

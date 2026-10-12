@@ -1,0 +1,24 @@
+<view class="page">
+  <block wx:if="{{invalid}}">
+    <text class="error">{{errorMessage}}</text>
+  </block>
+  <block wx:else>
+    <view class="month">
+      <text class="month-step" bindtap="onPreviousMonth">‹</text>
+      <text class="month-label">{{monthLabel}}</text>
+      <text class="month-step" bindtap="onNextMonth">›</text>
+    </view>
+    <text class="status" wx:if="{{phase === 'loading'}}">正在读取分析</text>
+    <block wx:elif="{{phase === 'error'}}">
+      <text class="error">{{errorMessage}}</text>
+      <button class="retry" bindtap="onRetry">重新加载</button>
+    </block>
+    <block wx:elif="{{phase === 'ready'}}">
+      <text class="notice" wx:if="{{notice}}">{{notice}}</text>
+      <block wx:for="{{sections}}" wx:key="title">
+        <text class="section">{{item.title}}</text>
+        <text class="section-body">{{item.text}}</text>
+      </block>
+    </block>
+  </block>
+</view>

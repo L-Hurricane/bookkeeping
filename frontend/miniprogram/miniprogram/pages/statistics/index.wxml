@@ -8,6 +8,7 @@
       <text class="month-label">{{monthLabel}}</text>
       <text class="month-step" bindtap="onNextMonth">›</text>
     </view>
+    <button class="analysis-entry" bindtap="onOpenAnalysis">AI 分析本月</button>
     <view class="types">
       <text class="type {{type === 'EXPENSE' ? 'selected' : ''}}" data-type="EXPENSE" bindtap="onSelectType">支出</text>
       <text class="type {{type === 'INCOME' ? 'selected' : ''}}" data-type="INCOME" bindtap="onSelectType">收入</text>
