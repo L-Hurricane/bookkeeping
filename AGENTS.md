@@ -4,6 +4,8 @@ This repository is the personal bookkeeping application. The backend owns busine
 
 A new coding task starts here, then reads `docs/implementation/ai-engineering-rules.md`. After that, read only the baselines and source files the current task needs.
 
+Before running, testing, or debugging, read `docs/development/local-environment.md`. On this machine, reuse the installed Bootstrap JDK and MySQL. Do not create a new database.
+
 ## Source of truth
 
 Product, highest first:

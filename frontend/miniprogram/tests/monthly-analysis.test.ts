@@ -8,21 +8,33 @@ import {
   ANALYSIS_IN_PROGRESS,
   ANALYSIS_NETWORK_ERROR,
   ANALYSIS_NONE,
+  ANALYSIS_QUOTA,
+  ANALYSIS_REFRESH,
+  ANALYSIS_REUSED,
   ANALYSIS_STALE,
+  ANALYSIS_TIMEOUT,
+  analysisAgeNotice,
+  analysisFactLines,
+  analysisGenerateMessage,
   analysisLoadMessage,
   analysisNotice,
   analysisSections,
+  applyGenerate,
+  beginGenerate,
+  canRefreshAnalysis,
   failAnalysis,
   openAnalysis,
+  rejectGenerate,
   requestAnalysis,
   settleAnalysis,
 } from "../miniprogram/analysis/screen";
-import { createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
+import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
 import { createMonthlyAnalysisApi, monthlyAnalysisPath } from "../miniprogram/services/analysis";
 import { saveSession } from "../miniprogram/session/session";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 
 const overview = "2026年10月账本概况：净收入0.00元，0笔；净支出12.00元，1笔；结余-12.00元。\n本月账本没有收入记录。";
+const seenAt = new Date("2026-10-10T08:00:00Z");
 
 describe("monthly analysis GET", () => {
   it("requests the selected account and month and does not call another API", async () => {
@@ -58,13 +70,13 @@ describe("monthly analysis GET", () => {
     assert.deepEqual(sections.map((section) => section.title), ["本月概况", "支出结构", "结余情况与可能原因", "值得关注"]);
     assert.equal(sections[0]?.text, overview);
     assert.equal(sections[2]?.text, "结余-12.00元。\n支出高于收入。");
-    assert.equal(analysisNotice(analysis), "");
+    assert.equal(analysisNotice(analysis, seenAt), "");
   });
 
   it("marks a stale snapshot and still shows its original text", () => {
     const analysis = parseMonthlyAnalysis(body("STALE", { stale: true, fingerprint: "1:old" }), "2026-10");
     assert.ok(analysis);
-    assert.equal(analysisNotice(analysis), ANALYSIS_STALE);
+    assert.equal(analysisNotice(analysis, seenAt), ANALYSIS_STALE);
     assert.equal(analysisSections(analysis)[0]?.text, overview);
     assert.equal(analysis.fingerprint, "1:abc");
     assert.notEqual(analysis.snapshot?.fingerprint, analysis.fingerprint);
@@ -73,7 +85,7 @@ describe("monthly analysis GET", () => {
   it("does not invent a report when nothing has been generated", () => {
     const analysis = parseMonthlyAnalysis(body("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false }), "2026-10");
     assert.ok(analysis);
-    assert.equal(analysisNotice(analysis), ANALYSIS_NONE);
+    assert.equal(analysisNotice(analysis, seenAt), ANALYSIS_NONE);
     assert.deepEqual(analysisSections(analysis), []);
     assert.equal(analysis.snapshot, null);
   });
@@ -89,7 +101,7 @@ describe("monthly analysis GET", () => {
       surplus: "0.00",
     }), "2026-10");
     assert.ok(analysis);
-    assert.equal(analysisNotice(analysis), ANALYSIS_EMPTY_MONTH);
+    assert.equal(analysisNotice(analysis, seenAt), ANALYSIS_EMPTY_MONTH);
     assert.deepEqual(analysisSections(analysis), []);
   });
 
@@ -105,11 +117,11 @@ describe("monthly analysis GET", () => {
       generation: { state: "FAILED", active: false },
     }), "2026-10");
     assert.ok(running && failed && failedWithoutReport);
-    assert.equal(analysisNotice(running), ANALYSIS_IN_PROGRESS);
+    assert.equal(analysisNotice(running, seenAt), ANALYSIS_IN_PROGRESS);
     assert.equal(analysisSections(running).length, 4);
-    assert.equal(analysisNotice(failed), ANALYSIS_FAILED);
+    assert.equal(analysisNotice(failed, seenAt), ANALYSIS_FAILED);
     assert.equal(analysisSections(failed).length, 4);
-    assert.equal(analysisNotice(failedWithoutReport), ANALYSIS_FAILED);
+    assert.equal(analysisNotice(failedWithoutReport, seenAt), ANALYSIS_FAILED);
     assert.deepEqual(analysisSections(failedWithoutReport), []);
     assert.equal(parseMonthlyAnalysis(body("GENERATION_IN_PROGRESS", {
       generation: { state: "IN_PROGRESS", active: false },
@@ -206,12 +218,44 @@ describe("monthly analysis GET", () => {
     }), "2026-10");
     assert.ok(current && stale && running && failed);
     assert.equal(current.snapshot?.stale, false);
-    assert.equal(analysisNotice(current), "");
-    assert.equal(analysisNotice(stale), ANALYSIS_STALE);
-    assert.equal(analysisNotice(running), `${ANALYSIS_IN_PROGRESS}\n${ANALYSIS_STALE}`);
-    assert.equal(analysisNotice(failed), `${ANALYSIS_FAILED}\n${ANALYSIS_STALE}`);
+    assert.equal(analysisNotice(current, seenAt), "");
+    assert.equal(analysisNotice(stale, seenAt), ANALYSIS_STALE);
+    assert.equal(analysisNotice(running, seenAt), `${ANALYSIS_IN_PROGRESS}\n${ANALYSIS_STALE}`);
+    assert.equal(analysisNotice(failed, seenAt), `${ANALYSIS_FAILED}\n${ANALYSIS_STALE}`);
     assert.equal(analysisSections(running).length, 4);
     assert.equal(analysisSections(failed)[0]?.text, overview);
+  });
+
+  it("reminds that a matching report is old without hiding it or calling generate", async () => {
+    const requests: HttpTransportRequest[] = [];
+    const old = body("CURRENT", { generatedAt: "2026-10-01T04:00:00Z" });
+    const api = apiFor((request) => {
+      requests.push(request);
+      return { statusCode: 200, data: old };
+    });
+    const analysis = await api.load(1001, "2026-10");
+    const now = new Date("2026-10-09T04:00:00Z");
+    assert.deepEqual(requests.map((request) => request.method), ["GET"]);
+    assert.equal(analysis.viewState, "CURRENT");
+    assert.equal(analysis.snapshot?.stale, false);
+    assert.equal(analysisNotice(analysis, now), "这份分析生成于2026年10月1日，时间较早，可能尚未反映后续的模型能力更新。");
+    assert.equal(analysisSections(analysis).length, 4);
+    assert.equal(analysisSections(analysis)[0]?.text, overview);
+    assert.equal(analysisNotice(analysis, new Date("2026-10-08T04:00:00Z")), "");
+    assert.equal(analysisAgeNotice("not-a-time", now), null);
+  });
+
+  it("marks a freshly generated unmatched report as stale data", () => {
+    const analysis = parseMonthlyAnalysis(body("STALE", {
+      stale: true,
+      fingerprint: "1:old",
+      generatedAt: "2026-10-12T06:00:00Z",
+    }), "2026-10");
+    assert.ok(analysis);
+    const notice = analysisNotice(analysis, new Date("2026-10-12T06:00:00Z"));
+    assert.equal(notice, ANALYSIS_STALE);
+    assert.equal(notice.includes("模型能力"), false);
+    assert.equal(analysisSections(analysis).length, 4);
   });
 
   it("ignores a late response from another month", () => {
@@ -226,6 +270,161 @@ describe("monthly analysis GET", () => {
     assert.equal(failed.error, ANALYSIS_NETWORK_ERROR);
   });
 });
+
+describe("monthly analysis generate", () => {
+  it("posts the fingerprint from the displayed GET and does not generate by itself", async () => {
+    const requests: HttpTransportRequest[] = [];
+    const api = apiFor((request) => {
+      requests.push(request);
+      if (request.method === "GET") {
+        return { statusCode: 200, data: body("STALE", { stale: true, fingerprint: "1:old" }) };
+      }
+      return { statusCode: 200, data: { outcome: "SUCCESS", analysis: body("CURRENT") } };
+    });
+    const loaded = await api.load(1001, "2026-10");
+    assert.deepEqual(analysisFactLines(loaded).map((line) => `${line.label} ${line.text}`), [
+      "净收入 0.00 元，0 笔",
+      "净支出 12.00 元，1 笔",
+      "结余 -12.00 元",
+    ]);
+    const ready = settleAnalysis(requestAnalysis(openAnalysis("2026-10"), "2026-10").screen, 1, loaded, true);
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    assert.equal(attempt.expectedFingerprint, loaded.fingerprint);
+    assert.equal(attempt.expectedFingerprint, "1:abc");
+    assert.notEqual(attempt.expectedFingerprint, loaded.snapshot?.fingerprint);
+    assert.equal(beginGenerate(attempt.screen), null);
+    const result = await api.generate(1001, attempt.month, attempt.expectedFingerprint);
+    const posted = JSON.parse(requests[1]?.data ?? "{}") as { month?: string; expectedFingerprint?: string };
+    assert.deepEqual(requests.map((request) => request.method), ["GET", "POST"]);
+    assert.equal(requests[1]?.url, "http://127.0.0.1:8080/api/v1/accounts/1001/monthly-analysis");
+    assert.equal(posted.month, "2026-10");
+    assert.equal(posted.expectedFingerprint, "1:abc");
+    const applied = applyGenerate(attempt.screen, attempt, result.analysis, result.outcome, true);
+    assert.equal(applied.submitting, false);
+    assert.equal(applied.actionMessage, "");
+    assert.equal(analysisSections(applied.analysis as MonthlyAnalysis).length, 4);
+    assert.equal(analysisFactLines(applied.analysis as MonthlyAnalysis)[1]?.text, "12.00 元，1 笔");
+  });
+
+  it("keeps a reused report and the failure states without another post", () => {
+    const ready = readyScreen("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false });
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    const reused = parseMonthlyAnalysis(body("CURRENT"), "2026-10");
+    assert.ok(reused);
+    const applied = applyGenerate(attempt.screen, attempt, reused, "REUSED", true);
+    assert.equal(applied.actionMessage, ANALYSIS_REUSED);
+    assert.equal(analysisSections(applied.analysis as MonthlyAnalysis)[0]?.text, overview);
+    const blocked = readyScreen("EMPTY_MONTH", {
+      snapshot: null,
+      incomeTransactionCount: 0,
+      expenseTransactionCount: 0,
+      emptyMonth: true,
+    });
+    const running = readyScreen("GENERATION_IN_PROGRESS", { generation: { state: "IN_PROGRESS", active: true } });
+    assert.equal(beginGenerate(blocked), null);
+    assert.equal(beginGenerate(running), null);
+    const refused = rejectGenerate(attempt.screen, attempt, analysisGenerateMessage(new ApiError(409, "REFRESH_REQUIRED", "server")), true);
+    assert.equal(refused.actionMessage, ANALYSIS_REFRESH);
+    assert.equal(refused.analysis?.fingerprint, ready.analysis?.fingerprint);
+    assert.equal(beginGenerate(refused), null);
+    assert.equal(analysisGenerateMessage(new ApiError(409, "IN_PROGRESS", "server")), ANALYSIS_IN_PROGRESS);
+    assert.equal(analysisGenerateMessage(new ApiError(409, "QUOTA_EXCEEDED", "server")), ANALYSIS_QUOTA);
+    assert.equal(analysisGenerateMessage(new ApiError(502, "GENERATION_FAILED", "stack /tmp/internal")), ANALYSIS_FAILED);
+    assert.equal(analysisGenerateMessage(new ApiError(502, "GENERATION_FAILED", "stack /tmp/internal")).includes("/tmp/internal"), false);
+  });
+
+  it("drops a late generate response after the month changes", () => {
+    const ready = readyScreen("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false });
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    const switched = requestAnalysis(attempt.screen, "2026-09");
+    const late = applyGenerate(switched.screen, attempt, parseMonthlyAnalysis(body("CURRENT"), "2026-10") as MonthlyAnalysis, "SUCCESS", true);
+    assert.equal(late.month, "2026-09");
+    assert.equal(late.phase, "loading");
+    assert.equal(late.analysis, null);
+    assert.equal(late.submitting, false);
+    assert.equal(applyGenerate(switched.screen, attempt, parseMonthlyAnalysis(body("CURRENT"), "2026-10") as MonthlyAnalysis, "SUCCESS", false), switched.screen);
+  });
+
+  it("waits for a manual GET after IN_PROGRESS and does not offer generate again", () => {
+    const ready = readyScreen("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false });
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    const waiting = rejectGenerate(attempt.screen, attempt, analysisGenerateMessage(new ApiError(409, "IN_PROGRESS", "server")), true);
+    assert.equal(beginGenerate(waiting), null);
+    assert.equal(canRefreshAnalysis(waiting), true);
+    const reload = requestAnalysis(waiting, waiting.month);
+    assert.equal(reload.duringSubmit, false);
+    assert.equal(reload.screen.submitting, false);
+    const current = parseMonthlyAnalysis(body("CURRENT"), "2026-10");
+    assert.ok(current);
+    const done = settleAnalysis(reload.screen, reload.generation, current, true);
+    assert.equal(done.analysis?.viewState, "CURRENT");
+    assert.equal(analysisSections(done.analysis as MonthlyAnalysis).length, 4);
+    assert.equal(beginGenerate(done), null);
+    assert.equal(canRefreshAnalysis(done), false);
+    const stillRunning = parseMonthlyAnalysis(body("GENERATION_IN_PROGRESS", {
+      generation: { state: "IN_PROGRESS", active: true },
+    }), "2026-10");
+    assert.ok(stillRunning);
+    const pending = settleAnalysis(reload.screen, reload.generation, stillRunning, true);
+    assert.equal(pending.analysis?.viewState, "GENERATION_IN_PROGRESS");
+    assert.equal(canRefreshAnalysis(pending), true);
+    assert.equal(beginGenerate(pending), null);
+  });
+
+  it("does not generate again when the current snapshot already matches", () => {
+    const current = readyScreen("CURRENT", { generatedAt: "2026-10-01T04:00:00Z" });
+    assert.equal(beginGenerate(current), null);
+    assert.equal(canRefreshAnalysis(current), false);
+    const notice = analysisNotice(current.analysis as MonthlyAnalysis, new Date("2026-10-09T04:00:00Z"));
+    assert.equal(notice.includes("时间较早"), true);
+    assert.equal(notice.includes("生成分析"), false);
+  });
+
+  it("keeps one in-flight POST when the same month is loaded again", () => {
+    const ready = readyScreen("STALE", { stale: true, fingerprint: "1:old" });
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    const shown = requestAnalysis(attempt.screen, attempt.month);
+    assert.equal(shown.duringSubmit, true);
+    assert.equal(shown.screen.submitting, true);
+    assert.equal(shown.screen.submitId, attempt.submitId);
+    assert.equal(beginGenerate(shown.screen), null);
+    const created = parseMonthlyAnalysis(body("CURRENT"), "2026-10");
+    assert.ok(created);
+    const applied = applyGenerate(shown.screen, attempt, created, "SUCCESS", true);
+    assert.equal(applied.submitting, false);
+    assert.equal(applied.analysis?.viewState, "CURRENT");
+    const staleRead = parseMonthlyAnalysis(body("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false }), "2026-10");
+    assert.ok(staleRead);
+    const ignored = settleAnalysis(applied, shown.generation, staleRead, true, true);
+    assert.equal(ignored.analysis?.viewState, "CURRENT");
+  });
+
+  it("uses a different message when generation times out", () => {
+    const timeout = analysisGenerateMessage(new ApiError(504, "GENERATION_FAILED", "gateway"));
+    const failed = analysisGenerateMessage(new ApiError(502, "GENERATION_FAILED", "provider"));
+    assert.equal(timeout, ANALYSIS_TIMEOUT);
+    assert.notEqual(timeout, failed);
+    assert.equal(timeout.includes("取消"), false);
+    const ready = readyScreen("NO_ANALYSIS", { snapshot: null, expenseTransactionCount: 1, emptyMonth: false });
+    const attempt = beginGenerate(ready);
+    assert.ok(attempt);
+    const waiting = rejectGenerate(attempt.screen, attempt, timeout, true);
+    assert.equal(beginGenerate(waiting), null);
+    assert.equal(canRefreshAnalysis(waiting), true);
+  });
+});
+
+function readyScreen(viewState: AnalysisViewState, overrides: Record<string, unknown> = {}) {
+  const requested = requestAnalysis(openAnalysis("2026-10"), "2026-10");
+  const analysis = parseMonthlyAnalysis(body(viewState, overrides), "2026-10");
+  assert.ok(analysis);
+  return settleAnalysis(requested.screen, requested.generation, analysis, true);
+}
 
 function keyExpense(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -275,7 +474,7 @@ function body(viewState: AnalysisViewState, overrides: Record<string, unknown> =
       provider: "dashscope",
       model: "qwen3.7-flash",
       promptVersion: "v1",
-      generatedAt: "2026-10-10T08:00:00Z",
+      generatedAt: overrides.generatedAt ?? "2026-10-10T08:00:00Z",
     },
     generation: overrides.generation,
   };

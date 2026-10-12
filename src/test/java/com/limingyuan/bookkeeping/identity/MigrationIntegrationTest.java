@@ -12,6 +12,7 @@ class MigrationIntegrationTest {
         String url = System.getenv().getOrDefault("MIGRATION_TEST_DB_URL", "jdbc:mysql://localhost:3306/bookkeeping_migration_test");
         String username = System.getenv("TEST_DB_USERNAME");
         String password = System.getenv("TEST_DB_PASSWORD");
+        MigrationSchemaGuard.requireDisposableSchema(url);
         // This deliberately disposable schema is separate from both development and ordinary API fixtures.
         try (var connection = DriverManager.getConnection(url, username, password)) {
             assertThat(connection.getCatalog()).isEqualTo("bookkeeping_migration_test");

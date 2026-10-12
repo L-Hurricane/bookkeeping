@@ -28,10 +28,7 @@ class MonthlyAnalysisServiceTest {
             return source;
         };
         var store = new RecordingStore();
-        var service = new MonthlyAnalysisService(new MonthlyAnalysisFactsService(reader), store,
-                new MonthlyAnalysisReportGeneration(new MonthlyAnalysisFactsService(reader), (input, prompt) -> {
-                    throw new AssertionError("model");
-                }), new TrustedUserContext(), Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
+        var service = service(store, reader);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new TrustedUserContext.Identity(4L, 0L), null, List.of()));
         var view = service.get(7L, "2026-10");
@@ -45,6 +42,47 @@ class MonthlyAnalysisServiceTest {
         assertThat(store.acquireCalls).isZero();
     }
 
+    @Test void getPrefersAMatchingSnapshotAndDoesNotGenerate() {
+        var source = facts();
+        MonthlyAnalysisContext expected = new MonthlyAnalysisFactsService((accountId, yearMonth) -> source).build(7L, "2026-10");
+        var store = new RecordingStore();
+        store.matching = snapshot(3L, expected.fingerprint(), "匹配的较早分析");
+        store.latest = snapshot(9L, "1:other", "较新的其他分析");
+        var service = service(store, (accountId, yearMonth) -> facts());
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new TrustedUserContext.Identity(4L, 0L), null, List.of()));
+        var current = service.get(7L, "2026-10");
+        assertThat(current.viewState()).isEqualTo("CURRENT");
+        assertThat(current.snapshot().id()).isEqualTo(3L);
+        assertThat(current.snapshot().stale()).isFalse();
+        assertThat(current.snapshot().monthlyOverview()).isEqualTo("匹配的较早分析");
+        assertThat(store.findLatestCalls).isZero();
+        assertThat(store.acquireCalls).isZero();
+
+        store.matching = null;
+        var stale = service.get(7L, "2026-10");
+        assertThat(stale.viewState()).isEqualTo("STALE");
+        assertThat(stale.snapshot().id()).isEqualTo(9L);
+        assertThat(stale.snapshot().stale()).isTrue();
+        assertThat(stale.snapshot().monthlyOverview()).isEqualTo("较新的其他分析");
+        assertThat(store.findLatestCalls).isEqualTo(1);
+        assertThat(store.acquireCalls).isZero();
+    }
+
+    private static MonthlyAnalysisService service(RecordingStore store, MonthlyBookkeepingFactsReader reader) {
+        return new MonthlyAnalysisService(new MonthlyAnalysisFactsService(reader), store,
+                new MonthlyAnalysisReportGeneration(new MonthlyAnalysisFactsService(reader), (input, prompt) -> {
+                    throw new AssertionError("model");
+                }), new TrustedUserContext(), Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
+    }
+
+    private static AnalysisSnapshot snapshot(long id, String fingerprint, String overview) {
+        return new AnalysisSnapshot(id, 4L, "2026-10", fingerprint,
+                new MonthlyAnalysisReport(overview, "支出", "结余", "关注"),
+                new AnalysisProvenance("dashscope", "qwen3.7-flash", "v1", null, null, null, 1L, null),
+                java.time.LocalDate.parse("2026-10-01"), Instant.parse("2026-10-01T00:00:00Z"));
+    }
+
     private static MonthlyBookkeepingFacts facts() {
         return new MonthlyBookkeepingFacts(7L, "2026-10", "3.00", "1.50", "1.50", 1, 1, List.of(), List.of(),
                 new UncategorizedSlice(0, "0.00"), new UncategorizedSlice(0, "0.00"), List.of());
@@ -52,11 +90,17 @@ class MonthlyAnalysisServiceTest {
 
     private static final class RecordingStore implements AnalysisGenerationStore {
         private int acquireCalls;
+        private int findLatestCalls;
+        private AnalysisSnapshot matching;
+        private AnalysisSnapshot latest;
 
         @Override public Optional<AnalysisSnapshot> findSuccessful(long userId, String yearMonth, String contextFingerprint) {
-            return Optional.empty();
+            return matching != null && matching.contextFingerprint().equals(contextFingerprint) ? Optional.of(matching) : Optional.empty();
         }
-        @Override public Optional<AnalysisSnapshot> findLatest(long userId, String yearMonth) { return Optional.empty(); }
+        @Override public Optional<AnalysisSnapshot> findLatest(long userId, String yearMonth) {
+            findLatestCalls++;
+            return Optional.ofNullable(latest);
+        }
         @Override public Optional<GenerationStatus> findCoordination(long userId, String yearMonth, String contextFingerprint) {
             return Optional.empty();
         }

@@ -48,6 +48,14 @@
   color: #b42318;
 }
 
+.fact {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 30rpx;
+  line-height: 1.6;
+}
+
+.generate,
 .retry {
   margin-top: 24rpx;
   background: transparent;

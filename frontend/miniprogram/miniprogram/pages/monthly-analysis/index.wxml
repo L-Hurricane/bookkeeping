@@ -14,7 +14,15 @@
       <button class="retry" bindtap="onRetry">重新加载</button>
     </block>
     <block wx:elif="{{phase === 'ready'}}">
+      <view class="facts">
+        <text class="fact" wx:for="{{facts}}" wx:key="label">{{item.label}} {{item.text}}</text>
+      </view>
       <text class="notice" wx:if="{{notice}}">{{notice}}</text>
+      <text class="status" wx:if="{{submitting}}">正在提交分析</text>
+      <text class="notice" wx:elif="{{actionMessage}}">{{actionMessage}}</text>
+      <button wx:if="{{needsRefresh}}" class="generate" bindtap="onRetry">重新加载</button>
+      <button wx:elif="{{canRefreshStatus}}" class="generate" bindtap="onRetry">刷新分析状态</button>
+      <button wx:elif="{{canGenerate}}" class="generate" bindtap="onGenerate">生成分析</button>
       <block wx:for="{{sections}}" wx:key="title">
         <text class="section">{{item.title}}</text>
         <text class="section-body">{{item.text}}</text>

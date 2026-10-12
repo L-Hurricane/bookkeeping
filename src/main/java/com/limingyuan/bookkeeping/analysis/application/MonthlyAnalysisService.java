@@ -39,7 +39,10 @@ public class MonthlyAnalysisService {
 
     public MonthlyAnalysisView get(long accountId, String month) {
         var context = facts.build(accountId, month);
-        return assemble(context, users.userId(), store.findLatest(users.userId(), context.yearMonth()).orElse(null));
+        long userId = users.userId();
+        var snapshot = store.findSuccessful(userId, context.yearMonth(), context.fingerprint())
+                .or(() -> store.findLatest(userId, context.yearMonth()));
+        return assemble(context, userId, snapshot.orElse(null));
     }
 
     public MonthlyAnalysisResult generate(long accountId, String month, String expectedFingerprint) {

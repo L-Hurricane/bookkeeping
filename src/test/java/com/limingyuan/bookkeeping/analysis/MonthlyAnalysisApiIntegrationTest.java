@@ -7,6 +7,8 @@ import com.limingyuan.bookkeeping.analysis.application.MonthlyAnalysisGenerator;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -283,6 +285,43 @@ class MonthlyAnalysisApiIntegrationTest {
         verify(generator, never()).generate(any(), any());
     }
 
+    @Test void getPrefersAnOlderMatchingSnapshotOverANewerHistoricalOne() throws Exception {
+        transact("2026-10-02T08:00:00+08:00");
+        String fingerprint = read(getAnalysis("2026-10")).path("fingerprint").asText();
+        long older = insertSnapshot(fingerprint, "较早的匹配分析", Instant.parse("2026-10-01T00:00:00Z"));
+        long newer = insertSnapshot("1:not-current", "较新的不匹配分析", Instant.parse("2026-10-12T00:00:00Z"));
+        assertThat(newer).isGreaterThan(older);
+        var before = quota();
+        var body = read(getAnalysis("2026-10"));
+        assertThat(body.path("viewState").asText()).isEqualTo("CURRENT");
+        assertThat(body.path("snapshot").path("id").asLong()).isEqualTo(older);
+        assertThat(body.path("snapshot").path("stale").asBoolean()).isFalse();
+        assertThat(body.path("snapshot").path("fingerprint").asText()).isEqualTo(fingerprint);
+        assertThat(body.path("snapshot").path("monthlyOverview").asText()).isEqualTo("较早的匹配分析");
+        assertThat(body.path("snapshot").path("generatedAt").asText()).isNotBlank();
+        assertThat(jdbc.sql("SELECT monthly_overview FROM analysis_snapshots WHERE id = :id").param("id", older)
+                .query(String.class).single()).isEqualTo("较早的匹配分析");
+        assertThat(quota()).isEqualTo(before);
+        assertThat(snapshotCount()).isEqualTo(2);
+        verify(generator, never()).generate(any(), any());
+    }
+
+    @Test void getShowsTheLatestHistoricalSnapshotWhenNoneMatches() throws Exception {
+        transact("2026-10-02T08:00:00+08:00");
+        String fingerprint = read(getAnalysis("2026-10")).path("fingerprint").asText();
+        insertSnapshot("1:older-other", "更早的历史分析", Instant.parse("2026-10-01T00:00:00Z"));
+        long latest = insertSnapshot("1:newer-other", "最近的历史分析", Instant.parse("2026-10-12T00:00:00Z"));
+        var body = read(getAnalysis("2026-10"));
+        assertThat(body.path("viewState").asText()).isEqualTo("STALE");
+        assertThat(body.path("snapshot").path("id").asLong()).isEqualTo(latest);
+        assertThat(body.path("snapshot").path("stale").asBoolean()).isTrue();
+        assertThat(body.path("snapshot").path("monthlyOverview").asText()).isEqualTo("最近的历史分析");
+        assertThat(body.path("fingerprint").asText()).isEqualTo(fingerprint);
+        assertThat(body.path("snapshot").path("fingerprint").asText()).isNotEqualTo(fingerprint);
+        assertThat(quota()).isEqualTo(new Quota(0, 0));
+        verify(generator, never()).generate(any(), any());
+    }
+
     @Test void anotherUserCannotReadOrGenerate() throws Exception {
         transact("2026-10-02T08:00:00+08:00");
         var other = newUser("analysis_other");
@@ -326,6 +365,19 @@ class MonthlyAnalysisApiIntegrationTest {
                 SELECT COALESCE(SUM(reserved_count), 0), COALESCE(SUM(consumed_count), 0)
                 FROM analysis_quota_days WHERE user_id = :id
                 """).param("id", userId).query((rs, row) -> new Quota(rs.getInt(1), rs.getInt(2))).single();
+    }
+
+    private long insertSnapshot(String fingerprint, String overview, Instant generatedAt) {
+        jdbc.sql("""
+                INSERT INTO analysis_snapshots
+                    (user_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
+                     points_to_watch, provider, model, prompt_version, latency_millis, permit_date, generated_at_utc)
+                VALUES
+                    (:userId, '2026-10', :fingerprint, :overview, '支出结构', '结余', '关注',
+                     'dashscope', 'qwen3.7-flash', 'v1', 1, '2026-10-01', :generatedAt)
+                """).param("userId", userId).param("fingerprint", fingerprint).param("overview", overview)
+                .param("generatedAt", Timestamp.from(generatedAt)).update();
+        return jdbc.sql("SELECT MAX(id) FROM analysis_snapshots WHERE user_id = :id").param("id", userId).query(Long.class).single();
     }
 
     private int snapshotCount() {

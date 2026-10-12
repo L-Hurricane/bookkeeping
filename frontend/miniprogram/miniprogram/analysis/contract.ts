@@ -299,6 +299,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+export interface GenerateMonthlyAnalysisResult {
+  readonly outcome: "SUCCESS" | "REUSED";
+  readonly analysis: MonthlyAnalysis;
+}
+
+export function parseGenerateResult(value: unknown, month: string): GenerateMonthlyAnalysisResult | null {
+  if (!isRecord(value) || (value.outcome !== "SUCCESS" && value.outcome !== "REUSED")) {
+    return null;
+  }
+  const analysis = parseMonthlyAnalysis(value.analysis, month);
+  if (analysis === null) {
+    return null;
+  }
+  return { outcome: value.outcome, analysis };
+}
+
 export function isAnalysisMonth(value: string): boolean {
   return MONTH_PATTERN.test(value);
 }

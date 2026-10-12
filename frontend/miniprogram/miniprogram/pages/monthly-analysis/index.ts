@@ -3,13 +3,22 @@ import { ApiError } from "../../http/client";
 import { monthlyAnalysisApi } from "../../services/runtime";
 import { parseAnalysisContext, type AnalysisPageContext } from "../../analysis/navigation";
 import {
+  analysisFactLines,
+  analysisGenerateMessage,
   analysisLoadMessage,
+  ANALYSIS_REFRESH,
   analysisNotice,
   analysisSections,
+  applyGenerate,
+  beginGenerate,
+  canGenerateAnalysis,
+  canRefreshAnalysis,
   failAnalysis,
   openAnalysis,
+  rejectGenerate,
   requestAnalysis,
   settleAnalysis,
+  type AnalysisFactLine,
   type AnalysisScreen,
   type AnalysisSection,
 } from "../../analysis/screen";
@@ -24,7 +33,13 @@ Page({
     phase: "loading" as AnalysisScreen["phase"],
     monthLabel: "",
     notice: "",
+    facts: [] as AnalysisFactLine[],
     sections: [] as AnalysisSection[],
+    canGenerate: false,
+    canRefreshStatus: false,
+    needsRefresh: false,
+    submitting: false,
+    actionMessage: "",
     errorMessage: "",
   },
 
@@ -70,6 +85,29 @@ Page({
     void this.load(this.screen.month);
   },
 
+  async onGenerate() {
+    const context = this.context;
+    const attempt = beginGenerate(this.screen);
+    if (context === null || attempt === null) {
+      return;
+    }
+    this.screen = attempt.screen;
+    this.publish();
+    try {
+      const result = await monthlyAnalysisApi.generate(context.accountId, attempt.month, attempt.expectedFingerprint);
+      this.screen = applyGenerate(this.screen, attempt, result.analysis, result.outcome, this.pageAlive);
+    } catch (error) {
+      if (!this.pageAlive || error instanceof ApiError && error.status === 401) {
+        return;
+      }
+      this.screen = rejectGenerate(this.screen, attempt, analysisGenerateMessage(error), this.pageAlive);
+    }
+    if (!this.pageAlive) {
+      return;
+    }
+    this.publish();
+  },
+
   async load(month: string) {
     const context = this.context;
     if (context === null) {
@@ -80,12 +118,18 @@ Page({
     this.publish();
     try {
       const analysis = await monthlyAnalysisApi.load(context.accountId, month);
-      this.screen = settleAnalysis(this.screen, requested.generation, analysis, this.pageAlive);
+      if (!this.pageAlive) {
+        return;
+      }
+      this.screen = settleAnalysis(this.screen, requested.generation, analysis, this.pageAlive, requested.duringSubmit);
     } catch (error) {
       if (!this.pageAlive || error instanceof ApiError && error.status === 401) {
         return;
       }
       this.screen = failAnalysis(this.screen, requested.generation, analysisLoadMessage(error), this.pageAlive);
+    }
+    if (!this.pageAlive) {
+      return;
     }
     this.publish();
   },
@@ -96,8 +140,14 @@ Page({
       invalid: false,
       phase: this.screen.phase,
       monthLabel: formatMonthLabel(this.screen.month),
-      notice: analysis === null ? "" : analysisNotice(analysis),
+      notice: analysis === null ? "" : analysisNotice(analysis, new Date()),
+      facts: analysis === null ? [] : analysisFactLines(analysis),
       sections: analysis === null ? [] : analysisSections(analysis),
+      canGenerate: canGenerateAnalysis(this.screen),
+      canRefreshStatus: canRefreshAnalysis(this.screen),
+      needsRefresh: this.screen.actionMessage === ANALYSIS_REFRESH,
+      submitting: this.screen.submitting,
+      actionMessage: this.screen.actionMessage,
       errorMessage: this.screen.error,
     });
   },
