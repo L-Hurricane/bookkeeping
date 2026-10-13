@@ -50,7 +50,7 @@ class MonthlyAnalysisUiHarness {
     static final Path MODE = EVIDENCE.resolve("generator-mode");
     static final Path STOP = EVIDENCE.resolve("stop");
     static final Path SESSION = EVIDENCE.resolve("session.json");
-    private static final String MODEL_SURPLUS = "模型写成净支出99999.00元，这不是账本事实。";
+    private static final String MODEL_SURPLUS = "工资收入高于购物支出，结余因此为正。";
     private static final String MODEL_POINTS = "第一行关注点。\n" + "长".repeat(400);
 
     static {

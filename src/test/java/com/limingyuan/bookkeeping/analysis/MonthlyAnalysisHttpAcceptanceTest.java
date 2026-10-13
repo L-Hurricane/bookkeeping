@@ -41,9 +41,13 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class MonthlyAnalysisHttpAcceptanceTest {
-    private static final String MODEL_SURPLUS = "模型写成净支出99999.00元，这不是账本事实。";
+    private static final String BALANCED_SURPLUS = "工资收入与购物支出相互抵消，结余因此为零。";
+    private static final String NEGATIVE_SURPLUS = "追加购物支出后，支出高于收入，结余为负。";
+    private static final String INCOME_ONLY_SURPLUS = "本月只有工资收入，账本没有支出，结余为正。";
+    private static final String REFUND_SURPLUS = "本月账本没有收入记录，支出是一笔购物退款，结余为正。";
+    private static final String REDUCED_INCOME_SURPLUS = "工资收入在冲减之后仍高于购物支出，结余为正。";
     private static final String MODEL_POINTS = "长".repeat(800);
-    private static final String MODEL = "{\"surplusReasons\":\"" + MODEL_SURPLUS + "\",\"pointsToWatch\":\"" + MODEL_POINTS + "\"}";
+    private static final String MODEL = model(BALANCED_SURPLUS);
 
     @LocalServerPort int port;
     @Autowired ObjectMapper json;
@@ -168,7 +172,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(report.path("snapshot").path("expenseStructure").asText())
                 .isEqualTo("支出净额100.00元。购物净额60.00元，2笔，占支出净额60.00%。未分类支出净额40.00元，1笔，占支出净额40.00%。");
         assertThat(report.path("snapshot").path("surplusReasons").asText())
-                .isEqualTo("2026年6月结余为0.00元。净收入100.00元，净支出100.00元。\n" + MODEL_SURPLUS);
+                .isEqualTo("2026年6月结余为0.00元。净收入100.00元，净支出100.00元。\n" + BALANCED_SURPLUS);
         assertThat(report.path("snapshot").path("pointsToWatch").asText()).isEqualTo(MODEL_POINTS);
         assertThat(report.path("snapshot").path("monthlyOverview").asText()).doesNotContain("99999");
         assertThat(report.path("snapshot").path("expenseStructure").asText()).doesNotContain("99999");
@@ -202,8 +206,11 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertError(post(user.token(), analysis(accountId), Map.of("month", "2026-06", "expectedFingerprint", fingerprint)), 409, "REFRESH_REQUIRED");
         assertThat(calls.get()).isEqualTo(beforeRefresh);
         String refreshed = stale.path("fingerprint").asText();
+        content.set(model(NEGATIVE_SURPLUS));
         var regenerated = ok(post(user.token(), analysis(accountId), Map.of("month", "2026-06", "expectedFingerprint", refreshed)));
         assertThat(regenerated.path("outcome").asText()).isEqualTo("SUCCESS");
+        assertThat(regenerated.path("analysis").path("snapshot").path("surplusReasons").asText())
+                .contains(NEGATIVE_SURPLUS).doesNotContain("结余因此为零");
         long newerId = regenerated.path("analysis").path("snapshot").path("id").asLong();
         assertThat(newerId).isGreaterThan(snapshotId);
         assertThat(quota(user.id())).isEqualTo(new Quota(0, 2));
@@ -219,10 +226,13 @@ class MonthlyAnalysisHttpAcceptanceTest {
 
         transact(user.token(), accountId, "INCOME", "12.00", salary, "工资", "2026-07-01T08:00:00+08:00");
         String incomeOnly = fingerprint(user.token(), accountId, "2026-07");
+        content.set(model(INCOME_ONLY_SURPLUS));
         var incomeReport = ok(post(user.token(), analysis(accountId), Map.of("month", "2026-07", "expectedFingerprint", incomeOnly)));
         assertThat(incomeReport.path("outcome").asText()).isEqualTo("SUCCESS");
         assertThat(incomeReport.path("analysis").path("snapshot").path("monthlyOverview").asText())
                 .isEqualTo("2026年7月账本概况：净收入12.00元，1笔；净支出0.00元，0笔；结余12.00元。本月账本没有支出记录。");
+        assertThat(incomeReport.path("analysis").path("snapshot").path("surplusReasons").asText())
+                .contains(INCOME_ONLY_SURPLUS).doesNotContain("结余因此为零");
         assertThat(incomeReport.path("analysis").path("snapshot").path("expenseStructure").asText()).isEqualTo("本月账本没有支出记录。");
         assertThat(quota(user.id())).isEqualTo(new Quota(0, 3));
 
@@ -246,7 +256,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
         long shopping = categoryId(user.token(), "EXPENSE", "购物");
         transact(user.token(), accountId, "EXPENSE", "-6.00", shopping, "退款", "2026-08-02T08:00:00+08:00");
         String fingerprint = fingerprint(user.token(), accountId, "2026-08");
-        content.set(MODEL);
+        content.set(model(REFUND_SURPLUS));
         var gate = new CountDownLatch(1);
         var resume = new CountDownLatch(1);
         entered.set(gate);
@@ -271,7 +281,8 @@ class MonthlyAnalysisHttpAcceptanceTest {
                     .isEqualTo("支出净额-6.00元。购物净额-6.00元，1笔。本月没有未分类支出。")
                     .doesNotContain("%");
             assertThat(created.path("analysis").path("snapshot").path("surplusReasons").asText())
-                    .startsWith("2026年8月结余为6.00元。净收入0.00元，净支出-6.00元。\n");
+                    .startsWith("2026年8月结余为6.00元。净收入0.00元，净支出-6.00元。\n")
+                    .contains(REFUND_SURPLUS).doesNotContain("相互抵消");
             var again = ok(get(user.token(), analysis(accountId, "2026-08")));
             assertThat(again.path("viewState").asText()).isEqualTo("CURRENT");
             assertThat(again.path("snapshot").path("id").asLong()).isEqualTo(created.path("analysis").path("snapshot").path("id").asLong());
@@ -328,7 +339,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(seen.path("facts").path("incomeCategories").get(0).path("netAmount").asText()).isEqualTo("50.00");
         assertThat(seen.path("facts").path("incomeCategories").get(0).path("transactionCount").asInt()).isEqualTo(2);
         assertThat(seen.path("facts").path("expenseCategories").get(0).path("netAmount").asText()).isEqualTo("20.00");
-        content.set(MODEL);
+        content.set(model(REDUCED_INCOME_SURPLUS));
         var created = ok(post(user.token(), analysis(accountId),
                 Map.of("month", "2026-09", "expectedFingerprint", seen.path("fingerprint").asText())));
         assertThat(created.path("outcome").asText()).isEqualTo("SUCCESS");
@@ -348,7 +359,40 @@ class MonthlyAnalysisHttpAcceptanceTest {
                 .startsWith("2026年9月结余为30.00元。净收入50.00元，净支出20.00元。\n");
         assertThat(snapshot.path("monthlyOverview").asText()).doesNotContain("99999");
         assertThat(snapshot.path("expenseStructure").asText()).doesNotContain("99999");
-        assertThat(snapshot.path("surplusReasons").asText()).contains(MODEL_SURPLUS);
+        assertThat(snapshot.path("surplusReasons").asText()).contains(REDUCED_INCOME_SURPLUS).doesNotContain("结余因此为零");
+    }
+
+    @Test void httpDroppedExpenseSignDoesNotSaveOrConsumeQuota() throws Exception {
+        var user = newUser("analysis_http_sign");
+        long accountId = initialize(user.token(), "0.00");
+        jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", accountId).update();
+        long salary = categoryId(user.token(), "INCOME", "工资");
+        long shopping = categoryId(user.token(), "EXPENSE", "购物");
+        transact(user.token(), accountId, "INCOME", "50.00", salary, "工资", "2026-02-01T08:00:00+08:00");
+        transact(user.token(), accountId, "EXPENSE", "-20.00", shopping, "退款", "2026-02-02T08:00:00+08:00");
+        var seen = ok(get(user.token(), analysis(accountId, "2026-02")));
+        assertThat(seen.path("facts").path("netIncome").asText()).isEqualTo("50.00");
+        assertThat(seen.path("facts").path("netExpense").asText()).isEqualTo("-20.00");
+        assertThat(seen.path("facts").path("surplus").asText()).isEqualTo("70.00");
+        content.set("{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。收入主要来源于工资，支出为购物类退款。\","
+                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}");
+        assertError(post(user.token(), analysis(accountId),
+                Map.of("month", "2026-02", "expectedFingerprint", seen.path("fingerprint").asText())), 502, "GENERATION_FAILED");
+        assertThat(calls.get()).isEqualTo(1);
+        assertThat(snapshotCount(user.id())).isZero();
+        assertThat(quota(user.id())).isEqualTo(new Quota(0, 0));
+        var permit = jdbc.sql("""
+                SELECT state, quota_reserved, snapshot_id FROM analysis_generations WHERE user_id = :id
+                """).param("id", user.id()).query((rs, row) -> new Permit(rs.getString(1), rs.getInt(2), rs.getObject(3))).list();
+        assertThat(permit).containsExactly(new Permit("FAILED", 0, null));
+        var after = ok(get(user.token(), analysis(accountId, "2026-02")));
+        assertThat(after.path("viewState").asText()).isEqualTo("GENERATION_FAILED");
+        assertThat(after.path("snapshot").isMissingNode()).isTrue();
+        assertThat(after.path("facts").path("netExpense").asText()).isEqualTo("-20.00");
+    }
+
+    private static String model(String surplus) {
+        return "{\"surplusReasons\":\"" + surplus + "\",\"pointsToWatch\":\"" + MODEL_POINTS + "\"}";
     }
 
     private String fingerprint(String token, long accountId, String month) throws Exception {
@@ -457,6 +501,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
                 """).param("id", id).query((rs, row) -> new Stored(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5))).single();
     }
 
+    private record Permit(String state, int reserved, Object snapshotId) { }
     private record Exchange(int status, JsonNode body, String raw) { }
     private record Quota(int reserved, int consumed) { }
     private record TestUser(long id, String token) { }

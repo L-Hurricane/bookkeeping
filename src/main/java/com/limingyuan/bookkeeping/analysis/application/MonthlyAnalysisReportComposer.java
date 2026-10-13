@@ -8,6 +8,8 @@ public final class MonthlyAnalysisReportComposer {
 
     public static MonthlyAnalysisReport compose(MonthlyAnalysisContext context, String modelJson) {
         var interpretation = ModelOutputValidator.parse(modelJson);
+        ModelOutputValidator.requireConsistentAmounts(interpretation, context.netIncome(), context.netExpense(),
+                context.surplus());
         return new MonthlyAnalysisReport(DeterministicMonthlyReport.monthlyOverview(context),
                 DeterministicMonthlyReport.expenseStructure(context),
                 DeterministicMonthlyReport.surplusFact(context) + "\n" + interpretation.surplusReasons(),

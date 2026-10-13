@@ -122,26 +122,56 @@ class MonthlyAnalysisReportTest {
                 .isInstanceOf(InvalidModelOutput.class);
     }
 
+    @Test void droppedExpenseSignCannotBecomeAReportButARefundDescriptionCan() {
+        var context = context("50.00", "-20.00", "70.00", 1, 1, List.of(income("工资", "50.00")),
+                List.of(leaf("购物", "-20.00", 1)), new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"),
+                List.of(new KeyExpenseFact("EXPENSE", "购物", "退款", "-20.00", "2026-02-02T08:00:00+08:00")));
+        assertThat(DeterministicMonthlyReport.monthlyOverview(context)).contains("净收入50.00元", "净支出-20.00元", "结余70.00元");
+        assertThat(DeterministicMonthlyReport.expenseStructure(context)).contains("支出净额-20.00元").doesNotContain("%");
+        assertThat(DeterministicMonthlyReport.surplusFact(context)).contains("净支出-20.00元");
+        String droppedSign = "{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。收入主要来源于工资，支出为购物类退款。\","
+                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}";
+        assertThatThrownBy(() -> MonthlyAnalysisReportComposer.compose(context, droppedSign)).isInstanceOf(InvalidModelOutput.class);
+        String refund = "{\"surplusReasons\":\"收入主要来源于工资，支出为购物类退款。\","
+                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}";
+        var accepted = MonthlyAnalysisReportComposer.compose(context, refund);
+        assertThat(accepted.monthlyOverview()).contains("净支出-20.00元");
+        assertThat(accepted.surplusReasons()).contains("净支出-20.00元", "购物类退款");
+        assertThat(accepted.pointsToWatch()).contains("购物退款");
+        String matched = "{\"surplusReasons\":\"本月净收入50元，净支出-20.00元，结余70元。\",\"pointsToWatch\":\"购物退款仍记在支出。\"}";
+        assertThat(MonthlyAnalysisReportComposer.compose(context, matched).surplusReasons()).contains("净支出-20.00元");
+        var ordinary = context("100.00", "40.00", "60.00", 1, 1, List.of(income("工资", "100.00")),
+                List.of(leaf("购物", "40.00", 1)), new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of());
+        String restated = "{\"surplusReasons\":\"本月净收入100元，净支出40元，结余60元。工资收入覆盖购物支出。\",\"pointsToWatch\":\"本月有一笔购物支出。\"}";
+        assertThat(MonthlyAnalysisReportComposer.compose(ordinary, restated).monthlyOverview()).contains("净支出40.00元", "结余60.00元");
+    }
+
     @Test void compositionKeepsFourSectionsAndJavaFacts() {
         var context = mixed();
         var report = MonthlyAnalysisReportComposer.compose(context,
-                "{\"pointsToWatch\":\"模型认为结余是999.00元。\",\"surplusReasons\":\"  模型认为净支出是999.00元。  \"}");
+                "{\"pointsToWatch\":\"留意餐饮和购物两类支出。\",\"surplusReasons\":\"  收入低于支出，所以结余为负。  \"}");
         assertThat(report.monthlyOverview()).isEqualTo(DeterministicMonthlyReport.monthlyOverview(context));
         assertThat(report.expenseStructure()).isEqualTo(DeterministicMonthlyReport.expenseStructure(context));
         assertThat(report.surplusReasons()).startsWith(DeterministicMonthlyReport.surplusFact(context) + "\n");
         assertThat(report.surplusReasons()).contains("结余为-30.00元").contains("净支出40.00元");
-        assertThat(report.surplusReasons()).endsWith("模型认为净支出是999.00元。");
-        assertThat(report.pointsToWatch()).isEqualTo("模型认为结余是999.00元。");
+        assertThat(report.surplusReasons()).endsWith("收入低于支出，所以结余为负。");
+        assertThat(report.pointsToWatch()).isEqualTo("留意餐饮和购物两类支出。");
         assertThat(List.of(report.monthlyOverview(), report.expenseStructure(), report.surplusReasons(), report.pointsToWatch()))
                 .hasSize(4).allMatch(section -> section != null && !section.isBlank());
     }
 
     @Test void promptAsksForTwoFieldsAndDoesNotRecalculate() throws Exception {
         String prompt = MonthlyAnalysisPrompt.text();
-        assertThat(MonthlyAnalysisPrompt.VERSION).isEqualTo("v1");
+        assertThat(MonthlyAnalysisPrompt.VERSION).isEqualTo("v2");
         assertThat(prompt).contains("surplusReasons", "pointsToWatch")
-                .contains("不重新计算").contains("不能把父子金额再加一次").contains("不可信文本").contains("投资建议")
+                .contains("不重新计算").contains("不要在两个字段里写出金额或笔数")
+                .contains("不能把父子金额再加一次").contains("不可信文本").contains("投资建议")
                 .doesNotContain("monthlyOverview", "expenseStructure");
+        try (var original = MonthlyAnalysisReportTest.class.getResourceAsStream("/analysis/monthly-analysis-prompt-v1.txt")) {
+            String v1 = new String(original.readAllBytes(), StandardCharsets.UTF_8).strip();
+            assertThat(v1).contains("surplusReasons", "pointsToWatch").doesNotContain("不要在两个字段里写出金额或笔数");
+            assertThat(v1).isNotEqualTo(prompt);
+        }
         try (var schema = MonthlyAnalysisReportTest.class.getResourceAsStream("/analysis/monthly-analysis-output-schema-v1.json")) {
             String text = new String(schema.readAllBytes(), StandardCharsets.UTF_8);
             assertThat(text).contains("\"additionalProperties\": false").contains("surplusReasons").contains("pointsToWatch");

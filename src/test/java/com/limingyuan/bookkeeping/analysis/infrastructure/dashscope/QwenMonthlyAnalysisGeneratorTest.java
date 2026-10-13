@@ -312,9 +312,12 @@ class QwenMonthlyAnalysisGeneratorTest {
             }
         }), capturing);
         capturing.content = "{\"surplusReasons\":\"模型认为净支出是999.00元。\",\"pointsToWatch\":\"模型认为结余是999.00元。\"}";
+        assertThatThrownBy(() -> service.generate(424242L, "2026-09")).isInstanceOf(InvalidModelOutput.class);
+        assertThat(capturing.calls).isEqualTo(1);
+        capturing.content = "{\"surplusReasons\":\"收入低于支出，所以结余为负。\",\"pointsToWatch\":\"留意餐饮和购物两类支出。\"}";
         var generated = service.generate(424242L, "2026-09");
         var context = context();
-        assertThat(capturing.calls).isEqualTo(1);
+        assertThat(capturing.calls).isEqualTo(2);
         assertThat(capturing.prompt).isEqualTo(MonthlyAnalysisPrompt.text());
         assertThat(capturing.input.json()).doesNotContain("accountId", "userId", "fingerprint", "424242");
         assertThat(generated.report().monthlyOverview()).isEqualTo(DeterministicMonthlyReport.monthlyOverview(context))
@@ -322,8 +325,8 @@ class QwenMonthlyAnalysisGeneratorTest {
         assertThat(generated.report().expenseStructure()).isEqualTo(DeterministicMonthlyReport.expenseStructure(context))
                 .contains("餐饮净额30.00元", "早餐10.00元", "购物净额10.00元");
         assertThat(generated.report().surplusReasons()).startsWith(DeterministicMonthlyReport.surplusFact(context) + "\n")
-                .contains("结余为-30.00元", "净支出40.00元").endsWith("模型认为净支出是999.00元。");
-        assertThat(generated.report().pointsToWatch()).isEqualTo("模型认为结余是999.00元。");
+                .contains("结余为-30.00元", "净支出40.00元").endsWith("收入低于支出，所以结余为负。");
+        assertThat(generated.report().pointsToWatch()).isEqualTo("留意餐饮和购物两类支出。");
         capturing.content = "{\"surplusReasons\":\"只有一句\"}";
         assertThatThrownBy(() -> service.generate(context)).isInstanceOf(InvalidModelOutput.class);
         capturing.failure = new AnalysisGenerationFailed(Kind.INVALID_OUTPUT, 200);
