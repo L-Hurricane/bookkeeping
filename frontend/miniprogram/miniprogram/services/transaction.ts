@@ -1,6 +1,11 @@
 import type { HttpClient } from "../http/client";
 import { updateTransactionRequestBody, type UpdateTransactionSnapshot } from "../transaction/edit";
 import { createTransactionRequestBody, type CreateTransactionSnapshot } from "../transaction/form";
+import {
+  parseTransactionSearch,
+  searchTransactionsPath,
+  type TransactionSearchResult,
+} from "../transaction/transaction-search";
 import { parseTransactionResponse, type TransactionView } from "../transaction/transaction";
 
 export class TransactionResponseError extends Error {
@@ -10,11 +15,19 @@ export class TransactionResponseError extends Error {
   }
 }
 
+export class TransactionSearchResponseError extends Error {
+  constructor(message = "搜索结果无法识别") {
+    super(message);
+    this.name = "TransactionSearchResponseError";
+  }
+}
+
 export interface TransactionApi {
   createTransaction(snapshot: CreateTransactionSnapshot, idempotencyKey: string): Promise<TransactionView>;
   getTransaction(accountId: number, transactionId: number): Promise<TransactionView>;
   updateTransaction(snapshot: UpdateTransactionSnapshot): Promise<TransactionView>;
   deleteTransaction(accountId: number, transactionId: number): Promise<void>;
+  searchTransactions(accountId: number, keyword: string, accountCreatedTime: string): Promise<TransactionSearchResult>;
 }
 
 export function transactionCreatePath(accountId: number): string {
@@ -64,6 +77,18 @@ export function createTransactionApi(http: HttpClient): TransactionApi {
         path: transactionResourcePath(accountId, transactionId),
         authenticated: true,
       });
+    },
+    async searchTransactions(accountId, keyword, accountCreatedTime) {
+      const body = await http.request<unknown>({
+        method: "GET",
+        path: searchTransactionsPath(accountId, keyword),
+        authenticated: true,
+      });
+      const result = parseTransactionSearch(body, accountCreatedTime);
+      if (result === null) {
+        throw new TransactionSearchResponseError();
+      }
+      return result;
     },
   };
 }

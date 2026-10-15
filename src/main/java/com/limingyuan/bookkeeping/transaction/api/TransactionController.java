@@ -41,6 +41,11 @@ public class TransactionController {
         return outcome.replay() ? ResponseEntity.status(outcome.status()).header("Idempotent-Replay", "true").body(outcome.body()) : response;
     }
 
+    @GetMapping("/search")
+    public TransactionService.TransactionSearchResult search(@PathVariable long accountId, @RequestParam String name) {
+        return transactions.searchByName(accountId, name);
+    }
+
     @GetMapping("/{transactionId}")
     public TransactionService.TransactionView get(@PathVariable long accountId, @PathVariable long transactionId) {
         return transactions.get(accountId, transactionId);
