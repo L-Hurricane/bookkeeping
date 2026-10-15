@@ -146,7 +146,8 @@ class MonthlyAnalysisApiIntegrationTest {
         assertThat(analysis.path("snapshot").path("stale").asBoolean()).isFalse();
         assertThat(analysis.path("snapshot").path("monthlyOverview").asText()).contains("净收入");
         assertThat(analysis.path("snapshot").path("expenseStructure").asText()).isNotBlank();
-        assertThat(analysis.path("snapshot").path("surplusReasons").asText()).contains("结余来自账本");
+        assertThat(analysis.path("snapshot").path("surplusReasons").asText())
+                .contains("结余").doesNotContain("结余来自账本");
         assertThat(analysis.path("snapshot").path("pointsToWatch").asText()).isEqualTo("留意本月支出");
         assertThat(analysis.path("snapshot").path("provider").asText()).isEqualTo("dashscope");
         assertThat(analysis.path("snapshot").path("model").asText()).isEqualTo("qwen3.7-flash");

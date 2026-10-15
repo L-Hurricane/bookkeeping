@@ -12,7 +12,7 @@ public final class MonthlyAnalysisReportComposer {
                 context.surplus());
         return new MonthlyAnalysisReport(DeterministicMonthlyReport.monthlyOverview(context),
                 DeterministicMonthlyReport.expenseStructure(context),
-                DeterministicMonthlyReport.surplusFact(context) + "\n" + interpretation.surplusReasons(),
+                DeterministicMonthlyReport.surplusExplanation(context),
                 interpretation.pointsToWatch());
     }
 }

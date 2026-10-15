@@ -15,6 +15,8 @@ export const ANALYSIS_QUOTA = "今日成功分析次数已用完。";
 export const ANALYSIS_REUSED = "已沿用当前账本对应的分析结果。";
 export const ANALYSIS_TIMEOUT = "分析请求超时了。请稍后刷新分析状态。";
 export const ANALYSIS_AGE_DAYS = 7;
+export const ANALYSIS_AI_CAUTION =
+  "以上统计基于已记录的账本数据；AI 生成的观察与建议可能存在偏差，请结合实际交易明细核对。";
 const GENERATED_AT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|\+00:00)$/;
 
 export interface AnalysisSection {
@@ -188,6 +190,10 @@ export function analysisGenerateMessage(error: unknown): string {
 
 function sameAttempt(screen: AnalysisScreen, attempt: AnalysisGenerateAttempt, pageAlive: boolean): boolean {
   return pageAlive && screen.submitting && screen.submitId === attempt.submitId && screen.month === attempt.month;
+}
+
+export function analysisAiCaution(analysis: MonthlyAnalysis): string {
+  return analysisSections(analysis).length === 0 ? "" : ANALYSIS_AI_CAUTION;
 }
 
 export function analysisSections(analysis: MonthlyAnalysis): AnalysisSection[] {

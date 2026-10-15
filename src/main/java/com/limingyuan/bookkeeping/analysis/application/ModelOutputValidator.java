@@ -38,15 +38,15 @@ public final class ModelOutputValidator {
     }
 
     /**
-     * Rejects a labeled total whose signed value differs from the ledger fact.
-     * A refund sentence that does not restate 净收入, 净支出, or 结余 is left alone.
+     * Rejects a labeled total in pointsToWatch whose signed value differs from the ledger fact.
+     * The model surplusReasons field is not displayed, so a wrong restatement there does not fail the report.
      */
     public static void requireConsistentAmounts(ModelInterpretation interpretation, String netIncome, String netExpense,
             String surplus) {
         var expected = Map.of("净收入", new BigDecimal(netIncome), "收入净额", new BigDecimal(netIncome),
                 "净支出", new BigDecimal(netExpense), "支出净额", new BigDecimal(netExpense),
                 "结余", new BigDecimal(surplus));
-        var matcher = LABELED_AMOUNT.matcher(interpretation.surplusReasons() + "\n" + interpretation.pointsToWatch());
+        var matcher = LABELED_AMOUNT.matcher(interpretation.pointsToWatch());
         while (matcher.find()) {
             if (new BigDecimal(matcher.group(2)).compareTo(expected.get(matcher.group(1))) != 0) {
                 throw new InvalidModelOutput("模型文字中的" + matcher.group(1) + "与账本事实不一致");

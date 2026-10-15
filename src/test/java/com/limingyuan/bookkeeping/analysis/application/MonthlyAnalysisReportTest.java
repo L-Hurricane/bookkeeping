@@ -122,28 +122,65 @@ class MonthlyAnalysisReportTest {
                 .isInstanceOf(InvalidModelOutput.class);
     }
 
-    @Test void droppedExpenseSignCannotBecomeAReportButARefundDescriptionCan() {
+    @Test void discardedSurplusTextCannotReplaceTheJavaExplanation() {
         var context = context("50.00", "-20.00", "70.00", 1, 1, List.of(income("工资", "50.00")),
                 List.of(leaf("购物", "-20.00", 1)), new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"),
-                List.of(new KeyExpenseFact("EXPENSE", "购物", "退款", "-20.00", "2026-02-02T08:00:00+08:00")));
-        assertThat(DeterministicMonthlyReport.monthlyOverview(context)).contains("净收入50.00元", "净支出-20.00元", "结余70.00元");
-        assertThat(DeterministicMonthlyReport.expenseStructure(context)).contains("支出净额-20.00元").doesNotContain("%");
-        assertThat(DeterministicMonthlyReport.surplusFact(context)).contains("净支出-20.00元");
-        String droppedSign = "{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。收入主要来源于工资，支出为购物类退款。\","
-                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}";
-        assertThatThrownBy(() -> MonthlyAnalysisReportComposer.compose(context, droppedSign)).isInstanceOf(InvalidModelOutput.class);
-        String refund = "{\"surplusReasons\":\"收入主要来源于工资，支出为购物类退款。\","
-                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}";
-        var accepted = MonthlyAnalysisReportComposer.compose(context, refund);
-        assertThat(accepted.monthlyOverview()).contains("净支出-20.00元");
-        assertThat(accepted.surplusReasons()).contains("净支出-20.00元", "购物类退款");
-        assertThat(accepted.pointsToWatch()).contains("购物退款");
-        String matched = "{\"surplusReasons\":\"本月净收入50元，净支出-20.00元，结余70元。\",\"pointsToWatch\":\"购物退款仍记在支出。\"}";
-        assertThat(MonthlyAnalysisReportComposer.compose(context, matched).surplusReasons()).contains("净支出-20.00元");
-        var ordinary = context("100.00", "40.00", "60.00", 1, 1, List.of(income("工资", "100.00")),
-                List.of(leaf("购物", "40.00", 1)), new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of());
-        String restated = "{\"surplusReasons\":\"本月净收入100元，净支出40元，结余60元。工资收入覆盖购物支出。\",\"pointsToWatch\":\"本月有一笔购物支出。\"}";
-        assertThat(MonthlyAnalysisReportComposer.compose(ordinary, restated).monthlyOverview()).contains("净支出40.00元", "结余60.00元");
+                List.of(new KeyExpenseFact("EXPENSE", "购物", "购物退款", "-20.00", "2026-02-02T08:00:00+08:00")));
+        String javaSurplus = "收入记录的有符号金额合计为净收入50.00元。支出净额为-20.00元，仍记在支出。支出净额为负，使结余70.00元高于净收入。";
+        assertThat(DeterministicMonthlyReport.surplusExplanation(context)).isEqualTo(javaSurplus);
+        String withoutExpense = "{\"surplusReasons\":\"本月净收入为正，且无净支出，导致结余为正。\","
+                + "\"pointsToWatch\":\"主要支出记录显示为购物退款，需关注此类交易对实际消费金额的抵消影响。\"}";
+        var kept = MonthlyAnalysisReportComposer.compose(context, withoutExpense);
+        assertThat(kept.surplusReasons()).isEqualTo(javaSurplus).doesNotContain("无净支出", "购物退款");
+        assertThat(kept.pointsToWatch()).contains("购物退款");
+        String wrongAmounts = "{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。\","
+                + "\"pointsToWatch\":\"需核对该笔支出记录的方向。\"}";
+        var discarded = MonthlyAnalysisReportComposer.compose(context, wrongAmounts);
+        assertThat(discarded.surplusReasons()).isEqualTo(javaSurplus).doesNotContain("净支出20元");
+        String contradictoryPoints = "{\"surplusReasons\":\"支出净额为负，结余高于净收入。\",\"pointsToWatch\":\"本月净支出20元。\"}";
+        assertThatThrownBy(() -> MonthlyAnalysisReportComposer.compose(context, contradictoryPoints))
+                .isInstanceOf(InvalidModelOutput.class);
+    }
+
+    @Test void javaSurplusExplainsTheLedgerRelationship() {
+        assertThat(DeterministicMonthlyReport.surplusExplanation(context("100.00", "40.00", "60.00", 1, 1,
+                List.of(income("工资", "100.00")), List.of(leaf("购物", "40.00", 1)),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of())))
+                .isEqualTo("收入记录的有符号金额合计为净收入100.00元。净收入覆盖净支出40.00元后，结余为60.00元。");
+        assertThat(DeterministicMonthlyReport.surplusExplanation(context("50.00", "20.00", "30.00", 2, 1,
+                List.of(new CategoryFact(3L, "工资", 2, "50.00", List.of())), List.of(leaf("购物", "20.00", 1)),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of())))
+                .isEqualTo("收入记录的有符号金额合计为净收入50.00元。净收入覆盖净支出20.00元后，结余为30.00元。")
+                .doesNotContain("冲减", "退款");
+        assertThat(DeterministicMonthlyReport.surplusExplanation(context("12.00", "0.00", "12.00", 1, 0,
+                List.of(income("工资", "12.00")), List.of(),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of())))
+                .isEqualTo("收入记录的有符号金额合计为净收入12.00元。本月账本没有支出记录，结余等于净收入12.00元。")
+                .doesNotContain("现实");
+        assertThat(DeterministicMonthlyReport.surplusExplanation(context("0.00", "40.00", "-40.00", 0, 1,
+                List.of(), List.of(leaf("购物", "40.00", 1)),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of())))
+                .isEqualTo("本月账本没有收入记录。净支出40.00元形成结余-40.00元。")
+                .doesNotContain("现实");
+        var uncategorized = context("100.00", "40.00", "60.00", 1, 1, List.of(income("工资", "100.00")), List.of(),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(1, "40.00"), List.of());
+        assertThat(DeterministicMonthlyReport.surplusExplanation(uncategorized))
+                .isEqualTo("收入记录的有符号金额合计为净收入100.00元。净收入覆盖净支出40.00元后，结余为60.00元。")
+                .doesNotContain("用途", "购物");
+        var visibleReduction = context("-10.00", "20.00", "-30.00", 1, 1, List.of(income("工资", "-10.00")),
+                List.of(leaf("购物", "20.00", 1)), new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of());
+        assertThat(DeterministicMonthlyReport.surplusExplanation(visibleReduction))
+                .isEqualTo("收入记录中的负数金额降低了净收入，有符号金额合计为净收入-10.00元。净支出20.00元高于净收入，结余为-30.00元。");
+    }
+
+    @Test void zeroNetWithOffsettingRecordsIsNotAnEmptyLedger() {
+        var offset = context("0.00", "0.00", "0.00", 2, 2,
+                List.of(new CategoryFact(3L, "工资", 2, "0.00", List.of())),
+                List.of(leaf("购物", "30.00", 1), leaf("餐饮", "-30.00", 1)),
+                new UncategorizedFact(0, "0.00"), new UncategorizedFact(0, "0.00"), List.of());
+        assertThat(DeterministicMonthlyReport.surplusExplanation(offset))
+                .isEqualTo("收入记录的有符号金额相互抵消，净收入为0.00元。支出记录的有符号金额相互抵消，净支出为0.00元，结余等于净收入0.00元。")
+                .doesNotContain("没有收入记录", "没有支出记录");
     }
 
     @Test void compositionKeepsFourSectionsAndJavaFacts() {
@@ -152,9 +189,9 @@ class MonthlyAnalysisReportTest {
                 "{\"pointsToWatch\":\"留意餐饮和购物两类支出。\",\"surplusReasons\":\"  收入低于支出，所以结余为负。  \"}");
         assertThat(report.monthlyOverview()).isEqualTo(DeterministicMonthlyReport.monthlyOverview(context));
         assertThat(report.expenseStructure()).isEqualTo(DeterministicMonthlyReport.expenseStructure(context));
-        assertThat(report.surplusReasons()).startsWith(DeterministicMonthlyReport.surplusFact(context) + "\n");
-        assertThat(report.surplusReasons()).contains("结余为-30.00元").contains("净支出40.00元");
-        assertThat(report.surplusReasons()).endsWith("收入低于支出，所以结余为负。");
+        assertThat(report.surplusReasons()).isEqualTo(DeterministicMonthlyReport.surplusExplanation(context))
+                .isEqualTo("收入记录的有符号金额合计为净收入10.00元。净支出40.00元高于净收入，结余为-30.00元。")
+                .doesNotContain("收入低于支出");
         assertThat(report.pointsToWatch()).isEqualTo("留意餐饮和购物两类支出。");
         assertThat(List.of(report.monthlyOverview(), report.expenseStructure(), report.surplusReasons(), report.pointsToWatch()))
                 .hasSize(4).allMatch(section -> section != null && !section.isBlank());

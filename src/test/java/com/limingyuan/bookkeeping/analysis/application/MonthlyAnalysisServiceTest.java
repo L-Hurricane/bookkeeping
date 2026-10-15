@@ -79,8 +79,8 @@ class MonthlyAnalysisServiceTest {
         assertThat(context.netExpense()).isEqualTo("-20.00");
         assertThat(DeterministicMonthlyReport.monthlyOverview(context)).contains("净支出-20.00元", "结余70.00元");
         var calls = new int[] {0};
-        String droppedSign = "{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。收入主要来源于工资，支出为购物类退款。\","
-                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}";
+        String droppedSign = "{\"surplusReasons\":\"支出净额为负，结余高于净收入。\","
+                + "\"pointsToWatch\":\"本月净支出20元。\"}";
         MonthlyAnalysisGenerator generator = (input, prompt) -> {
             if (++calls[0] > 1) throw new AssertionError("provider was called again");
             return new MonthlyAnalysisGeneration("dashscope", "qwen3.7-flash", droppedSign, 1L, 1L, 2L, 5L, "req");

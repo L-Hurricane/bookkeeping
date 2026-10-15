@@ -5,8 +5,9 @@ import com.limingyuan.bookkeeping.analysis.domain.MonthlyAnalysisContext.Categor
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.YearMonth;
+import java.util.List;
 
-/** Authoritative overview, expense structure, and surplus fact. No model call. */
+/** Authoritative overview, expense structure, and surplus explanation. No model call. */
 public final class DeterministicMonthlyReport {
     private DeterministicMonthlyReport() { }
 
@@ -38,9 +39,53 @@ public final class DeterministicMonthlyReport {
         return text.toString();
     }
 
-    public static String surplusFact(MonthlyAnalysisContext context) {
-        return month(context.yearMonth()) + "结余为" + context.surplus() + "元。净收入" + context.netIncome()
-                + "元，净支出" + context.netExpense() + "元。";
+    /** Explains the already computed surplus. It does not recalculate the ledger or use model text. */
+    public static String surplusExplanation(MonthlyAnalysisContext context) {
+        var income = new BigDecimal(context.netIncome());
+        var expense = new BigDecimal(context.netExpense());
+        var surplus = new BigDecimal(context.surplus());
+        var text = new StringBuilder();
+        if (context.incomeTransactionCount() == 0) {
+            text.append("本月账本没有收入记录。");
+        } else if (income.signum() == 0) {
+            text.append("收入记录的有符号金额相互抵消，净收入为").append(context.netIncome()).append("元。");
+        } else if (hasNegativeIncome(context)) {
+            text.append("收入记录中的负数金额降低了净收入，有符号金额合计为净收入").append(context.netIncome()).append("元。");
+        } else {
+            text.append("收入记录的有符号金额合计为净收入").append(context.netIncome()).append("元。");
+        }
+        if (context.expenseTransactionCount() == 0) {
+            text.append("本月账本没有支出记录，结余等于净收入").append(context.netIncome()).append("元。");
+        } else if (expense.signum() == 0) {
+            text.append("支出记录的有符号金额相互抵消，净支出为").append(context.netExpense())
+                    .append("元，结余等于净收入").append(context.netIncome()).append("元。");
+        } else if (expense.signum() < 0) {
+            text.append("支出净额为").append(context.netExpense()).append("元，仍记在支出。支出净额为负，使结余")
+                    .append(context.surplus()).append("元高于净收入。");
+        } else if (context.incomeTransactionCount() == 0) {
+            text.append("净支出").append(context.netExpense()).append("元形成结余").append(context.surplus()).append("元。");
+        } else if (surplus.signum() > 0) {
+            text.append("净收入覆盖净支出").append(context.netExpense()).append("元后，结余为").append(context.surplus()).append("元。");
+        } else if (surplus.signum() < 0) {
+            text.append("净支出").append(context.netExpense()).append("元高于净收入，结余为").append(context.surplus()).append("元。");
+        } else {
+            text.append("净收入与净支出相等，结余为").append(context.surplus()).append("元。");
+        }
+        return text.toString();
+    }
+
+    private static boolean hasNegativeIncome(MonthlyAnalysisContext context) {
+        return new BigDecimal(context.uncategorizedIncome().netAmount()).signum() < 0
+                || hasNegativeNet(context.incomeCategories());
+    }
+
+    private static boolean hasNegativeNet(List<CategoryFact> categories) {
+        for (var category : categories) {
+            if (new BigDecimal(category.netAmount()).signum() < 0 || hasNegativeNet(category.children())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void appendCategory(StringBuilder text, CategoryFact category, String netExpense, boolean percent) {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { parseMonthlyAnalysis, type AnalysisViewState, type MonthlyAnalysis } from "../miniprogram/analysis/contract";
 import { monthlyAnalysisPagePath, parseAnalysisContext } from "../miniprogram/analysis/navigation";
 import {
+  ANALYSIS_AI_CAUTION,
   ANALYSIS_EMPTY_MONTH,
   ANALYSIS_FAILED,
   ANALYSIS_IN_PROGRESS,
@@ -14,6 +15,7 @@ import {
   ANALYSIS_STALE,
   ANALYSIS_TIMEOUT,
   analysisAgeNotice,
+  analysisAiCaution,
   analysisFactLines,
   analysisGenerateMessage,
   analysisLoadMessage,
@@ -71,6 +73,7 @@ describe("monthly analysis GET", () => {
     assert.equal(sections[0]?.text, overview);
     assert.equal(sections[2]?.text, "结余-12.00元。\n支出高于收入。");
     assert.equal(analysisNotice(analysis, seenAt), "");
+    assert.equal(analysisAiCaution(analysis), ANALYSIS_AI_CAUTION);
   });
 
   it("marks a stale snapshot and still shows its original text", () => {
@@ -87,6 +90,7 @@ describe("monthly analysis GET", () => {
     assert.ok(analysis);
     assert.equal(analysisNotice(analysis, seenAt), ANALYSIS_NONE);
     assert.deepEqual(analysisSections(analysis), []);
+    assert.equal(analysisAiCaution(analysis), "");
     assert.equal(analysis.snapshot, null);
   });
 
@@ -103,6 +107,7 @@ describe("monthly analysis GET", () => {
     assert.ok(analysis);
     assert.equal(analysisNotice(analysis, seenAt), ANALYSIS_EMPTY_MONTH);
     assert.deepEqual(analysisSections(analysis), []);
+    assert.equal(analysisAiCaution(analysis), "");
   });
 
   it("shows in-progress and failed states, keeping an earlier report only when one exists", () => {
@@ -123,6 +128,8 @@ describe("monthly analysis GET", () => {
     assert.equal(analysisSections(failed).length, 4);
     assert.equal(analysisNotice(failedWithoutReport, seenAt), ANALYSIS_FAILED);
     assert.deepEqual(analysisSections(failedWithoutReport), []);
+    assert.equal(analysisAiCaution(failedWithoutReport), "");
+    assert.equal(analysisAiCaution(running), ANALYSIS_AI_CAUTION);
     assert.equal(parseMonthlyAnalysis(body("GENERATION_IN_PROGRESS", {
       generation: { state: "IN_PROGRESS", active: false },
     }), "2026-10"), null);

@@ -324,8 +324,8 @@ class QwenMonthlyAnalysisGeneratorTest {
                 .doesNotContain("999.00");
         assertThat(generated.report().expenseStructure()).isEqualTo(DeterministicMonthlyReport.expenseStructure(context))
                 .contains("餐饮净额30.00元", "早餐10.00元", "购物净额10.00元");
-        assertThat(generated.report().surplusReasons()).startsWith(DeterministicMonthlyReport.surplusFact(context) + "\n")
-                .contains("结余为-30.00元", "净支出40.00元").endsWith("收入低于支出，所以结余为负。");
+        assertThat(generated.report().surplusReasons()).isEqualTo(DeterministicMonthlyReport.surplusExplanation(context))
+                .doesNotContain("收入低于支出");
         assertThat(generated.report().pointsToWatch()).isEqualTo("留意餐饮和购物两类支出。");
         capturing.content = "{\"surplusReasons\":\"只有一句\"}";
         assertThatThrownBy(() -> service.generate(context)).isInstanceOf(InvalidModelOutput.class);

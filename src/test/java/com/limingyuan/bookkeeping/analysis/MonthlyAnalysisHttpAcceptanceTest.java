@@ -172,7 +172,8 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(report.path("snapshot").path("expenseStructure").asText())
                 .isEqualTo("支出净额100.00元。购物净额60.00元，2笔，占支出净额60.00%。未分类支出净额40.00元，1笔，占支出净额40.00%。");
         assertThat(report.path("snapshot").path("surplusReasons").asText())
-                .isEqualTo("2026年6月结余为0.00元。净收入100.00元，净支出100.00元。\n" + BALANCED_SURPLUS);
+                .isEqualTo("收入记录的有符号金额合计为净收入100.00元。净收入与净支出相等，结余为0.00元。")
+                .doesNotContain(BALANCED_SURPLUS);
         assertThat(report.path("snapshot").path("pointsToWatch").asText()).isEqualTo(MODEL_POINTS);
         assertThat(report.path("snapshot").path("monthlyOverview").asText()).doesNotContain("99999");
         assertThat(report.path("snapshot").path("expenseStructure").asText()).doesNotContain("99999");
@@ -188,7 +189,13 @@ class MonthlyAnalysisHttpAcceptanceTest {
         var restored = ok(get(user.token(), analysis(accountId, "2026-06")));
         assertThat(restored.path("viewState").asText()).isEqualTo("CURRENT");
         assertThat(restored.path("snapshot").path("id").asLong()).isEqualTo(snapshotId);
+        assertThat(restored.path("snapshot").path("surplusReasons").asText())
+                .isEqualTo(report.path("snapshot").path("surplusReasons").asText());
         assertThat(restored.path("snapshot").path("pointsToWatch").asText()).isEqualTo(MODEL_POINTS);
+        assertThat(restored.path("snapshot").path("monthlyOverview").asText())
+                .isEqualTo(report.path("snapshot").path("monthlyOverview").asText());
+        assertThat(restored.path("snapshot").path("expenseStructure").asText())
+                .isEqualTo(report.path("snapshot").path("expenseStructure").asText());
         int beforeReuse = calls.get();
         var reused = ok(post(user.token(), analysis(accountId), Map.of("month", "2026-06", "expectedFingerprint", fingerprint)));
         assertThat(reused.path("outcome").asText()).isEqualTo("REUSED");
@@ -210,7 +217,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
         var regenerated = ok(post(user.token(), analysis(accountId), Map.of("month", "2026-06", "expectedFingerprint", refreshed)));
         assertThat(regenerated.path("outcome").asText()).isEqualTo("SUCCESS");
         assertThat(regenerated.path("analysis").path("snapshot").path("surplusReasons").asText())
-                .contains(NEGATIVE_SURPLUS).doesNotContain("结余因此为零");
+                .contains("结余为-1.00元").doesNotContain(NEGATIVE_SURPLUS, "结余因此为零");
         long newerId = regenerated.path("analysis").path("snapshot").path("id").asLong();
         assertThat(newerId).isGreaterThan(snapshotId);
         assertThat(quota(user.id())).isEqualTo(new Quota(0, 2));
@@ -232,7 +239,8 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(incomeReport.path("analysis").path("snapshot").path("monthlyOverview").asText())
                 .isEqualTo("2026年7月账本概况：净收入12.00元，1笔；净支出0.00元，0笔；结余12.00元。本月账本没有支出记录。");
         assertThat(incomeReport.path("analysis").path("snapshot").path("surplusReasons").asText())
-                .contains(INCOME_ONLY_SURPLUS).doesNotContain("结余因此为零");
+                .isEqualTo("收入记录的有符号金额合计为净收入12.00元。本月账本没有支出记录，结余等于净收入12.00元。")
+                .doesNotContain(INCOME_ONLY_SURPLUS, "结余因此为零");
         assertThat(incomeReport.path("analysis").path("snapshot").path("expenseStructure").asText()).isEqualTo("本月账本没有支出记录。");
         assertThat(quota(user.id())).isEqualTo(new Quota(0, 3));
 
@@ -281,8 +289,8 @@ class MonthlyAnalysisHttpAcceptanceTest {
                     .isEqualTo("支出净额-6.00元。购物净额-6.00元，1笔。本月没有未分类支出。")
                     .doesNotContain("%");
             assertThat(created.path("analysis").path("snapshot").path("surplusReasons").asText())
-                    .startsWith("2026年8月结余为6.00元。净收入0.00元，净支出-6.00元。\n")
-                    .contains(REFUND_SURPLUS).doesNotContain("相互抵消");
+                    .isEqualTo("本月账本没有收入记录。支出净额为-6.00元，仍记在支出。支出净额为负，使结余6.00元高于净收入。")
+                    .doesNotContain(REFUND_SURPLUS, "退款", "相互抵消");
             var again = ok(get(user.token(), analysis(accountId, "2026-08")));
             assertThat(again.path("viewState").asText()).isEqualTo("CURRENT");
             assertThat(again.path("snapshot").path("id").asLong()).isEqualTo(created.path("analysis").path("snapshot").path("id").asLong());
@@ -356,10 +364,10 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(snapshot.path("expenseStructure").asText())
                 .isEqualTo("支出净额20.00元。购物净额20.00元，1笔，占支出净额100.00%。本月没有未分类支出。");
         assertThat(snapshot.path("surplusReasons").asText())
-                .startsWith("2026年9月结余为30.00元。净收入50.00元，净支出20.00元。\n");
+                .isEqualTo("收入记录的有符号金额合计为净收入50.00元。净收入覆盖净支出20.00元后，结余为30.00元。")
+                .doesNotContain(REDUCED_INCOME_SURPLUS, "冲减", "结余因此为零");
         assertThat(snapshot.path("monthlyOverview").asText()).doesNotContain("99999");
         assertThat(snapshot.path("expenseStructure").asText()).doesNotContain("99999");
-        assertThat(snapshot.path("surplusReasons").asText()).contains(REDUCED_INCOME_SURPLUS).doesNotContain("结余因此为零");
     }
 
     @Test void httpDroppedExpenseSignDoesNotSaveOrConsumeQuota() throws Exception {
@@ -374,8 +382,7 @@ class MonthlyAnalysisHttpAcceptanceTest {
         assertThat(seen.path("facts").path("netIncome").asText()).isEqualTo("50.00");
         assertThat(seen.path("facts").path("netExpense").asText()).isEqualTo("-20.00");
         assertThat(seen.path("facts").path("surplus").asText()).isEqualTo("70.00");
-        content.set("{\"surplusReasons\":\"本月净收入50元，净支出20元，结余70元。收入主要来源于工资，支出为购物类退款。\","
-                + "\"pointsToWatch\":\"最大笔支出为-20元的购物退款，需确认该笔交易是否已正确入账并冲减当期支出。\"}");
+        content.set("{\"surplusReasons\":\"支出净额为负，结余高于净收入。\",\"pointsToWatch\":\"本月净支出20元。\"}");
         assertError(post(user.token(), analysis(accountId),
                 Map.of("month", "2026-02", "expectedFingerprint", seen.path("fingerprint").asText())), 502, "GENERATION_FAILED");
         assertThat(calls.get()).isEqualTo(1);

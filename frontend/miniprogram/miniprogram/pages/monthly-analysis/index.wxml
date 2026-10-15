@@ -27,6 +27,7 @@
         <text class="section">{{item.title}}</text>
         <text class="section-body">{{item.text}}</text>
       </block>
+      <text class="notice" wx:if="{{aiCaution}}">{{aiCaution}}</text>
     </block>
   </block>
 </view>
