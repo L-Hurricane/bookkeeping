@@ -68,7 +68,8 @@ final class QwenMonthlyAnalysisGenerator implements MonthlyAnalysisGenerator {
     @Override
     public MonthlyAnalysisGeneration generate(MonthlyAnalysisModelInput input, String systemPrompt) {
         if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) {
-            throw new IllegalStateException("DashScope monthly analysis provider is not configured");
+            log.warn("monthly analysis provider is not configured");
+            throw new AnalysisGenerationFailed(Kind.PROVIDER_ERROR, null);
         }
         if (systemPrompt == null || systemPrompt.isBlank()) throw new IllegalArgumentException("system prompt is required");
         URI uri = endpoint(baseUrl, permitLoopbackHttp);

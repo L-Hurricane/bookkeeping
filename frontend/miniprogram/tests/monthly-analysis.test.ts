@@ -23,6 +23,7 @@ import {
   analysisSections,
   applyGenerate,
   beginGenerate,
+  canGenerateAnalysis,
   canRefreshAnalysis,
   failAnalysis,
   openAnalysis,
@@ -32,7 +33,7 @@ import {
 } from "../miniprogram/analysis/screen";
 import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
 import { createMonthlyAnalysisApi, monthlyAnalysisPath } from "../miniprogram/services/analysis";
-import { saveSession } from "../miniprogram/session/session";
+import { restoreSession, saveSession } from "../miniprogram/session/session";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 
 const overview = "2026年10月账本概况：净收入0.00元，0笔；净支出12.00元，1笔；结余-12.00元。\n本月账本没有收入记录。";
@@ -411,6 +412,42 @@ describe("monthly analysis generate", () => {
     assert.equal(ignored.analysis?.viewState, "CURRENT");
   });
 
+  it("keeps the session and the historical report when generation fails", async () => {
+    const serverError = await submitGenerate(500, {
+      timestamp: "2026-10-15T06:10:52.503+00:00",
+      status: 500,
+      error: "Internal Server Error",
+      path: "/api/v1/accounts/1001/monthly-analysis",
+    });
+    assert.equal(serverError.unauthorized, 0);
+    assert.ok(serverError.session);
+    assert.equal(serverError.navigatedToLogin, false);
+    assert.equal(serverError.screen.submitting, false);
+    assert.equal(serverError.screen.actionMessage, ANALYSIS_FAILED);
+    assert.equal(serverError.screen.analysis?.snapshot?.monthlyOverview, overview);
+    assert.equal(canGenerateAnalysis(serverError.screen), true);
+
+    const providerError = await submitGenerate(502, {
+      error: { code: "GENERATION_FAILED", message: "分析生成失败，请稍后重试", requestId: "req-502" },
+    });
+    assert.equal(providerError.unauthorized, 0);
+    assert.ok(providerError.session);
+    assert.equal(providerError.navigatedToLogin, false);
+    assert.equal(providerError.screen.submitting, false);
+    assert.equal(providerError.screen.actionMessage, ANALYSIS_FAILED);
+    assert.equal(providerError.screen.analysis?.snapshot?.monthlyOverview, overview);
+    assert.equal(canGenerateAnalysis(providerError.screen), true);
+
+    const expired = await submitGenerate(401, {
+      error: { code: "SESSION_INVALID", message: "会话无效或已过期", requestId: "req-401" },
+    });
+    assert.equal(expired.unauthorized, 1);
+    assert.equal(expired.session, null);
+    assert.equal(expired.navigatedToLogin, true);
+    assert.equal(expired.screen.submitting, true);
+    assert.equal(expired.screen.analysis?.snapshot?.monthlyOverview, overview);
+  });
+
   it("uses a different message when generation times out", () => {
     const timeout = analysisGenerateMessage(new ApiError(504, "GENERATION_FAILED", "gateway"));
     const failed = analysisGenerateMessage(new ApiError(502, "GENERATION_FAILED", "provider"));
@@ -425,6 +462,36 @@ describe("monthly analysis generate", () => {
     assert.equal(canRefreshAnalysis(waiting), true);
   });
 });
+
+async function submitGenerate(statusCode: number, data: unknown) {
+  const storage = memoryStorage();
+  const now = new Date("2026-10-10T04:00:00Z");
+  saveSession(storage, { token: "opaque-token", expiresAt: "2099-01-01T00:00:00Z" });
+  let unauthorized = 0;
+  const api = createMonthlyAnalysisApi(createHttpClient({
+    baseUrl: "http://127.0.0.1:8080",
+    storage,
+    now: () => now,
+    onUnauthorized() { unauthorized += 1; },
+    transport: async () => ({ statusCode, data }),
+  }));
+  const ready = readyScreen("STALE", { stale: true, fingerprint: "1:old" });
+  const attempt = beginGenerate(ready);
+  assert.ok(attempt);
+  let screen = attempt.screen;
+  let navigatedToLogin = false;
+  try {
+    const result = await api.generate(1001, attempt.month, attempt.expectedFingerprint);
+    screen = applyGenerate(screen, attempt, result.analysis, result.outcome, true);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      navigatedToLogin = true;
+    } else {
+      screen = rejectGenerate(screen, attempt, analysisGenerateMessage(error), true);
+    }
+  }
+  return { unauthorized, session: restoreSession(storage, now), screen, navigatedToLogin };
+}
 
 function readyScreen(viewState: AnalysisViewState, overrides: Record<string, unknown> = {}) {
   const requested = requestAnalysis(openAnalysis("2026-10"), "2026-10");

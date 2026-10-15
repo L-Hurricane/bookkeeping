@@ -2,6 +2,7 @@ package com.limingyuan.bookkeeping.identity.security;
 
 import com.limingyuan.bookkeeping.common.api.*;
 import com.limingyuan.bookkeeping.identity.application.AuthenticationService;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -19,6 +20,8 @@ public class IdentitySecurityConfiguration {
         var sessionFilter = new SessionAuthenticationFilter(authentication, errors);
         return http
                 .authorizeHttpRequests(authorize -> authorize
+                        // A client cannot choose ERROR. This only lets the container finish the original status.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/**").authenticated()

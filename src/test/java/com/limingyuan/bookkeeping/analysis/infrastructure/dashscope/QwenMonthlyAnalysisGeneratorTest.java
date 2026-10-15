@@ -25,6 +25,8 @@ import com.limingyuan.bookkeeping.statistics.application.MonthlyBookkeepingFacts
 import com.limingyuan.bookkeeping.statistics.application.MonthlyBookkeepingFactsReader;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -42,6 +44,10 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class QwenMonthlyAnalysisGeneratorTest {
     private static final String SECRET = "sk-test-secret-value";
@@ -187,6 +193,25 @@ class QwenMonthlyAnalysisGeneratorTest {
         assertThat(uri.getScheme()).isEqualTo("https");
         assertThat(uri.getHost()).isEqualTo("dashscope.example");
         assertThat(uri.getPath()).isEqualTo("/compatible-mode/v1/chat/completions");
+    }
+
+    @Test void unconfiguredProviderFailsBeforeAnyRequest() throws Exception {
+        HttpClient client = mock(HttpClient.class);
+        int before = hits.get();
+        for (String[] values : new String[][] {
+                {"", SECRET, "qwen3.7-flash"},
+                {baseUrl, " ", "qwen3.7-flash"},
+                {baseUrl, SECRET, ""}}) {
+            var generator = new QwenMonthlyAnalysisGenerator(client, values[0], values[1], values[2], Duration.ofSeconds(2), 2048);
+            assertThatThrownBy(() -> generator.generate(MonthlyAnalysisModelInput.from(context()), MonthlyAnalysisPrompt.text()))
+                    .isInstanceOfSatisfying(AnalysisGenerationFailed.class, failure -> {
+                        assertThat(failure.kind()).isEqualTo(Kind.PROVIDER_ERROR);
+                        assertThat(failure.httpStatus()).isNull();
+                        assertThat(failure.getMessage()).doesNotContain(SECRET, "Authorization", "Bearer");
+                    });
+        }
+        verify(client, never()).send(any(HttpRequest.class), any());
+        assertThat(hits.get()).isEqualTo(before);
     }
 
     @Test void plaintextHttpIsRejectedBeforeARequest() {
