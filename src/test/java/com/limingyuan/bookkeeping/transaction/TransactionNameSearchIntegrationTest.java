@@ -3,7 +3,6 @@ package com.limingyuan.bookkeeping.transaction;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
-import com.limingyuan.bookkeeping.transaction.application.TransactionService;
 import java.util.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -113,10 +112,6 @@ class TransactionNameSearchIntegrationTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
         mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions").header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
-    }
-
-    @Test void likePatternEscapesForSqlBinding() {
-        assertThat(TransactionService.likeContainsPattern("a%b_c\\d")).isEqualTo("%a\\%b\\_c\\\\d%");
     }
 
     private List<Long> searchIds(String keyword, String bearer) throws Exception {

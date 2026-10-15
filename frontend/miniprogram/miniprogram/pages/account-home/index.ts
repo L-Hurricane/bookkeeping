@@ -341,7 +341,7 @@ Page({
   onSearchInput(event: WechatMiniprogram.Input) {
     const searchInput = typeof event.detail.value === "string" ? event.detail.value : "";
     this.setData({ searchInput });
-    this.searchDebounce.schedule(searchInput, (keyword) => {
+    this.searchDebounce.schedule(searchInput, (keyword: string) => {
       this.applySearchKeyword(keyword);
     });
   },

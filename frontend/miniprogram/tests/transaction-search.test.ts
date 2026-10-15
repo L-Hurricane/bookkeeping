@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createLoadGuard } from "../miniprogram/account/load-guard";
 import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
+import { saveSession } from "../miniprogram/session/session";
+import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import {
   canApplySearchResult,
   createSearchDebounce,
@@ -14,6 +16,22 @@ import {
 import { createTransactionApi, TransactionSearchResponseError } from "../miniprogram/services/transaction";
 
 const created = "2020-01-01T00:00:00+08:00";
+const activeSession = { token: "opaque-token", expiresAt: "2099-01-01T00:00:00Z" };
+
+function memoryStorage(): KeyValueStorage {
+  let value: string | undefined;
+  return {
+    getItem() {
+      return value;
+    },
+    setItem(_key, next) {
+      value = next;
+    },
+    removeItem() {
+      value = undefined;
+    },
+  };
+}
 
 function searchItem(id: number, name: string, businessTime = "2026-09-12T20:00:00+08:00") {
   return {
@@ -75,32 +93,36 @@ describe("transaction search", () => {
   it("loads search results through the transaction api", async () => {
     const requests: HttpTransportRequest[] = [];
     let calls = 0;
+    const storage = memoryStorage();
+    saveSession(storage, activeSession);
     const http = createHttpClient({
       baseUrl: "https://api.example",
       transport: async (request) => {
         requests.push(request);
         calls += 1;
         if (calls === 1) {
-          return { status: 200, headers: {}, body: { items: [searchItem(2, "牛奶")] } };
+          return { statusCode: 200, data: { items: [searchItem(2, "牛奶")] } };
         }
-        return { status: 200, headers: {}, body: { items: [{ id: 2 }] } };
+        return { statusCode: 200, data: { items: [{ id: 2 }] } };
       },
-      storage: { get: () => null, set: () => {}, remove: () => {} },
+      storage,
       now: () => new Date("2026-09-12T12:00:00+08:00"),
       onUnauthorized: () => {},
     });
     const api = createTransactionApi(http);
     const result = await api.searchTransactions(1001, "牛奶", created);
     assert.equal(result.items.length, 1);
-    assert.equal(requests[0]?.path, "/api/v1/accounts/1001/transactions/search?name=%E7%89%9B%E5%A5%B6");
+    assert.equal(requests[0]?.url, "https://api.example/api/v1/accounts/1001/transactions/search?name=%E7%89%9B%E5%A5%B6");
     await assert.rejects(() => api.searchTransactions(1001, "牛奶", created), TransactionSearchResponseError);
   });
 
   it("surfaces unauthorized search failures", async () => {
+    const storage = memoryStorage();
+    saveSession(storage, activeSession);
     const http = createHttpClient({
       baseUrl: "https://api.example",
-      transport: async () => ({ status: 401, headers: {}, body: { error: { code: "UNAUTHORIZED" } } }),
-      storage: { get: () => null, set: () => {}, remove: () => {} },
+      transport: async () => ({ statusCode: 401, data: { error: { code: "UNAUTHORIZED", message: "未授权" } } }),
+      storage,
       now: () => new Date("2026-09-12T12:00:00+08:00"),
       onUnauthorized: () => {},
     });
