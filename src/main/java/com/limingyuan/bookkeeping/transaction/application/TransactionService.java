@@ -206,7 +206,7 @@ public class TransactionService {
                 LEFT JOIN categories c ON c.id = t.category_id
                 WHERE t.account_id = :accountId AND t.user_id = :userId
                   AND t.name IS NOT NULL AND t.name <> ''
-                  AND t.name LIKE :pattern ESCAPE '\\'
+                  AND t.name LIKE :pattern ESCAPE '!'
                 ORDER BY t.business_time DESC, t.first_save_order DESC
                 """).param("accountId", accountId).param("userId", context.userId()).param("pattern", pattern)
                 .query((rs, row) -> {
@@ -383,12 +383,13 @@ public class TransactionService {
     }
 
     static String likeContainsPattern(String keyword) {
+        char escape = '!';
         var escaped = new StringBuilder(keyword.length() * 2 + 2);
         escaped.append('%');
         for (int index = 0; index < keyword.length(); index++) {
             char character = keyword.charAt(index);
-            if (character == '%' || character == '_' || character == '\\') {
-                escaped.append('\\');
+            if (character == escape || character == '%' || character == '_' || character == '\\') {
+                escaped.append(escape);
             }
             escaped.append(character);
         }

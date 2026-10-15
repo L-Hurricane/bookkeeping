@@ -6,6 +6,6 @@ import org.junit.jupiter.api.Test;
 
 class TransactionLikePatternTest {
     @Test void likePatternEscapesForSqlBinding() {
-        assertThat(TransactionService.likeContainsPattern("a%b_c\\d")).isEqualTo("%a\\%b\\_c\\\\d%");
+        assertThat(TransactionService.likeContainsPattern("a%b_c\\d")).isEqualTo("%a!%b!_c!\\d%");
     }
 }
