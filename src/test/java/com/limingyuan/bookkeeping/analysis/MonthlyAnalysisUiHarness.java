@@ -81,14 +81,19 @@ class MonthlyAnalysisUiHarness {
         Files.deleteIfExists(SESSION);
         Files.writeString(MODE, "success\n");
         String username = "t6b1_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String usernameB = "t6b1b_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         var created = new AtomicLong(-1L);
+        var createdB = new AtomicLong(-1L);
         Throwable failure = null;
-        Thread cleanupHook = new Thread(() -> discardRun(username, created), "monthly-analysis-ui-harness-cleanup");
+        Thread cleanupHook = new Thread(() -> discardRun(username, created, usernameB, createdB), "monthly-analysis-ui-harness-cleanup");
         Runtime.getRuntime().addShutdownHook(cleanupHook);
         try {
             String password = tokens.generate();
             bootstrap.ensureUser(username, password);
             created.set(users.findByUsername(username).orElseThrow().getId());
+            String passwordB = tokens.generate();
+            bootstrap.ensureUser(usernameB, passwordB);
+            createdB.set(users.findByUsername(usernameB).orElseThrow().getId());
             String token = login(username, password);
             long accountId = initialize(token);
             jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", accountId).update();
@@ -97,7 +102,8 @@ class MonthlyAnalysisUiHarness {
             transact(token, accountId, "INCOME", "100.00", salary, "工资", "2026-10-01T08:00:00+08:00");
             transact(token, accountId, "EXPENSE", "40.00", shopping, "日用品", "2026-10-02T08:00:00+08:00");
             Files.writeString(SESSION, json.writeValueAsString(Map.of(
-                    "username", username, "password", password, "accountId", accountId, "userId", created.get())));
+                    "username", username, "password", password, "accountId", accountId, "userId", created.get(),
+                    "userB", Map.of("username", usernameB, "password", passwordB, "userId", createdB.get()))));
             Files.writeString(EVIDENCE.resolve("harness.txt"), """
                     profile=test
                     port=8080
@@ -112,7 +118,7 @@ class MonthlyAnalysisUiHarness {
             throw ex;
         } finally {
             try {
-                discardRun(username, created);
+                discardRun(username, created, usernameB, createdB);
             } catch (Exception cleanup) {
                 if (failure != null) failure.addSuppressed(cleanup);
                 else throw cleanup;
@@ -125,7 +131,7 @@ class MonthlyAnalysisUiHarness {
         }
     }
 
-    private void discardRun(String username, AtomicLong created) {
+    private void discardRun(String username, AtomicLong created, String usernameB, AtomicLong createdB) {
         if (!discarded.compareAndSet(false, true)) return;
         IOException credentialFailure = null;
         try {
@@ -139,6 +145,12 @@ class MonthlyAnalysisUiHarness {
             if (found.isPresent()) userId = found.get().getId();
         }
         if (userId >= 0) removeCreatedUser(userId);
+        long userBId = createdB.get();
+        if (userBId < 0 && usernameB != null) {
+            var foundB = users.findByUsername(usernameB);
+            if (foundB.isPresent()) userBId = foundB.get().getId();
+        }
+        if (userBId >= 0) removeCreatedUser(userBId);
         if (credentialFailure != null) {
             throw new IllegalStateException("could not delete the harness credential", credentialFailure);
         }
@@ -179,7 +191,10 @@ class MonthlyAnalysisUiHarness {
         if ("invalid".equals(mode)) {
             return new MonthlyAnalysisGeneration("dashscope", "qwen3.7-flash", "not-json", 1L, 1L, 2L, 5L, "harness-hidden");
         }
-        String body = json.writeValueAsString(Map.of("surplusReasons", MODEL_SURPLUS, "pointsToWatch", MODEL_POINTS));
+        Path override = EVIDENCE.resolve("model-body.json");
+        String body = Files.exists(override)
+                ? Files.readString(override).trim()
+                : json.writeValueAsString(Map.of("surplusReasons", MODEL_SURPLUS, "pointsToWatch", MODEL_POINTS));
         return new MonthlyAnalysisGeneration("dashscope", "qwen3.7-flash", body, 1L, 1L, 2L, 5L, "harness-hidden");
     }
 
