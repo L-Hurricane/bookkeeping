@@ -88,8 +88,8 @@ class MonthlyAnalysisServiceTest {
         var store = new OutcomeStore(context.fingerprint());
         var factsService = new MonthlyAnalysisFactsService((accountId, yearMonth) -> source);
         var service = new MonthlyAnalysisService(factsService, store,
-                new MonthlyAnalysisReportGeneration(factsService, generator), new TrustedUserContext(),
-                Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
+                new MonthlyAnalysisReportGeneration(factsService, generator), new OpenAnalysisAdmission(),
+                new TrustedUserContext(), Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new TrustedUserContext.Identity(4L, 0L), null, List.of()));
         assertThatThrownBy(() -> service.generate(7L, "2026-02", context.fingerprint()))
@@ -102,11 +102,31 @@ class MonthlyAnalysisServiceTest {
         assertThat(store.failures).isEqualTo(1);
     }
 
+    @Test void rejectedAdmissionDoesNotAcquireAPermit() {
+        var source = facts();
+        var context = new MonthlyAnalysisFactsService((accountId, yearMonth) -> source).build(7L, "2026-10");
+        var store = new RecordingStore();
+        var service = new MonthlyAnalysisService(new MonthlyAnalysisFactsService((accountId, yearMonth) -> source), store,
+                new MonthlyAnalysisReportGeneration(new MonthlyAnalysisFactsService((accountId, yearMonth) -> source),
+                        (input, prompt) -> { throw new AssertionError("model"); }),
+                () -> { throw new ApiFailure(403, "OPERATION_FORBIDDEN", "当前本地模拟不接受此用户"); },
+                new TrustedUserContext(), Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new TrustedUserContext.Identity(4L, 0L), null, List.of()));
+        assertThatThrownBy(() -> service.generate(7L, "2026-10", context.fingerprint()))
+                .isInstanceOfSatisfying(ApiFailure.class, failure -> {
+                    assertThat(failure.status()).isEqualTo(403);
+                    assertThat(failure.code()).isEqualTo("OPERATION_FORBIDDEN");
+                });
+        assertThat(store.acquireCalls).isZero();
+    }
+
     private static MonthlyAnalysisService service(RecordingStore store, MonthlyBookkeepingFactsReader reader) {
         return new MonthlyAnalysisService(new MonthlyAnalysisFactsService(reader), store,
                 new MonthlyAnalysisReportGeneration(new MonthlyAnalysisFactsService(reader), (input, prompt) -> {
                     throw new AssertionError("model");
-                }), new TrustedUserContext(), Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
+                }), new OpenAnalysisAdmission(), new TrustedUserContext(),
+                Clock.fixed(Instant.parse("2026-10-10T04:00:00Z"), ZoneOffset.UTC));
     }
 
     private static AnalysisSnapshot snapshot(long id, String fingerprint, String overview) {

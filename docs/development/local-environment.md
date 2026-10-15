@@ -124,6 +124,25 @@ API 集成测试只清理自己创建的测试用户。不要用测试账号连�
 
 `./mvnw test` 不调用真实 DashScope。不要为了跑测试设置会打到真实模型的开关。
 
+## 本地月度分析 Mock
+
+默认关闭。普通 `local` 启动仍使用 Qwen generator。没有配置 Provider 时，生成返回 502 `GENERATION_FAILED`，不会自动改成 Mock。
+
+只有这些条件同时成立时，Mock generator 才会装配：
+
+- 有效 profile 包含 `local`，并且不包含 `prod` 或 `production`。没有显式 profile 时，默认 profile `local` 算满足。
+- `BOOKKEEPING_ANALYSIS_MOCK_ENABLED=true`。
+- `BOOKKEEPING_ANALYSIS_MOCK_USERS` 是逗号分隔的用户名白名单。用户名留在本机环境，不写进仓库。
+- `DASHSCOPE_API_KEY` 为空。
+
+白名单之外的用户在配额预留之前被拒绝，不会产生新的 Generation 或 Snapshot。已有成功 Snapshot 的复用规则不变。
+
+冲突配置会让进程启动失败，错误信息里没有密钥。Mock 不会在失败后退回真实 Qwen，也不会发出外部请求。
+
+成功 Snapshot 的 provider 是 `local-mock`，model 是 `deterministic-acceptance`。关闭 Mock 后，同一用户、同一月份、同一指纹仍会复用这份 Snapshot。不要在启动时自动删除它。
+
+`BOOKKEEPING_ANALYSIS_MOCK_MODE` 只接受 `success` 或 `failure`，默认 `success`。`failure` 只用于验证失败路径。
+
 ## 前端
 
 在 `frontend/miniprogram`：

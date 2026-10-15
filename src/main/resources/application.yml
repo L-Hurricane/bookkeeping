@@ -37,6 +37,10 @@ bookkeeping:
     enabled: ${ACCEPTANCE_DATA_ENABLED:false}
     action: ${ACCEPTANCE_DATA_ACTION:}
   analysis:
+    mock:
+      enabled: ${BOOKKEEPING_ANALYSIS_MOCK_ENABLED:false}
+      allowed-usernames: ${BOOKKEEPING_ANALYSIS_MOCK_USERS:}
+      mode: ${BOOKKEEPING_ANALYSIS_MOCK_MODE:success}
     dashscope:
       base-url: ${DASHSCOPE_BASE_URL:}
       api-key: ${DASHSCOPE_API_KEY:}

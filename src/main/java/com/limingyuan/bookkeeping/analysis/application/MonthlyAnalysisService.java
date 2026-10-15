@@ -25,14 +25,17 @@ public class MonthlyAnalysisService {
     private final MonthlyAnalysisFactsService facts;
     private final AnalysisGenerationStore store;
     private final MonthlyAnalysisReportGeneration reports;
+    private final AnalysisGenerationAdmission admission;
     private final TrustedUserContext users;
     private final Clock clock;
 
     public MonthlyAnalysisService(MonthlyAnalysisFactsService facts, AnalysisGenerationStore store,
-            MonthlyAnalysisReportGeneration reports, TrustedUserContext users, Clock clock) {
+            MonthlyAnalysisReportGeneration reports, AnalysisGenerationAdmission admission, TrustedUserContext users,
+            Clock clock) {
         this.facts = facts;
         this.store = store;
         this.reports = reports;
+        this.admission = admission;
         this.users = users;
         this.clock = clock;
     }
@@ -60,6 +63,7 @@ public class MonthlyAnalysisService {
         long userId = users.userId();
         var existing = store.findSuccessful(userId, context.yearMonth(), fingerprint);
         if (existing.isPresent()) return new MonthlyAnalysisResult("REUSED", assemble(context, userId, existing.get()));
+        admission.admit();
         return switch (store.acquire(userId, context.yearMonth(), fingerprint)) {
             case PermitAcquisition.Reused reused -> new MonthlyAnalysisResult("REUSED", assemble(context, userId, reused.snapshot()));
             case PermitAcquisition.Busy ignored -> throw new ApiFailure(409, "IN_PROGRESS", "这个月的分析正在生成");
