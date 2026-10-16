@@ -155,8 +155,6 @@ describe("transaction search", () => {
     });
     assert.equal("rows" in monthPatch, true);
     assert.equal("empty" in monthPatch, true);
-    assert.deepEqual(monthPatch.rows, []);
-    assert.equal(monthPatch.empty, true);
     const merged = { ...page, ...monthPatch };
     assert.deepEqual(merged.rows, []);
     assert.equal(merged.empty, true);
