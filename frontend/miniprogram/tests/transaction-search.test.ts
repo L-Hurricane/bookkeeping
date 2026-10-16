@@ -5,6 +5,7 @@ import { ApiError, createHttpClient, type HttpTransportRequest } from "../minipr
 import { saveSession } from "../miniprogram/session/session";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import {
+  buildLedgerLoadSetDataPatch,
   canApplySearchResult,
   createSearchDebounce,
   invalidateSearchOnInputChange,
@@ -15,10 +16,18 @@ import {
   searchTransactionsPath,
   shouldPreserveSearchRowsOnLedgerLoad,
   shouldRefreshSearchAfterDetailReturn,
+  shouldRefreshSearchOnListShow,
   shouldRunDebouncedSearch,
   shouldRunSearchOnMonthChange,
   trimSearchKeyword,
 } from "../miniprogram/transaction/transaction-search";
+import {
+  noteListStale,
+  noteSavedTransaction,
+  openTransactionDetail,
+  showOpenList,
+  type OpenList,
+} from "../miniprogram/navigation/scroll-restore";
 import { createTransactionApi, TransactionSearchResponseError } from "../miniprogram/services/transaction";
 
 const created = "2020-01-01T00:00:00+08:00";
@@ -97,6 +106,74 @@ describe("transaction search", () => {
     assert.equal(shouldPreserveSearchRowsOnLedgerLoad("牛奶"), true);
     assert.equal(shouldRunSearchOnMonthChange("牛奶"), false);
     assert.equal(shouldRunSearchOnMonthChange(""), true);
+  });
+
+  it("keeps search rows when a late ledger patch applies during active search", () => {
+    const searchRows = searchLedgerRows([searchItem(9, "牛奶")]);
+    const page = {
+      rows: searchRows,
+      empty: false,
+      searchEmpty: false,
+      balanceLabel: "¥1.00",
+    };
+    const latePatch = buildLedgerLoadSetDataPatch("牛奶", [], {
+      phase: "ready",
+      balanceLabel: "¥9.00",
+      monthLabel: "2026年9月",
+      incomeLabel: "¥0.00",
+      expenseLabel: "¥0.00",
+      surplusLabel: "¥0.00",
+      countLabel: "0 笔收支",
+      errorMessage: "",
+      locateMiss: "",
+      highlightKey: "",
+    });
+    assert.equal("rows" in latePatch, false);
+    assert.equal("empty" in latePatch, false);
+    assert.equal("searchEmpty" in latePatch, false);
+    const merged = { ...page, ...latePatch };
+    assert.deepEqual(merged.rows, searchRows);
+    assert.equal(merged.balanceLabel, "¥9.00");
+    assert.equal(merged.searchEmpty, false);
+  });
+
+  it("writes month ledger rows when search is inactive at ledger apply time", () => {
+    const searchRows = searchLedgerRows([searchItem(9, "牛奶")]);
+    const page = { rows: searchRows, empty: false, searchEmpty: false };
+    const monthPatch = buildLedgerLoadSetDataPatch("", [], {
+      phase: "ready",
+      balanceLabel: "¥0.00",
+      monthLabel: "2026年9月",
+      incomeLabel: "¥0.00",
+      expenseLabel: "¥0.00",
+      surplusLabel: "¥0.00",
+      countLabel: "0 笔收支",
+      errorMessage: "",
+      locateMiss: "",
+      highlightKey: "",
+    });
+    assert.deepEqual(monthPatch.rows, []);
+    assert.equal(monthPatch.empty, true);
+    const merged = { ...page, ...monthPatch };
+    assert.deepEqual(merged.rows, []);
+    assert.equal(merged.empty, true);
+  });
+
+  it("refreshes search on dirty return transitions but not on keep or user month change", () => {
+    const home = (month: string): OpenList => ({ month, locateMonth: null, visit: null });
+    const keyword = "牛奶";
+
+    const deleteReturn = showOpenList(noteListStale(openTransactionDetail(home("2026-09"), 480)));
+    assert.equal(shouldRefreshSearchOnListShow(deleteReturn.show, keyword), true);
+
+    const monthMove = showOpenList(noteSavedTransaction(openTransactionDetail(home("2026-09"), 480), "2026-10"));
+    assert.equal(shouldRefreshSearchOnListShow(monthMove.show, keyword), true);
+
+    const readOnly = showOpenList(openTransactionDetail(home("2026-09"), 480));
+    assert.equal(shouldRefreshSearchOnListShow(readOnly.show, keyword), false);
+
+    assert.equal(shouldRunSearchOnMonthChange(keyword), false);
+    assert.equal(shouldRefreshSearchOnListShow({ refresh: "reload", scope: "account", locate: true }, keyword), false);
   });
 
   it("parses search responses and maps ledger rows without using Number for money", () => {

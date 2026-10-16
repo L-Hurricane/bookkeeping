@@ -32,8 +32,8 @@ import {
   SEARCH_DEBOUNCE_MS,
   SEARCH_LOAD_ERROR,
   searchLedgerRows,
-  shouldPreserveSearchRowsOnLedgerLoad,
-  shouldRefreshSearchAfterDetailReturn,
+  buildLedgerLoadSetDataPatch,
+  shouldRefreshSearchOnListShow,
   shouldRunDebouncedSearch,
   trimSearchKeyword,
 } from "../../transaction/transaction-search";
@@ -95,11 +95,11 @@ Page({
     }
     const shown = showOpenList(this.openList());
     this.detailReturn = shown.state.visit;
+    const refreshSearch = shouldRefreshSearchOnListShow(shown.show, this.searchKeyword);
     if (shown.show.refresh === "keep") {
       return;
     }
     if (shown.show.refresh === "background-refresh") {
-      const refreshSearch = shouldRefreshSearchAfterDetailReturn(this.searchKeyword);
       void this.loadLedger("background", shown.show.scrollTop);
       if (refreshSearch) {
         void this.runSearch(this.searchKeyword);
@@ -108,6 +108,9 @@ Page({
     }
     if (shown.show.scope === "ledger") {
       void this.loadLedger("replace");
+      if (refreshSearch) {
+        void this.runSearch(this.searchKeyword);
+      }
       return;
     }
     void this.loadAccount();
@@ -190,21 +193,18 @@ Page({
       const locate = settlement.locate;
       const explicitLocate = this.pendingPostSave !== null || locate !== null;
       const restoreTop = background && !explicitLocate ? restoreScrollTop : null;
-      const searchActive = shouldPreserveSearchRowsOnLedgerLoad(this.searchKeyword);
-      const ledgerView = {
-        phase: "ready" as const,
+      const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, ledger.items, {
+        phase: "ready",
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
         monthLabel: formatMonthLabel(ledger.month),
         incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
         expenseLabel: formatMoneyLabel(ledger.summary.netExpense),
         surplusLabel: formatMoneyLabel(ledger.summary.surplus),
         countLabel: `${ledger.summary.transactionCount} 笔收支`,
-        rows: searchActive ? this.data.rows : ledgerRows(ledger.items),
-        empty: searchActive ? this.data.searchEmpty : ledger.items.length === 0,
         errorMessage: "",
         locateMiss: settlement.missMessage,
         highlightKey: locate === null ? this.highlight.key : locate.key,
-      };
+      });
       if (locate === null) {
         this.setData(ledgerView, () => {
           if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {

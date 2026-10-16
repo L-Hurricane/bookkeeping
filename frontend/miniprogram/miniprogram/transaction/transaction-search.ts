@@ -1,5 +1,6 @@
 import type { LoadGuard } from "../account/load-guard";
-import { formatBusinessTime, formatMoneyLabel, type LedgerRow } from "../ledger/ledger";
+import { formatBusinessTime, formatMoneyLabel, ledgerRows, type LedgerEntry, type LedgerRow } from "../ledger/ledger";
+import type { ListShow } from "../navigation/scroll-restore";
 import { isBusinessTimeAllowed, validateBusinessTime } from "./business-time";
 
 const MONEY_RESPONSE_PATTERN = /^-?[0-9]+\.[0-9]{2}$/;
@@ -115,6 +116,49 @@ export function shouldRunDebouncedSearch(
 
 export function shouldRefreshSearchAfterDetailReturn(searchKeyword: string): boolean {
   return isActiveSearchKeyword(searchKeyword);
+}
+
+export function shouldRefreshSearchOnListShow(show: ListShow, searchKeyword: string): boolean {
+  if (!isActiveSearchKeyword(searchKeyword)) {
+    return false;
+  }
+  if (show.refresh === "keep") {
+    return false;
+  }
+  if (show.refresh === "reload" && show.scope === "account") {
+    return false;
+  }
+  return true;
+}
+
+export interface LedgerLoadSetDataCommon {
+  readonly phase: "ready";
+  readonly balanceLabel: string;
+  readonly monthLabel: string;
+  readonly incomeLabel: string;
+  readonly expenseLabel: string;
+  readonly surplusLabel: string;
+  readonly countLabel: string;
+  readonly errorMessage: string;
+  readonly locateMiss: string;
+  readonly highlightKey: string;
+}
+
+export type LedgerLoadSetDataPatch = LedgerLoadSetDataCommon | (LedgerLoadSetDataCommon & { readonly rows: LedgerRow[]; readonly empty: boolean });
+
+export function buildLedgerLoadSetDataPatch(
+  searchKeyword: string,
+  ledgerItems: readonly LedgerEntry[],
+  common: LedgerLoadSetDataCommon,
+): LedgerLoadSetDataPatch {
+  if (isActiveSearchKeyword(searchKeyword)) {
+    return common;
+  }
+  return {
+    ...common,
+    rows: ledgerRows(ledgerItems),
+    empty: ledgerItems.length === 0,
+  };
 }
 
 export function shouldPreserveSearchRowsOnLedgerLoad(searchKeyword: string): boolean {

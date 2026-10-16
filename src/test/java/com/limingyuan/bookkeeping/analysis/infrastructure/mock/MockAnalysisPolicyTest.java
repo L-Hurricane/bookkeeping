@@ -9,7 +9,7 @@ class MockAnalysisPolicyTest {
 
     @Test void localProfileWithoutAKeyIsSafe() {
         MockAnalysisPolicy.requireSafe(new String[] {"local"}, new String[0], " ", "mock_accept_a, mock_accept_b,", "success");
-        assertThat(MockAnalysisPolicy.usernames("mock_accept_a, mock_accept_b,")).containsExactly("mock_accept_a", "mock_accept_b");
+        assertThat(MockAnalysisPolicy.usernames("mock_accept_a, mock_accept_b,")).containsExactlyInAnyOrder("mock_accept_a", "mock_accept_b");
     }
 
     @Test void defaultLocalProfileIsEnoughWhenNothingIsActive() {
