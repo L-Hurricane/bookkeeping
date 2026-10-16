@@ -13,7 +13,7 @@ AI Coding Agent: read `AGENTS.md` first.
 ## 工程基线
 
 - Java 25 LTS、Spring Boot 4.1.1、MySQL 8.4 LTS。
-- `./mvnw` 固定 Apache Maven 3.9.16；官方 Maven Wrapper 3.3.4
+- `backend/mvnw` 固定 Apache Maven 3.9.16；官方 Maven Wrapper 3.3.4
   使用 only-script 分发，首次运行需要网络，Maven 分发包启用 SHA-256 校验。
 - 依赖版本由 Spring Boot 管理；无全局 Maven、Docker 或 H2 前置要求。
 - 坐标：`com.limingyuan:bookkeeping`；base package：`com.limingyuan.bookkeeping`。
@@ -27,6 +27,7 @@ brew install openjdk@25 mysql@8.4
 export JAVA_HOME="$(brew --prefix openjdk@25)/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$(brew --prefix mysql@8.4)/bin:$PATH"
 java -version
+cd backend
 ./mvnw --version
 ```
 
@@ -58,6 +59,7 @@ CREATE DATABASE bookkeeping_migration_test CHARACTER SET utf8mb4 COLLATE utf8mb4
 
 ```sh
 export SPRING_PROFILES_ACTIVE=local
+cd backend
 ./mvnw spring-boot:run
 ```
 
@@ -159,7 +161,7 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 ## 测试与打包
 
 测试自动激活 `test` profile，使用相同 MySQL、Flyway、JPA、Security 配置链路。
-测试配置仅位于 `src/test/resources`，不会进入运行 JAR。
+测试配置仅位于 `backend/src/test/resources`，不会进入运行 JAR。
 
 - `TEST_DB_URL`：默认 `jdbc:mysql://localhost:3306/bookkeeping_test`。
 - `TEST_DB_USERNAME` / `TEST_DB_PASSWORD`：必须提供独立测试账号凭证。
@@ -171,6 +173,7 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 准备好测试环境变量后：
 
 ```sh
+cd backend
 ./mvnw test
 ./mvnw package
 ```
@@ -185,15 +188,15 @@ API 测试仅清理自己创建的随机测试用户及其账户/分类/标签/�
 未设置凭证或 MySQL 未就绪时测试应失败，不自动跳过、不使用 H2。
 测试中的身份探测 Controller 仅在 test source 中，不会打包，也不是正式 API。
 
-打包输出为 `target/bookkeeping-0.1.0-SNAPSHOT.jar`，配置好开发环境变量后可运行：
+打包输出为 `backend/target/bookkeeping-0.1.0-SNAPSHOT.jar`，配置好开发环境变量后可运行：
 
 ```sh
-java -jar target/bookkeeping-0.1.0-SNAPSHOT.jar
+java -jar backend/target/bookkeeping-0.1.0-SNAPSHOT.jar
 ```
 
 ## Flyway 与包边界
 
-`src/main/resources/db/migration` 仅包含：
+`backend/src/main/resources/db/migration` 仅包含：
 
 - `V1__create_users.sql`：users、username 唯一约束。
 - `V2__create_sessions.sql`：sessions、User FK、Token Hash 唯一约束及用户/到期索引。

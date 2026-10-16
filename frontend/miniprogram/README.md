@@ -36,10 +36,11 @@ npm test
 ## 本地联调
 
 1. 按仓库根目录 `README.md` 准备 MySQL、`DB_USERNAME` / `DB_PASSWORD`，以及预创建用户所需的 Bootstrap 环境变量。
-2. 在仓库根目录启动 Backend：
+2. 从仓库根目录启动 Backend：
 
 ```sh
 export SPRING_PROFILES_ACTIVE=local
+cd backend
 ./mvnw spring-boot:run
 ```
 

@@ -4,7 +4,7 @@ action="${1:-}"
 case "$action" in
   reset|seed|reset-and-seed) ;;
   *)
-    echo "usage: ACCEPTANCE_TEST_PASSWORD='...' ./scripts/acceptance-data.sh reset|seed|reset-and-seed" >&2
+    echo "usage: ACCEPTANCE_TEST_PASSWORD='...' ./backend/scripts/acceptance-data.sh reset|seed|reset-and-seed" >&2
     exit 1
     ;;
 esac
