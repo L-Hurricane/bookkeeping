@@ -2,7 +2,7 @@
 
 This repository is the personal bookkeeping application. The backend owns business facts. The WeChat mini program is a thin client with rich interaction.
 
-The Spring Boot project is in `backend/`. Run Maven there: `cd backend && ./mvnw test`. The mini program stays in `frontend/miniprogram/`.
+The Spring Boot project is in `backend/`. From the repository root, run `(cd backend && ./mvnw test)`. The mini program stays in `frontend/miniprogram/`.
 
 A new coding task starts here, then reads `docs/implementation/ai-engineering-rules.md`. After that, read only the baselines and source files the current task needs.
 

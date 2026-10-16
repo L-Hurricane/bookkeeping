@@ -27,8 +27,7 @@ brew install openjdk@25 mysql@8.4
 export JAVA_HOME="$(brew --prefix openjdk@25)/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$(brew --prefix mysql@8.4)/bin:$PATH"
 java -version
-cd backend
-./mvnw --version
+(cd backend && ./mvnw --version)
 ```
 
 启动本机 MySQL 8.4 后，由数据库管理员创建两个独立空库：
@@ -59,8 +58,7 @@ CREATE DATABASE bookkeeping_migration_test CHARACTER SET utf8mb4 COLLATE utf8mb4
 
 ```sh
 export SPRING_PROFILES_ACTIVE=local
-cd backend
-./mvnw spring-boot:run
+(cd backend && ./mvnw spring-boot:run)
 ```
 
 `.env` 文件不会被 Spring Boot 自动加载。切勿将凭证放入 JDBC URL。
@@ -173,9 +171,8 @@ DB 不保存 raw Token，仅保存 `BINARY(32)` SHA-256 Hash。
 准备好测试环境变量后：
 
 ```sh
-cd backend
-./mvnw test
-./mvnw package
+(cd backend && ./mvnw test)
+(cd backend && ./mvnw package)
 ```
 
 测试覆盖密码编码校验、Token 随机性/Hash、到期边界、Bootstrap 幂等、

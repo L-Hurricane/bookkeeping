@@ -98,11 +98,10 @@ set +a
 export JAVA_HOME="$HOME/.local/share/bookkeeping-bootstrap/zulu25.36.205-ca-jdk25.0.4.1-macosx_aarch64/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 java -version
-cd backend
-./mvnw -version
+(cd backend && ./mvnw -version)
 ```
 
-这些 `cd backend` 都从仓库根目录进入。
+下面的 Maven 命令都从仓库根目录执行，不会把当前目录留在 `backend/`。
 
 ## 运行数据库集成测试之前
 
@@ -122,8 +121,7 @@ API 集成测试只清理自己创建的测试用户。不要用测试账号连�
 先加载本机凭证，再执行：
 
 ```sh
-cd backend
-./mvnw test
+(cd backend && ./mvnw test)
 ```
 
 在 `backend/` 执行 `./mvnw test` 不调用真实 DashScope。不要为了跑测试设置会打到真实模型的开关。

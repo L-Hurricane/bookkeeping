@@ -40,8 +40,7 @@ npm test
 
 ```sh
 export SPRING_PROFILES_ACTIVE=local
-cd backend
-./mvnw spring-boot:run
+(cd backend && ./mvnw spring-boot:run)
 ```
 
 3. 另一个终端确认：
