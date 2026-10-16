@@ -20,7 +20,23 @@ import {
   type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import { accountApi, authApi, authNavigation, ledgerApi } from "../../services/runtime";
+import { accountApi, authApi, authNavigation, ledgerApi, transactionApi } from "../../services/runtime";
+import { TransactionSearchResponseError } from "../../services/transaction";
+import {
+  canApplySearchResult,
+  createSearchDebounce,
+  invalidateSearchOnInputChange,
+  isActiveSearchKeyword,
+  nextSearchGeneration,
+  SEARCH_CONTRACT_ERROR,
+  SEARCH_DEBOUNCE_MS,
+  SEARCH_LOAD_ERROR,
+  searchLedgerRows,
+  buildLedgerLoadSetDataPatch,
+  shouldRefreshSearchOnListShow,
+  shouldRunDebouncedSearch,
+  trimSearchKeyword,
+} from "../../transaction/transaction-search";
 import { validateBusinessTime } from "../../transaction/business-time";
 import { adjustmentCreatePath, adjustmentDetailPath, canOpenAdjustmentDetail, canOpenBalanceAdjustment } from "../../balance-adjustment/navigation";
 import { statisticsPagePath } from "../../statistics/drilldown";
@@ -31,6 +47,14 @@ import { noteListStale, noteSavedTransaction, showOpenList, type DetailReturn, t
 
 Page({
   loadGuard: createLoadGuard(),
+  searchDebounce: createSearchDebounce(
+    SEARCH_DEBOUNCE_MS,
+    (callback, delayMs) => setTimeout(callback, delayMs) as unknown as number,
+    clearTimeout,
+  ),
+  searchGeneration: 0,
+  searchRequestGeneration: 0,
+  searchKeyword: "",
   selectedMonth: "",
   accountId: 0,
   accountCreatedTime: "",
@@ -54,6 +78,10 @@ Page({
     countLabel: "",
     rows: [] as ReturnType<typeof ledgerRows>,
     empty: false,
+    searchInput: "",
+    searchLoading: false,
+    searchEmpty: false,
+    searchErrorMessage: "",
     errorMessage: "",
     loggingOut: false,
     logoutErrorMessage: "",
@@ -67,15 +95,22 @@ Page({
     }
     const shown = showOpenList(this.openList());
     this.detailReturn = shown.state.visit;
+    const refreshSearch = shouldRefreshSearchOnListShow(shown.show, this.searchKeyword);
     if (shown.show.refresh === "keep") {
       return;
     }
     if (shown.show.refresh === "background-refresh") {
       void this.loadLedger("background", shown.show.scrollTop);
+      if (refreshSearch) {
+        void this.runSearch(this.searchKeyword);
+      }
       return;
     }
     if (shown.show.scope === "ledger") {
       void this.loadLedger("replace");
+      if (refreshSearch) {
+        void this.runSearch(this.searchKeyword);
+      }
       return;
     }
     void this.loadAccount();
@@ -89,6 +124,7 @@ Page({
 
   onUnload() {
     this.loadGuard.pageAlive = false;
+    this.searchDebounce.cancel();
     this.stopLocateFeedback();
   },
 
@@ -112,6 +148,7 @@ Page({
         this.setData({ phase: "account-error", errorMessage: route.message });
         return;
       }
+      this.resetSearchState();
       this.accountId = route.account.id;
       this.accountCreatedTime = route.account.createdTime;
       this.currency = route.account.currency;
@@ -156,20 +193,18 @@ Page({
       const locate = settlement.locate;
       const explicitLocate = this.pendingPostSave !== null || locate !== null;
       const restoreTop = background && !explicitLocate ? restoreScrollTop : null;
-      const ledgerView = {
-        phase: "ready" as const,
+      const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, ledger.items, {
+        phase: "ready",
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
         monthLabel: formatMonthLabel(ledger.month),
         incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
         expenseLabel: formatMoneyLabel(ledger.summary.netExpense),
         surplusLabel: formatMoneyLabel(ledger.summary.surplus),
         countLabel: `${ledger.summary.transactionCount} 笔收支`,
-        rows: ledgerRows(ledger.items),
-        empty: ledger.items.length === 0,
         errorMessage: "",
         locateMiss: settlement.missMessage,
         highlightKey: locate === null ? this.highlight.key : locate.key,
-      };
+      });
       if (locate === null) {
         this.setData(ledgerView, () => {
           if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
@@ -312,6 +347,114 @@ Page({
     this.setData({ highlightKey: "", locateMiss: "" });
   },
 
+  onSearchInput(event: WechatMiniprogram.Input) {
+    const searchInput = typeof event.detail.value === "string" ? event.detail.value : "";
+    const invalidation = invalidateSearchOnInputChange(
+      this.searchKeyword,
+      searchInput,
+      this.data.searchLoading,
+      this.searchGeneration,
+    );
+    this.searchGeneration = invalidation.nextGeneration;
+    const patch: Partial<typeof this.data> = { searchInput };
+    if (invalidation.clearSearchLoading) {
+      patch.searchLoading = false;
+    }
+    this.setData(patch);
+    this.searchDebounce.schedule(searchInput, (keyword: string) => {
+      this.applySearchKeyword(keyword);
+    });
+  },
+
+  applySearchKeyword(raw: string) {
+    const keyword = trimSearchKeyword(raw);
+    if (!isActiveSearchKeyword(keyword)) {
+      if (!isActiveSearchKeyword(this.searchKeyword)) {
+        return;
+      }
+      this.searchKeyword = "";
+      this.searchGeneration = nextSearchGeneration(this.searchGeneration);
+      this.searchRequestGeneration = this.searchGeneration;
+      this.setData({ searchEmpty: false, searchErrorMessage: "", searchLoading: false });
+      void this.loadLedger();
+      return;
+    }
+    if (
+      !shouldRunDebouncedSearch(
+        this.searchKeyword,
+        keyword,
+        this.data.searchLoading,
+        this.searchGeneration,
+        this.searchRequestGeneration,
+      )
+    ) {
+      return;
+    }
+    this.searchKeyword = keyword;
+    void this.runSearch(keyword);
+  },
+
+  async runSearch(keyword: string) {
+    const accountId = this.accountId;
+    const generation = nextSearchGeneration(this.searchGeneration);
+    this.searchGeneration = generation;
+    this.searchRequestGeneration = generation;
+    this.setData({ searchLoading: true, searchErrorMessage: "", searchEmpty: false, phase: "ready" });
+    try {
+      const result = await transactionApi.searchTransactions(accountId, keyword, this.accountCreatedTime);
+      if (
+        !canApplySearchResult(
+          this.loadGuard,
+          generation,
+          accountId,
+          this.accountId,
+          keyword,
+          this.data.searchInput,
+          this.searchGeneration,
+          this.searchKeyword,
+        )
+      ) {
+        return;
+      }
+      const rows = searchLedgerRows(result.items);
+      this.setData({
+        searchLoading: false,
+        rows,
+        searchEmpty: rows.length === 0,
+        empty: false,
+        searchErrorMessage: "",
+        highlightKey: "",
+        locateMiss: "",
+      });
+    } catch (error) {
+      if (
+        !canApplySearchResult(
+          this.loadGuard,
+          generation,
+          accountId,
+          this.accountId,
+          keyword,
+          this.data.searchInput,
+          this.searchGeneration,
+          this.searchKeyword,
+        ) ||
+        isUnauthorized(error)
+      ) {
+        return;
+      }
+      const searchErrorMessage = error instanceof TransactionSearchResponseError ? SEARCH_CONTRACT_ERROR : SEARCH_LOAD_ERROR;
+      this.setData({ searchLoading: false, searchErrorMessage });
+    }
+  },
+
+  resetSearchState() {
+    this.searchDebounce.cancel();
+    this.searchKeyword = "";
+    this.searchGeneration = nextSearchGeneration(this.searchGeneration);
+    this.searchRequestGeneration = this.searchGeneration;
+    this.setData({ searchInput: "", searchLoading: false, searchEmpty: false, searchErrorMessage: "" });
+  },
+
   onPreviousMonth() {
     this.changeMonth(previousMonth(this.selectedMonth));
   },
@@ -337,6 +480,10 @@ Page({
   },
 
   onRetry() {
+    if (this.data.searchErrorMessage.length > 0 && isActiveSearchKeyword(this.searchKeyword)) {
+      void this.runSearch(this.searchKeyword);
+      return;
+    }
     if (this.data.phase === "ledger-error") {
       void this.loadLedger();
       return;

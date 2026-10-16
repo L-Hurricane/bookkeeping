@@ -29,6 +29,14 @@
   font-weight: 600;
 }
 
+.search {
+  margin-top: 16rpx;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid #ececec;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
 .month {
   margin-top: 32rpx;
   display: flex;

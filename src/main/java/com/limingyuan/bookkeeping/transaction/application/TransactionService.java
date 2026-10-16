@@ -64,6 +64,7 @@ public class TransactionService {
     public record TransactionListItem(long id, TransactionType type, String amount, String displayName,
             CategoryRef category, List<TagRef> tags, String businessTime) { }
     public record TransactionList(String month, List<TransactionListItem> items) { }
+    public record TransactionSearchResult(List<TransactionListItem> items) { }
     public record Draft(String amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark) { }
     public record CreateOutcome(int status, TransactionView body, boolean replay) { }
 
@@ -169,6 +170,15 @@ public class TransactionService {
         });
     }
 
+    public TransactionSearchResult searchByName(long accountId, String nameRaw) {
+        String keyword = searchKeyword(nameRaw);
+        String pattern = likeContainsPattern(keyword);
+        return transaction.execute(status -> {
+            accounts.requireOwned(accountId);
+            return searchQuery(accountId, pattern);
+        });
+    }
+
     public TransactionList list(long accountId, String monthRaw, String typeRaw, Long categoryId, Boolean uncategorizedOnly,
             Long tagId, Boolean untaggedOnly) {
         var month = month(monthRaw);
@@ -187,6 +197,30 @@ public class TransactionService {
             if (tagId != null) tags.requireVisible(tagId);
             return query(accountId, month, type, categoryId, onlyUncategorized, tagId, onlyUntagged);
         });
+    }
+
+    private TransactionSearchResult searchQuery(long accountId, String pattern) {
+        var rows = jdbc.sql("""
+                SELECT t.id, t.type, t.amount, t.name, t.category_id, c.name AS category_name, t.business_time
+                FROM transactions t
+                LEFT JOIN categories c ON c.id = t.category_id
+                WHERE t.account_id = :accountId AND t.user_id = :userId
+                  AND t.name IS NOT NULL AND t.name <> ''
+                  AND t.name LIKE :pattern ESCAPE '!'
+                ORDER BY t.business_time DESC, t.first_save_order DESC
+                """).param("accountId", accountId).param("userId", context.userId()).param("pattern", pattern)
+                .query((rs, row) -> {
+                    Long storedCategoryId = rs.getObject("category_id", Long.class);
+                    String categoryName = rs.getString("category_name");
+                    return new TransactionListItem(rs.getLong("id"),
+                            TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
+                            displayName(rs.getString("name"), categoryName),
+                            storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
+                            List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+                }).list();
+        var items = new ArrayList<TransactionListItem>();
+        for (var row : rows) items.add(withTags(row));
+        return new TransactionSearchResult(items);
     }
 
     private TransactionList query(long accountId, YearMonth month, TransactionType type, Long categoryId,
@@ -332,5 +366,34 @@ public class TransactionService {
         if (trimmed.isEmpty()) return null;
         if (trimmed.length() > limit) throw new ApiFailure(400, "VALIDATION_FAILED", "名称最长 255 个字符");
         return trimmed;
+    }
+
+    private static String searchKeyword(String raw) {
+        if (raw == null) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "名称关键词不能为空");
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "名称关键词不能为空");
+        }
+        if (trimmed.length() > NAME_LIMIT) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "名称最长 255 个字符");
+        }
+        return trimmed;
+    }
+
+    static String likeContainsPattern(String keyword) {
+        char escape = '!';
+        var escaped = new StringBuilder(keyword.length() * 2 + 2);
+        escaped.append('%');
+        for (int index = 0; index < keyword.length(); index++) {
+            char character = keyword.charAt(index);
+            if (character == escape || character == '%' || character == '_' || character == '\\') {
+                escaped.append(escape);
+            }
+            escaped.append(character);
+        }
+        escaped.append('%');
+        return escaped.toString();
     }
 }
