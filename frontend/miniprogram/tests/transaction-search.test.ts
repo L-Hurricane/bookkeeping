@@ -20,6 +20,7 @@ import {
   shouldRunDebouncedSearch,
   shouldRunSearchOnMonthChange,
   trimSearchKeyword,
+  type TransactionSearchItem,
 } from "../miniprogram/transaction/transaction-search";
 import {
   noteListStale,
@@ -48,10 +49,10 @@ function memoryStorage(): KeyValueStorage {
   };
 }
 
-function searchItem(id: number, name: string, businessTime = "2026-09-12T20:00:00+08:00") {
+function searchItem(id: number, name: string, businessTime = "2026-09-12T20:00:00+08:00"): TransactionSearchItem {
   return {
     id,
-    type: "EXPENSE",
+    type: "EXPENSE" as const,
     amount: "-12.00",
     displayName: name,
     category: { id: 3, name: "早餐" },
@@ -152,6 +153,8 @@ describe("transaction search", () => {
       locateMiss: "",
       highlightKey: "",
     });
+    assert.equal("rows" in monthPatch, true);
+    assert.equal("empty" in monthPatch, true);
     assert.deepEqual(monthPatch.rows, []);
     assert.equal(monthPatch.empty, true);
     const merged = { ...page, ...monthPatch };
