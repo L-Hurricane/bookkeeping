@@ -76,6 +76,11 @@ class TransactionNameSearchIntegrationTest {
         assertThat(searchIds("早餐", token)).doesNotContain(unnamed.path("id").asLong());
     }
 
+    @Test void matchesStoredNamesContainingExclamationKeyword() throws Exception {
+        var named = create(body("EXPENSE", "1", "惊喜!", expenseCategory, "2026-09-20T12:00:00+08:00"), token);
+        assertThat(searchIds("!", token)).containsExactly(named.path("id").asLong());
+    }
+
     @Test void escapesLikeMetacharactersAndSortsByBusinessTimeThenSaveOrder() throws Exception {
         var literal = create(body("EXPENSE", "1", "100%纯牛奶", expenseCategory, "2026-09-20T12:00:00+08:00"), token);
         var underscore = create(body("EXPENSE", "2", "a_b", expenseCategory, "2026-09-20T12:00:00+08:00"), token);
@@ -104,6 +109,8 @@ class TransactionNameSearchIntegrationTest {
         mvc.perform(get("/api/v1/accounts/" + foreignAccount + "/transactions/search").header("Authorization", "Bearer " + token)
                         .param("name", "牛奶"))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/search").header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
         mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/search").header("Authorization", "Bearer " + token)
                         .param("name", " "))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));

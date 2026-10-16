@@ -25,12 +25,16 @@ import { TransactionSearchResponseError } from "../../services/transaction";
 import {
   canApplySearchResult,
   createSearchDebounce,
+  invalidateSearchOnInputChange,
   isActiveSearchKeyword,
   nextSearchGeneration,
   SEARCH_CONTRACT_ERROR,
   SEARCH_DEBOUNCE_MS,
   SEARCH_LOAD_ERROR,
   searchLedgerRows,
+  shouldPreserveSearchRowsOnLedgerLoad,
+  shouldRefreshSearchAfterDetailReturn,
+  shouldRunDebouncedSearch,
   trimSearchKeyword,
 } from "../../transaction/transaction-search";
 import { validateBusinessTime } from "../../transaction/business-time";
@@ -49,6 +53,7 @@ Page({
     clearTimeout,
   ),
   searchGeneration: 0,
+  searchRequestGeneration: 0,
   searchKeyword: "",
   selectedMonth: "",
   accountId: 0,
@@ -94,7 +99,11 @@ Page({
       return;
     }
     if (shown.show.refresh === "background-refresh") {
+      const refreshSearch = shouldRefreshSearchAfterDetailReturn(this.searchKeyword);
       void this.loadLedger("background", shown.show.scrollTop);
+      if (refreshSearch) {
+        void this.runSearch(this.searchKeyword);
+      }
       return;
     }
     if (shown.show.scope === "ledger") {
@@ -181,7 +190,7 @@ Page({
       const locate = settlement.locate;
       const explicitLocate = this.pendingPostSave !== null || locate !== null;
       const restoreTop = background && !explicitLocate ? restoreScrollTop : null;
-      const searchActive = isActiveSearchKeyword(this.searchKeyword);
+      const searchActive = shouldPreserveSearchRowsOnLedgerLoad(this.searchKeyword);
       const ledgerView = {
         phase: "ready" as const,
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
@@ -340,7 +349,18 @@ Page({
 
   onSearchInput(event: WechatMiniprogram.Input) {
     const searchInput = typeof event.detail.value === "string" ? event.detail.value : "";
-    this.setData({ searchInput });
+    const invalidation = invalidateSearchOnInputChange(
+      this.searchKeyword,
+      searchInput,
+      this.data.searchLoading,
+      this.searchGeneration,
+    );
+    this.searchGeneration = invalidation.nextGeneration;
+    const patch: Partial<typeof this.data> = { searchInput };
+    if (invalidation.clearSearchLoading) {
+      patch.searchLoading = false;
+    }
+    this.setData(patch);
     this.searchDebounce.schedule(searchInput, (keyword: string) => {
       this.applySearchKeyword(keyword);
     });
@@ -354,11 +374,20 @@ Page({
       }
       this.searchKeyword = "";
       this.searchGeneration = nextSearchGeneration(this.searchGeneration);
+      this.searchRequestGeneration = this.searchGeneration;
       this.setData({ searchEmpty: false, searchErrorMessage: "", searchLoading: false });
       void this.loadLedger();
       return;
     }
-    if (keyword === this.searchKeyword) {
+    if (
+      !shouldRunDebouncedSearch(
+        this.searchKeyword,
+        keyword,
+        this.data.searchLoading,
+        this.searchGeneration,
+        this.searchRequestGeneration,
+      )
+    ) {
       return;
     }
     this.searchKeyword = keyword;
@@ -369,10 +398,22 @@ Page({
     const accountId = this.accountId;
     const generation = nextSearchGeneration(this.searchGeneration);
     this.searchGeneration = generation;
+    this.searchRequestGeneration = generation;
     this.setData({ searchLoading: true, searchErrorMessage: "", searchEmpty: false, phase: "ready" });
     try {
       const result = await transactionApi.searchTransactions(accountId, keyword, this.accountCreatedTime);
-      if (!canApplySearchResult(this.loadGuard, generation, accountId, this.accountId, keyword, this.searchKeyword, this.searchGeneration)) {
+      if (
+        !canApplySearchResult(
+          this.loadGuard,
+          generation,
+          accountId,
+          this.accountId,
+          keyword,
+          this.data.searchInput,
+          this.searchGeneration,
+          this.searchKeyword,
+        )
+      ) {
         return;
       }
       const rows = searchLedgerRows(result.items);
@@ -386,7 +427,19 @@ Page({
         locateMiss: "",
       });
     } catch (error) {
-      if (!canApplySearchResult(this.loadGuard, generation, accountId, this.accountId, keyword, this.searchKeyword, this.searchGeneration) || isUnauthorized(error)) {
+      if (
+        !canApplySearchResult(
+          this.loadGuard,
+          generation,
+          accountId,
+          this.accountId,
+          keyword,
+          this.data.searchInput,
+          this.searchGeneration,
+          this.searchKeyword,
+        ) ||
+        isUnauthorized(error)
+      ) {
         return;
       }
       const searchErrorMessage = error instanceof TransactionSearchResponseError ? SEARCH_CONTRACT_ERROR : SEARCH_LOAD_ERROR;
@@ -398,6 +451,7 @@ Page({
     this.searchDebounce.cancel();
     this.searchKeyword = "";
     this.searchGeneration = nextSearchGeneration(this.searchGeneration);
+    this.searchRequestGeneration = this.searchGeneration;
     this.setData({ searchInput: "", searchLoading: false, searchEmpty: false, searchErrorMessage: "" });
   },
 

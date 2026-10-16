@@ -53,14 +53,76 @@ export function canApplySearchResult(
   requestedKeyword: string,
   currentKeyword: string,
   currentSearchGeneration: number,
+  committedKeyword?: string,
 ): boolean {
+  const committed = committedKeyword === undefined ? currentKeyword : committedKeyword;
   return (
     guard.pageAlive &&
     !guard.loggingOut &&
     generation === currentSearchGeneration &&
     requestedAccountId === currentAccountId &&
-    trimSearchKeyword(requestedKeyword) === trimSearchKeyword(currentKeyword)
+    trimSearchKeyword(requestedKeyword) === trimSearchKeyword(committed) &&
+    !searchDraftDiffersFromCommitted(committed, currentKeyword)
   );
+}
+
+export function searchDraftDiffersFromCommitted(committedKeyword: string, draftInput: string): boolean {
+  return trimSearchKeyword(draftInput) !== trimSearchKeyword(committedKeyword);
+}
+
+export interface SearchInputInvalidation {
+  readonly nextGeneration: number;
+  readonly clearSearchLoading: boolean;
+}
+
+export function invalidateSearchOnInputChange(
+  committedKeyword: string,
+  draftInput: string,
+  searchLoading: boolean,
+  currentGeneration: number,
+): SearchInputInvalidation {
+  const draftDiffers =
+    isActiveSearchKeyword(committedKeyword) && searchDraftDiffersFromCommitted(committedKeyword, draftInput);
+  if (!searchLoading && !draftDiffers) {
+    return { nextGeneration: currentGeneration, clearSearchLoading: false };
+  }
+  return {
+    nextGeneration: nextSearchGeneration(currentGeneration),
+    clearSearchLoading: searchLoading,
+  };
+}
+
+export function shouldRunDebouncedSearch(
+  committedKeyword: string,
+  debouncedKeyword: string,
+  searchLoading: boolean,
+  searchGeneration: number,
+  searchRequestGeneration: number,
+): boolean {
+  const debounced = trimSearchKeyword(debouncedKeyword);
+  const committed = trimSearchKeyword(committedKeyword);
+  if (!isActiveSearchKeyword(debounced)) {
+    return true;
+  }
+  if (debounced !== committed) {
+    return true;
+  }
+  if (searchLoading) {
+    return true;
+  }
+  return searchGeneration !== searchRequestGeneration;
+}
+
+export function shouldRefreshSearchAfterDetailReturn(searchKeyword: string): boolean {
+  return isActiveSearchKeyword(searchKeyword);
+}
+
+export function shouldPreserveSearchRowsOnLedgerLoad(searchKeyword: string): boolean {
+  return isActiveSearchKeyword(searchKeyword);
+}
+
+export function shouldRunSearchOnMonthChange(searchKeyword: string): boolean {
+  return !isActiveSearchKeyword(searchKeyword);
 }
 
 export function searchTransactionsPath(accountId: number, keyword: string): string {

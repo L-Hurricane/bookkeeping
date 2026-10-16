@@ -7,10 +7,16 @@ import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import {
   canApplySearchResult,
   createSearchDebounce,
+  invalidateSearchOnInputChange,
   isActiveSearchKeyword,
   parseTransactionSearch,
+  searchDraftDiffersFromCommitted,
   searchLedgerRows,
   searchTransactionsPath,
+  shouldPreserveSearchRowsOnLedgerLoad,
+  shouldRefreshSearchAfterDetailReturn,
+  shouldRunDebouncedSearch,
+  shouldRunSearchOnMonthChange,
   trimSearchKeyword,
 } from "../miniprogram/transaction/transaction-search";
 import { createTransactionApi, TransactionSearchResponseError } from "../miniprogram/services/transaction";
@@ -54,12 +60,43 @@ describe("transaction search", () => {
 
   it("rejects stale search results for account or keyword changes", () => {
     const guard = createLoadGuard();
-    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 1), true);
-    assert.equal(canApplySearchResult(guard, 1, 10, 11, "牛奶", "牛奶", 1), false);
-    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "鸡蛋", 1), false);
-    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 2), false);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 1, "牛奶"), true);
+    assert.equal(canApplySearchResult(guard, 1, 10, 11, "牛奶", "牛奶", 1, "牛奶"), false);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "鸡蛋", 1, "牛奶"), false);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 2, "牛奶"), false);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 1, "牛奶"), true);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶x", 1, "牛奶"), false);
     guard.pageAlive = false;
-    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 1), false);
+    assert.equal(canApplySearchResult(guard, 1, 10, 10, "牛奶", "牛奶", 1, "牛奶"), false);
+  });
+
+  it("invalidates in-flight search when draft diverges or input changes during loading", () => {
+    assert.equal(searchDraftDiffersFromCommitted("牛奶", "牛奶"), false);
+    assert.equal(searchDraftDiffersFromCommitted("牛奶", "牛"), true);
+    const idle = invalidateSearchOnInputChange("牛奶", "牛", false, 3);
+    assert.equal(idle.nextGeneration, 4);
+    assert.equal(idle.clearSearchLoading, false);
+    const loading = invalidateSearchOnInputChange("牛奶", "牛奶", true, 4);
+    assert.equal(loading.nextGeneration, 5);
+    assert.equal(loading.clearSearchLoading, true);
+    const firstDraft = invalidateSearchOnInputChange("", "牛", false, 0);
+    assert.equal(firstDraft.nextGeneration, 0);
+  });
+
+  it("reruns debounced search after invalidation even when keyword matches committed", () => {
+    assert.equal(shouldRunDebouncedSearch("牛奶", "牛奶", false, 2, 2), false);
+    assert.equal(shouldRunDebouncedSearch("牛奶", "牛奶", true, 2, 2), true);
+    assert.equal(shouldRunDebouncedSearch("牛奶", "牛奶", false, 3, 2), true);
+    assert.equal(shouldRunDebouncedSearch("牛奶", "牛", false, 2, 2), true);
+    assert.equal(shouldRunDebouncedSearch("", " ", false, 0, 0), true);
+  });
+
+  it("refreshes search after dirty detail return but not on month change", () => {
+    assert.equal(shouldRefreshSearchAfterDetailReturn("牛奶"), true);
+    assert.equal(shouldRefreshSearchAfterDetailReturn(" "), false);
+    assert.equal(shouldPreserveSearchRowsOnLedgerLoad("牛奶"), true);
+    assert.equal(shouldRunSearchOnMonthChange("牛奶"), false);
+    assert.equal(shouldRunSearchOnMonthChange(""), true);
   });
 
   it("parses search responses and maps ledger rows without using Number for money", () => {
