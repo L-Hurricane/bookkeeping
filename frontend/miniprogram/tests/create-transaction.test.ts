@@ -3,9 +3,12 @@ import { describe, it } from "node:test";
 import { bookableCategoryOptions, parseCategoryList } from "../miniprogram/category/category";
 import { parseTag, parseTagList } from "../miniprogram/tag/tag";
 import {
+  applyBusinessTimeDraft,
   businessMonth,
   currentBeijingBusinessTime,
   isBusinessTimeAllowed,
+  normalizeBusinessDateInput,
+  normalizeBusinessTimeInput,
   validateBusinessTime,
 } from "../miniprogram/transaction/business-time";
 import {
@@ -258,5 +261,17 @@ describe("beijing business time", () => {
     assert.equal(isBusinessTimeAllowed("2026-07-31T23:59:59+08:00", created), false);
     assert.equal(isBusinessTimeAllowed(created, created), true);
     assert.equal(isBusinessTimeAllowed("2026-10-01T00:00:00+08:00", created), true);
+  });
+
+  it("builds canonical business time from normalized draft parts at save", () => {
+    const created = "2026-08-01T00:00:00+08:00";
+    assert.equal(normalizeBusinessDateInput("2026-02-30"), null);
+    assert.equal(normalizeBusinessTimeInput("12:70:00"), null);
+    const applied = applyBusinessTimeDraft({ date: "2026/10/7", time: "9:5" }, created);
+    assert.equal(applied.ok, true);
+    if (applied.ok) {
+      assert.equal(applied.businessTime, "2026-10-07T09:05:00+08:00");
+    }
+    assert.equal(applyBusinessTimeDraft({ date: "2026-10-07", time: "25:00:00" }, created).ok, false);
   });
 });
