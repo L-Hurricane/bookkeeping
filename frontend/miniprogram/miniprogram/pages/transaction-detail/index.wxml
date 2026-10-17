@@ -118,9 +118,19 @@
     <view class="panel">
       <text class="editor-title">编辑交易时间</text>
       <text class="label">日期</text>
-      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" />
+      <view class="datetime-row">
+        <input class="field datetime-input" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" bindblur="onTimeDateBlur" />
+        <picker class="datetime-picker" mode="date" value="{{timeDate}}" disabled="{{formLocked}}" bindchange="onPickTimeDate">
+          <text class="picker-link">选择</text>
+        </picker>
+      </view>
       <text class="label">时间</text>
-      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" />
+      <view class="datetime-row">
+        <input class="field datetime-input" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" bindblur="onTimeClockBlur" />
+        <picker class="datetime-picker" mode="time" value="{{timePickerMinute}}" disabled="{{formLocked}}" bindchange="onPickTimeClock">
+          <text class="picker-link">选择</text>
+        </picker>
+      </view>
       <view class="shortcuts {{formLocked ? 'locked' : ''}}">
         <text class="shortcut" bindtap="onTimeNow">现在</text>
         <text class="shortcut" bindtap="onTimeToday">今天</text>

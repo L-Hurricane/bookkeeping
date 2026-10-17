@@ -4,14 +4,20 @@ import { ApiError } from "../../http/client";
 import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
 import type { Tag } from "../../tag/tag";
 import {
+  applyDatePickerValue,
   applyNow,
+  applyTimePickerValue,
   applyToday,
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
+  businessTimePickerMinute,
   isBusinessTimeAllowed,
   isFutureBusinessTime,
+  normalizeDateOnBlur,
+  normalizeTimeOnBlur,
   resolveBusinessTimeEdit,
+  timeEditorFields,
   type BusinessTimeDraft,
 } from "../../transaction/business-time";
 import { createTransactionForm, validateTransactionAmount, type PostSaveResult } from "../../transaction/form";
@@ -91,6 +97,7 @@ Page({
     timeEditorOpen: false,
     timeDate: "",
     timeClock: "",
+    timePickerMinute: "00:00",
     timeDraftError: "",
     categoryPhase: "idle" as "idle" | "loading" | "ready" | "error",
     categoryRows: [] as CategoryRow[],
@@ -308,9 +315,8 @@ Page({
     this.setData({
       selectorOpen: false,
       timeEditorOpen: true,
-      timeDate: draft.date,
-      timeClock: draft.time,
       timeDraftError: "",
+      ...timeEditorFields(draft),
     });
   },
 
@@ -322,12 +328,50 @@ Page({
     this.setData({ timeDate: event.detail.value });
   },
 
+  onTimeDateBlur() {
+    if (!this.canEdit()) {
+      return;
+    }
+    const draft = this.timeDraft ?? { date: this.data.timeDate, time: this.data.timeClock };
+    const date = normalizeDateOnBlur(draft.date);
+    this.timeDraft = { date, time: draft.time };
+    this.setData({ timeDate: date });
+  },
+
+  onPickTimeDate(event: WechatMiniprogram.PickerChange) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const draft = this.timeDraft ?? { date: this.data.timeDate, time: this.data.timeClock };
+    this.timeDraft = applyDatePickerValue(String(event.detail.value), draft);
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
   onTimeClock(event: WechatMiniprogram.Input) {
     if (!this.canEdit()) {
       return;
     }
     this.timeDraft = { date: this.timeDraft?.date ?? "", time: event.detail.value };
-    this.setData({ timeClock: event.detail.value });
+    this.setData({ timeClock: event.detail.value, timePickerMinute: businessTimePickerMinute(event.detail.value) });
+  },
+
+  onTimeClockBlur() {
+    if (!this.canEdit()) {
+      return;
+    }
+    const draft = this.timeDraft ?? { date: this.data.timeDate, time: this.data.timeClock };
+    const time = normalizeTimeOnBlur(draft.time);
+    this.timeDraft = { date: draft.date, time };
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
+  onPickTimeClock(event: WechatMiniprogram.PickerChange) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const draft = this.timeDraft ?? { date: this.data.timeDate, time: this.data.timeClock };
+    this.timeDraft = applyTimePickerValue(String(event.detail.value), draft);
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeNow() {
@@ -335,7 +379,7 @@ Page({
       return;
     }
     this.timeDraft = applyNow(new Date());
-    this.setData({ timeDate: this.timeDraft.date, timeClock: this.timeDraft.time });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeToday() {
@@ -344,7 +388,7 @@ Page({
     }
     const draft = this.timeDraft ?? { date: "", time: "" };
     this.timeDraft = applyToday(draft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeYesterday() {
@@ -353,7 +397,7 @@ Page({
     }
     const draft = this.timeDraft ?? { date: "", time: "" };
     this.timeDraft = applyYesterday(draft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onConfirmTime() {

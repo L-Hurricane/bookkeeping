@@ -82,6 +82,30 @@
   width: 100%;
 }
 
+.datetime-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.datetime-input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.datetime-picker {
+  flex-shrink: 0;
+}
+
+.picker-link {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: #f3f3f3;
+  color: #111111;
+  font-size: 26rpx;
+}
+
 .locked {
   pointer-events: none;
 }

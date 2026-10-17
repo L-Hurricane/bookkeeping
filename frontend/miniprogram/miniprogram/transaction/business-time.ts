@@ -52,6 +52,124 @@ export function businessTimeFromParts(date: string, time: string): string | null
   return validateBusinessTime(value) ? value : null;
 }
 
+export function normalizeBusinessDateInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parts = trimmed.replace(/\//g, "-").split("-");
+  if (parts.length !== 3) {
+    return null;
+  }
+  if (!parts.every((part) => /^\d{1,4}$/.test(part))) {
+    return null;
+  }
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const date = formatDate(year, month, day);
+  return validateBusinessTime(`${date}T00:00:00+08:00`) ? date : null;
+}
+
+export function normalizeBusinessTimeInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (/^\d{6}$/.test(trimmed)) {
+    return formatClock(
+      Number(trimmed.slice(0, 2)),
+      Number(trimmed.slice(2, 4)),
+      Number(trimmed.slice(4, 6)),
+    );
+  }
+  if (!trimmed.includes(":")) {
+    return null;
+  }
+  const parts = trimmed.split(":");
+  if (parts.length < 2 || parts.length > 3) {
+    return null;
+  }
+  if (!parts.every((part) => /^\d{1,2}$/.test(part))) {
+    return null;
+  }
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  const second = parts.length === 3 ? Number(parts[2]) : 0;
+  return formatClock(hour, minute, second);
+}
+
+export function normalizeDateOnBlur(raw: string): string {
+  return normalizeBusinessDateInput(raw) ?? raw;
+}
+
+export function normalizeTimeOnBlur(raw: string): string {
+  return normalizeBusinessTimeInput(raw) ?? raw;
+}
+
+export function businessTimePickerMinute(time: string): string {
+  const normalized = normalizeBusinessTimeInput(time);
+  if (normalized !== null) {
+    return normalized.slice(0, 5);
+  }
+  const match = /^(\d{1,2}):(\d{1,2})/.exec(time.trim());
+  if (match === null) {
+    return "00:00";
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) {
+    return "00:00";
+  }
+  return `${pad(hour, 2)}:${pad(minute, 2)}`;
+}
+
+export function applyDatePickerValue(pickerDate: string, draft: BusinessTimeDraft): BusinessTimeDraft {
+  const date = normalizeBusinessDateInput(pickerDate) ?? pickerDate;
+  return { date, time: draft.time };
+}
+
+export function applyTimePickerValue(pickerTime: string, draft: BusinessTimeDraft): BusinessTimeDraft {
+  const match = /^(\d{1,2}):(\d{1,2})$/.exec(pickerTime.trim());
+  if (match === null) {
+    return draft;
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const clock = formatClock(hour, minute, 0);
+  if (clock === null) {
+    return draft;
+  }
+  return { date: draft.date, time: clock };
+}
+
+export function normalizeBusinessTimeDraft(draft: BusinessTimeDraft): BusinessTimeDraft | null {
+  const date = normalizeBusinessDateInput(draft.date);
+  const time = normalizeBusinessTimeInput(draft.time);
+  if (date === null || time === null) {
+    return null;
+  }
+  return { date, time };
+}
+
+export function timeEditorFields(draft: BusinessTimeDraft): {
+  readonly timeDate: string;
+  readonly timeClock: string;
+  readonly timePickerMinute: string;
+} {
+  return {
+    timeDate: draft.date,
+    timeClock: draft.time,
+    timePickerMinute: businessTimePickerMinute(draft.time),
+  };
+}
+
 export function currentBeijingDate(now: Date): string {
   const clock = beijingWallClock(now);
   return formatDate(clock.year, clock.month, clock.day);
@@ -89,7 +207,11 @@ export function applyBusinessTimeDraft(
   draft: BusinessTimeDraft,
   accountCreatedTime: string,
 ): { readonly ok: true; readonly businessTime: string } | { readonly ok: false; readonly message: string } {
-  const businessTime = businessTimeFromParts(draft.date, draft.time);
+  const normalized = normalizeBusinessTimeDraft(draft);
+  if (normalized === null) {
+    return { ok: false, message: "请输入有效的日期和时间" };
+  }
+  const businessTime = businessTimeFromParts(normalized.date, normalized.time);
   if (businessTime === null) {
     return { ok: false, message: "请输入有效的日期和时间" };
   }
@@ -143,4 +265,17 @@ function daysInMonth(year: number, month: number): number {
 
 function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
+}
+
+function formatClock(hour: number, minute: number, second: number): string | null {
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    return null;
+  }
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return null;
+  }
+  if (!Number.isInteger(second) || second < 0 || second > 59) {
+    return null;
+  }
+  return `${pad(hour, 2)}:${pad(minute, 2)}:${pad(second, 2)}`;
 }
