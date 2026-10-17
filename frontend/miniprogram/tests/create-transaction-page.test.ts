@@ -9,13 +9,20 @@ import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import type { Tag } from "../miniprogram/tag/tag";
 import {
   applyBusinessTimeDraft,
+  applyDatePickerValue,
   applyNow,
+  applyTimePickerValue,
   applyToday,
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
   businessTimeFromParts,
+  businessTimePickerMinute,
   isFutureBusinessTime,
+  normalizeBusinessDateInput,
+  normalizeBusinessTimeInput,
+  normalizeDateOnBlur,
+  normalizeTimeOnBlur,
   previousBeijingDate,
   resolveBusinessTimeEdit,
 } from "../miniprogram/transaction/business-time";
@@ -338,12 +345,43 @@ describe("business time editor", () => {
     assert.deepEqual(businessTimeDraft(canonical), { date: "2026-09-26", time: "12:46:06" });
     assert.equal(businessTimeFromParts("2026-09-26", "12:46:06"), canonical);
     assert.equal(businessTimeFromParts("2024-02-29", "00:00:00"), "2024-02-29T00:00:00+08:00");
-    for (const date of ["2023-02-29", "2026-13-01", "2026/09/26", "2026-9-26", ""]) {
+    for (const date of ["2023-02-29", "2026-13-01", ""]) {
       assert.equal(businessTimeFromParts(date, "12:46:06"), null);
     }
-    for (const time of ["24:00:00", "12:60:00", "12:00:60", "09:30", "9:05", ""]) {
+    for (const time of ["24:00:00", "12:60:00", "12:00:60", ""]) {
       assert.equal(businessTimeFromParts("2026-09-26", time), null);
     }
+  });
+
+  it("normalizes flexible date and time input on submit without rewriting illegal values", () => {
+    assert.equal(normalizeBusinessDateInput("2026-10-7"), "2026-10-07");
+    assert.equal(normalizeBusinessDateInput("2026/10/7"), "2026-10-07");
+    assert.equal(normalizeBusinessDateInput("2026-9-26"), "2026-09-26");
+    assert.equal(normalizeBusinessDateInput("2026-02-30"), null);
+    assert.equal(normalizeDateOnBlur("2026-02-30"), "2026-02-30");
+
+    const cases: Array<[string, string]> = [
+      ["12:1:0", "12:01:00"],
+      ["9:5", "09:05:00"],
+      ["12:30", "12:30:00"],
+      ["8:3:7", "08:03:07"],
+      ["120000", "12:00:00"],
+      ["093015", "09:30:15"],
+    ];
+    for (const [input, expected] of cases) {
+      assert.equal(normalizeBusinessTimeInput(input), expected);
+    }
+    assert.equal(normalizeBusinessTimeInput("25:00:00"), null);
+    assert.equal(normalizeBusinessTimeInput("12:70:00"), null);
+    assert.equal(normalizeTimeOnBlur("25:00:00"), "25:00:00");
+  });
+
+  it("keeps seconds when only the date changes and zeroes seconds from the native time picker", () => {
+    const draft = { date: "2026-09-26", time: "12:46:06" };
+    assert.deepEqual(applyDatePickerValue("2026-10-01", draft), { date: "2026-10-01", time: "12:46:06" });
+    assert.deepEqual(applyTimePickerValue("13:15", draft), { date: "2026-09-26", time: "13:15:00" });
+    assert.equal(businessTimePickerMinute("12:46:06"), "12:46");
+    assert.equal(businessTimePickerMinute("12:1:0"), "12:01");
   });
 
   it("uses Beijing calendar shortcuts without rewriting an invalid clock", () => {
@@ -379,7 +417,11 @@ describe("business time editor", () => {
     assert.equal(confirmed.open, false);
     assert.equal(confirmed.error, "");
 
-    const rejected = resolveBusinessTimeEdit("confirm", canonical, { date: "2026-09-26", time: "09:30" }, accountCreated);
+    const normalized = resolveBusinessTimeEdit("confirm", canonical, { date: "2026-09-26", time: "09:30" }, accountCreated);
+    assert.equal(normalized.businessTime, "2026-09-26T09:30:00+08:00");
+    assert.equal(normalized.open, false);
+
+    const rejected = resolveBusinessTimeEdit("confirm", canonical, { date: "2026-09-26", time: "25:00:00" }, accountCreated);
     assert.equal(rejected.businessTime, canonical);
     assert.equal(rejected.open, true);
     assert.equal(rejected.error, "请输入有效的日期和时间");
