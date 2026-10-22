@@ -36,6 +36,7 @@ export interface CreateTransactionRequestBody {
 }
 
 export interface PostSaveResult {
+  readonly accountId: number;
   readonly transactionId: number;
   readonly targetMonth: string;
 }
@@ -147,8 +148,8 @@ export function createTransactionRequestBody(snapshot: CreateTransactionSnapshot
 
 export function postSaveResult(transaction: TransactionView): PostSaveResult | null {
   const targetMonth = businessMonth(transaction.businessTime);
-  if (targetMonth === null) {
+  if (targetMonth === null || !Number.isSafeInteger(transaction.accountId) || transaction.accountId <= 0) {
     return null;
   }
-  return { transactionId: transaction.id, targetMonth };
+  return { accountId: transaction.accountId, transactionId: transaction.id, targetMonth };
 }

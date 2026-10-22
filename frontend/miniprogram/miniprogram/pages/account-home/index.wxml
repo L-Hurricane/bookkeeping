@@ -3,12 +3,19 @@
   <block wx:elif="{{phase === 'account-error'}}">
     <text class="error">{{errorMessage}}</text>
     <button bindtap="onRetry">重新加载</button>
+    <button bindtap="onBackToList">返回账本</button>
   </block>
   <block wx:else>
+    <view class="nav">
+      <text class="nav-link" bindtap="onBackToList">‹ 账本</text>
+      <text class="nav-link" bindtap="onOpenSettings">账户设置</text>
+    </view>
     <view class="header">
       <text class="name">{{name}}</text>
+      <text class="kind">{{kindLabel}}</text>
       <text class="label">当前余额</text>
-      <text class="balance">{{balanceLabel}}</text>
+      <text class="balance {{balanceToneClass}}">{{balanceLabel}}</text>
+      <text class="hint" wx:if="{{negativeBalanceHint}}">{{negativeBalanceHint}}</text>
       <button class="adjust" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
       <button class="create" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
     </view>
@@ -22,15 +29,15 @@
     <view class="summary" wx:if="{{phase === 'ready'}}">
       <view class="summary-item">
         <text class="label">收入</text>
-        <text>{{incomeLabel}}</text>
+        <text class="{{incomeToneClass}}">{{incomeLabel}}</text>
       </view>
       <view class="summary-item">
         <text class="label">支出</text>
-        <text>{{expenseLabel}}</text>
+        <text class="{{expenseToneClass}}">{{expenseLabel}}</text>
       </view>
       <view class="summary-item">
         <text class="label">结余</text>
-        <text>{{surplusLabel}}</text>
+        <text class="{{surplusToneClass}}">{{surplusLabel}}</text>
       </view>
     </view>
     <text class="count" wx:if="{{phase === 'ready'}}">{{countLabel}}</text>
@@ -54,7 +61,7 @@
         </view>
         <view class="row-side">
           <text class="type {{item.kind}}">{{item.typeLabel}}</text>
-          <text class="amount">{{item.amountLabel}}</text>
+          <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
         </view>
       </view>
     </block>

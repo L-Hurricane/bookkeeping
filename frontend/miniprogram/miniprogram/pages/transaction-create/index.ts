@@ -1,7 +1,14 @@
+import {
+  defaultSelectableAccountId,
+  findAccount,
+  type Account,
+} from "../../account/account";
+import { stashLedgerHandoff } from "../../account/ledger-handoff";
 import { createLoadGuard } from "../../account/load-guard";
+import { accountHomePath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
-import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
+import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
 import type { Tag } from "../../tag/tag";
 import {
   applyDatePickerValue,
@@ -70,8 +77,10 @@ import type { TransactionType } from "../../transaction/transaction";
 Page({
   loadGuard: createLoadGuard(),
   form: createTransactionForm(new Date()),
+  openerAccountId: 0,
   accountId: 0,
   accountCreatedTime: "",
+  accounts: [] as Account[],
   submission: editingSubmission(),
   preparingSave: false,
   postSaveCompleted: false,
@@ -99,6 +108,11 @@ Page({
     timeClock: "",
     timePickerMinute: "00:00",
     timeDraftError: "",
+    accountPhase: "loading" as "loading" | "ready" | "error",
+    accountText: "选择账户",
+    accountRows: [] as { id: number; label: string }[],
+    accountSelectorOpen: false,
+    accountError: "",
     categoryPhase: "idle" as "idle" | "loading" | "ready" | "error",
     categoryRows: [] as CategoryRow[],
     selectorOpen: false,
@@ -123,11 +137,13 @@ Page({
       this.setData({ contextInvalid: true });
       return;
     }
+    this.openerAccountId = context.accountId;
     this.accountId = context.accountId;
     this.accountCreatedTime = context.accountCreatedTime;
     this.form = createTransactionForm(new Date());
     this.publishForm();
     wx.enableAlertBeforeUnload({ message: "放弃本次记账？" });
+    void this.loadAccounts();
     void this.loadCategories(this.form.type);
     void this.loadTags(this.form.type);
   },
@@ -655,9 +671,96 @@ Page({
       return;
     }
     this.postSaveCompleted = true;
-    emitTransactionCreated(this, decision.result);
     wx.disableAlertBeforeUnload();
+    const result = decision.result;
+    if (result.accountId > 0 && result.accountId !== this.openerAccountId) {
+      stashLedgerHandoff(result.accountId, result);
+      wx.reLaunch({ url: accountHomePath(result.accountId) });
+      return;
+    }
+    emitTransactionCreated(this, result);
     wx.navigateBack();
+  },
+
+  async loadAccounts() {
+    this.setData({ accountPhase: "loading", accountError: "" });
+    try {
+      const accounts = await accountApi.listAccounts();
+      if (!this.loadGuard.pageAlive) {
+        return;
+      }
+      this.accounts = accounts;
+      const selectedId = defaultSelectableAccountId(accounts, this.accountId);
+      if (selectedId === null) {
+        this.accountId = 0;
+        this.setData({
+          accountPhase: "ready",
+          accountText: accounts.length === 0 ? "暂无可用账户" : "请选择账户",
+          accountRows: accounts.map((account) => ({
+            id: account.id,
+            label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+          })),
+          accountError: accounts.length === 0 ? "没有可用账户" : "",
+        });
+        return;
+      }
+      this.applySelectedAccount(selectedId);
+      this.setData({
+        accountPhase: "ready",
+        accountRows: accounts.map((account) => ({
+          id: account.id,
+          label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+        })),
+        accountError: "",
+      });
+    } catch (error) {
+      if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
+        return;
+      }
+      this.setData({ accountPhase: "error", accountError: "账户列表加载失败" });
+    }
+  },
+
+  applySelectedAccount(accountId: number) {
+    const account = findAccount(this.accounts, accountId);
+    if (account === null) {
+      return;
+    }
+    this.accountId = account.id;
+    this.accountCreatedTime = account.createdTime;
+    this.setData({
+      accountText: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+      accountError: "",
+    });
+  },
+
+  onOpenAccounts() {
+    if (!this.canEdit() || this.data.accountPhase !== "ready" || this.accounts.length === 0) {
+      return;
+    }
+    this.setData({ accountSelectorOpen: true });
+  },
+
+  onCloseAccounts() {
+    this.setData({ accountSelectorOpen: false });
+  },
+
+  onChooseAccount(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const accountId = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+      return;
+    }
+    this.applySelectedAccount(accountId);
+    this.forgetSubmitError();
+    this.setData({ accountSelectorOpen: false });
+    this.publishForm();
+  },
+
+  onRetryAccounts() {
+    void this.loadAccounts();
   },
 
   canEdit(): boolean {
@@ -690,7 +793,7 @@ Page({
       formLocked: interactionLocked(this.submission.phase, this.preparingSave),
       saveDisabled: !canSave(this.submission.phase, this.tagCreateInFlight, this.preparingSave),
       businessTimeText: businessTimeDisplay(this.form.businessTime) ?? "",
-      timeError: isBusinessTimeAllowed(this.form.businessTime, this.accountCreatedTime) ? "" : "交易时间不得早于账户创建时间",
+      timeError: isBusinessTimeAllowed(this.form.businessTime, this.accountCreatedTime) ? "" : "请输入有效的日期和时间",
       futureHint: isFutureBusinessTime(this.form.businessTime, new Date())
         ? "未来交易保存后仍会立即影响当前余额；流水与统计归入所选自然月。"
         : "",
@@ -719,5 +822,9 @@ function emitTransactionCreated(page: object, result: PostSaveResult): void {
   if (channel === undefined || typeof channel.emit !== "function") {
     return;
   }
-  channel.emit("transactionCreated", { transactionId: result.transactionId, targetMonth: result.targetMonth });
+  channel.emit("transactionCreated", {
+    accountId: result.accountId,
+    transactionId: result.transactionId,
+    targetMonth: result.targetMonth,
+  });
 }

@@ -1,0 +1,26 @@
+<view class="page">
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取账户</text>
+  <block wx:elif="{{phase === 'error'}}">
+    <text class="error">{{errorMessage}}</text>
+    <button bindtap="onRetry">重新加载</button>
+  </block>
+  <block wx:else>
+    <view class="toolbar">
+      <button class="link" disabled="{{loggingOut}}" bindtap="onCreateAccount">创建账户</button>
+    </view>
+    <text class="toolbar-hint">账户总览。进入单个账户后可打开账户设置更名。</text>
+    <text class="empty" wx:if="{{rows.length === 0}}">暂无资金账户</text>
+    <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
+      <view class="card-main">
+        <text class="card-name">{{item.name}}</text>
+        <text class="card-kind">{{item.kindLabel}}</text>
+      </view>
+      <view class="card-side">
+        <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
+        <text class="card-hint" wx:if="{{item.negativeHint}}">{{item.negativeHint}}</text>
+      </view>
+    </view>
+  </block>
+  <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
+  <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
+</view>

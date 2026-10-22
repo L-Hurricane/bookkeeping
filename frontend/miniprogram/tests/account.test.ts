@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseAccount, routeAfterAccountQuery, type Account } from "../miniprogram/account/account";
+import {
+  defaultSelectableAccountId,
+  parseAccount,
+  routeAfterAccountQuery,
+  shouldWarnNegativeBalance,
+  type Account,
+} from "../miniprogram/account/account";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../miniprogram/account/load-guard";
 import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout } from "../miniprogram/account/logout-view";
+import { moneyTone, moneyToneClass } from "../miniprogram/account/money-tone";
 import { normalizeOpeningBalance } from "../miniprogram/account/opening-balance";
 import { createHttpClient, type HttpTransportRequest, type HttpTransportResponse } from "../miniprogram/http/client";
 import { saveSession } from "../miniprogram/session/session";
@@ -16,6 +23,7 @@ import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 const account: Account = {
   id: 1001,
   name: "微信",
+  kind: "NORMAL",
   currency: "CNY",
   openingBalance: "100.00",
   currentBalance: "60.50",
@@ -144,19 +152,21 @@ describe("opening balance", () => {
 });
 
 describe("account query routing", () => {
-  it("routes an empty list to init and one account to home", async () => {
+  it("routes an empty list to init and any accounts to the overview list", async () => {
     const empty = apiFor(() => ({ statusCode: 200, data: { items: [] } }));
     assert.deepEqual(routeAfterAccountQuery(await empty.listAccounts()), { destination: "init" });
 
     const one = apiFor(() => ({ statusCode: 200, data: { items: [account] } }));
-    assert.deepEqual(routeAfterAccountQuery(await one.listAccounts()), { destination: "home", account });
+    assert.deepEqual(routeAfterAccountQuery(await one.listAccounts()), { destination: "list", accounts: [account] });
   });
 
-  it("rejects malformed money and createdTime", () => {
+  it("rejects malformed money, kind, and createdTime", () => {
     assert.equal(parseAccount({ ...account, openingBalance: "100" }), null);
     assert.equal(parseAccount({ ...account, currentBalance: "60.5" }), null);
     assert.equal(parseAccount({ ...account, createdTime: "tomorrow" }), null);
+    assert.equal(parseAccount({ ...account, kind: "SAVINGS" }), null);
     assert.equal(parseAccount(account)?.currentBalance, "60.50");
+    assert.equal(parseAccount(account)?.kind, "NORMAL");
   });
 
   it("rejects a malformed account response", async () => {
@@ -164,9 +174,14 @@ describe("account query routing", () => {
     await assert.rejects(() => accounts.listAccounts(), (error: unknown) => error instanceof AccountResponseError);
   });
 
-  it("treats more than one account as a contract violation", () => {
-    const route = routeAfterAccountQuery([account, { ...account, id: 1002 }]);
-    assert.equal(route.destination, "error");
+  it("keeps more than one account on the overview list", () => {
+    const second = { ...account, id: 1002, name: "信用卡", kind: "CREDIT" as const };
+    const route = routeAfterAccountQuery([account, second]);
+    assert.equal(route.destination, "list");
+    if (route.destination === "list") {
+      assert.equal(route.accounts.length, 2);
+      assert.equal(route.accounts[1]?.kind, "CREDIT");
+    }
   });
 
   it("does not turn a failed query into an empty account list", async () => {
@@ -175,6 +190,55 @@ describe("account query routing", () => {
       data: { error: { code: "INTERNAL_ERROR", message: "服务暂时不可用", requestId: "req-3" } },
     }));
     await assert.rejects(() => accounts.listAccounts());
+  });
+});
+
+describe("multi-account create rename and selection", () => {
+  it("creates NORMAL or CREDIT accounts and renames with PUT /name", async () => {
+    const credit: Account = {
+      ...account,
+      id: 1002,
+      name: "信用卡",
+      kind: "CREDIT",
+      openingBalance: "0.00",
+      currentBalance: "-12.00",
+    };
+    const accounts = apiFor((request) => {
+      if (request.method === "POST" && request.url.endsWith("/api/v1/accounts")) {
+        assert.equal(request.data, JSON.stringify({ name: "信用卡", kind: "CREDIT", openingBalance: "0.00" }));
+        return { statusCode: 201, data: credit };
+      }
+      if (request.method === "PUT" && request.url.endsWith("/api/v1/accounts/1002/name")) {
+        assert.equal(request.method, "PUT");
+        assert.equal(request.url, "http://127.0.0.1:8080/api/v1/accounts/1002/name");
+        assert.equal(request.data, JSON.stringify({ name: "家庭信用卡" }));
+        return { statusCode: 200, data: { ...credit, name: "家庭信用卡" } };
+      }
+      return { statusCode: 500, data: { error: { code: "INTERNAL_ERROR", message: "unexpected" } } };
+    });
+    const created = await accounts.createAccount({ name: "信用卡", kind: "CREDIT", openingBalance: "0.00" });
+    assert.equal(created.kind, "CREDIT");
+    assert.equal(created.currentBalance, "-12.00");
+    const renamed = await accounts.renameAccount(1002, "家庭信用卡");
+    assert.equal(renamed.name, "家庭信用卡");
+  });
+
+  it("defaults the only usable account and keeps a preferred id among many", () => {
+    const second = { ...account, id: 1002, name: "现金", kind: "NORMAL" as const };
+    assert.equal(defaultSelectableAccountId([account], null), 1001);
+    assert.equal(defaultSelectableAccountId([account, second], 1002), 1002);
+    assert.equal(defaultSelectableAccountId([account, second], 9999), null);
+    assert.equal(defaultSelectableAccountId([], 1001), null);
+  });
+
+  it("warns only ordinary accounts for negative balance and colors by sign", () => {
+    assert.equal(shouldWarnNegativeBalance({ ...account, currentBalance: "-1.00" }), true);
+    assert.equal(shouldWarnNegativeBalance({ ...account, kind: "CREDIT", currentBalance: "-1.00" }), false);
+    assert.equal(shouldWarnNegativeBalance({ ...account, currentBalance: "0.00" }), false);
+    assert.equal(moneyTone("-1.00"), "negative");
+    assert.equal(moneyTone("1.00"), "positive");
+    assert.equal(moneyTone("0.00"), "zero");
+    assert.equal(moneyToneClass("-1.00"), "money-negative");
   });
 });
 

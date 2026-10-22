@@ -7,6 +7,7 @@ import { appLaunchRedirect, routeBootstrap, routeLoginShow } from "../miniprogra
 const account: Account = {
   id: 1001,
   name: "微信",
+  kind: "NORMAL",
   currency: "CNY",
   openingBalance: "50.00",
   currentBalance: "50.00",
@@ -18,13 +19,13 @@ describe("startup navigation", () => {
     assert.equal(routeBootstrap(false), "login");
   });
 
-  it("sends bootstrap with a session to account home without querying accounts", () => {
+  it("sends bootstrap with a session to account overview without querying accounts", () => {
     assert.equal(routeBootstrap(true), "home");
-    assert.equal(routeAfterAccountQuery([account]).destination, "home");
+    assert.equal(routeAfterAccountQuery([account]).destination, "list");
     assert.equal(routeAfterAccountQuery([]).destination, "init");
   });
 
-  it("sends login with an existing session straight to account home", () => {
+  it("sends login with an existing session straight to account overview", () => {
     assert.equal(routeLoginShow(true), "home");
     assert.equal(routeLoginShow(false), "stay");
     const urls: string[] = [];
@@ -36,7 +37,7 @@ describe("startup navigation", () => {
       },
     });
     navigation.enterAuthenticatedHome();
-    assert.deepEqual(urls, ["/pages/account-home/index"]);
+    assert.deepEqual(urls, ["/pages/account-list/index"]);
   });
 
   it("does not relaunch from app launch", () => {
@@ -46,7 +47,7 @@ describe("startup navigation", () => {
   it("keeps authenticated 401 and explicit logout on the login route", () => {
     const urls: string[] = [];
     const navigation = createAuthNavigation({
-      currentRoute: () => "pages/account-home/index",
+      currentRoute: () => "pages/account-list/index",
       reLaunch(url, done) {
         urls.push(url);
         done();

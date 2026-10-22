@@ -7,6 +7,14 @@
     <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
     <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
   </view>
+  <text class="label">资金账户</text>
+  <view wx:if="{{accountPhase === 'loading'}}"><text class="hint">正在读取账户</text></view>
+  <view wx:elif="{{accountPhase === 'error'}}">
+    <text class="error">{{accountError}}</text>
+    <button bindtap="onRetryAccounts">重新加载</button>
+  </view>
+  <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenAccounts">{{accountText}} ></view>
+  <text class="error" wx:if="{{accountError && accountPhase === 'ready'}}">{{accountError}}</text>
   <text class="amount-label">金额</text>
   <input class="amount" type="text" placeholder="0.00" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
   <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
@@ -49,6 +57,15 @@
   <view class="actions">
     <button class="cancel" bindtap="onCancel">取消</button>
     <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
+  </view>
+  <view class="mask" wx:if="{{accountSelectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseAccounts"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseAccount">{{item.label}}</view>
+      </scroll-view>
+      <button bindtap="onCloseAccounts">关闭</button>
+    </view>
   </view>
   <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseCategories"></view>

@@ -1,4 +1,4 @@
-import { parseAccount, parseAccountList, type Account } from "../account/account";
+import { parseAccount, parseAccountList, type Account, type AccountKind } from "../account/account";
 import { ApiError, type HttpClient } from "../http/client";
 
 export class AccountResponseError extends Error {
@@ -15,9 +15,17 @@ export class AccountReconciliationError extends Error {
   }
 }
 
+export interface CreateAccountInput {
+  readonly name: string;
+  readonly kind: AccountKind;
+  readonly openingBalance: string;
+}
+
 export interface AccountApi {
   listAccounts(): Promise<Account[]>;
   initializeAccount(openingBalance: string): Promise<Account>;
+  createAccount(input: CreateAccountInput): Promise<Account>;
+  renameAccount(accountId: number, name: string): Promise<Account>;
 }
 
 export function createAccountApi(http: HttpClient): AccountApi {
@@ -54,6 +62,38 @@ export function createAccountApi(http: HttpClient): AccountApi {
         }
         throw error;
       }
+    },
+
+    async createAccount(input) {
+      const body = await http.request<unknown>({
+        method: "POST",
+        path: "/api/v1/accounts",
+        body: {
+          name: input.name,
+          kind: input.kind,
+          openingBalance: input.openingBalance,
+        },
+        authenticated: true,
+      });
+      const account = parseAccount(body);
+      if (account === null) {
+        throw new AccountResponseError("账户响应无法识别");
+      }
+      return account;
+    },
+
+    async renameAccount(accountId, name) {
+      const body = await http.request<unknown>({
+        method: "PUT",
+        path: `/api/v1/accounts/${accountId}/name`,
+        body: { name },
+        authenticated: true,
+      });
+      const account = parseAccount(body);
+      if (account === null || account.id !== accountId) {
+        throw new AccountResponseError("账户响应无法识别");
+      }
+      return account;
     },
   };
 }

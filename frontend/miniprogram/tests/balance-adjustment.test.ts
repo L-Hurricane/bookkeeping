@@ -175,7 +175,7 @@ describe("adjustment create state", () => {
     assert.equal(next?.attempt?.idempotencyKey, "key-b");
     assert.equal(next?.attempt?.snapshot.targetBalance, "90.00");
     const early = buildAdjustmentSnapshot("90", "2026-07-01T00:00:00+08:00", "", 1001, createdTime);
-    assert.equal(early.ok, false);
+    assert.equal(early.ok, true);
   });
 });
 

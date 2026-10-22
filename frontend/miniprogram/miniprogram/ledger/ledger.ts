@@ -1,3 +1,4 @@
+import { moneyToneClass } from "../account/money-tone";
 import { canApplyLoadResult, type LoadGuard } from "../account/load-guard";
 
 const MONEY_RESPONSE_PATTERN = /^-?[0-9]+\.[0-9]{2}$/;
@@ -58,6 +59,7 @@ export interface LedgerRow {
   readonly detail: string;
   readonly typeLabel: string;
   readonly amountLabel: string;
+  readonly amountToneClass: string;
   readonly timeLabel: string;
 }
 
@@ -115,6 +117,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         detail: "",
         typeLabel: "调整",
         amountLabel: formatMoneyLabel(item.amount),
+        amountToneClass: moneyToneClass(item.amount),
         timeLabel: formatBusinessTime(item.businessTime),
       };
     }
@@ -128,6 +131,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
       detail: tags.length === 0 ? category : `${category} ${tags}`,
       typeLabel: item.transactionType === "INCOME" ? "收入" : "支出",
       amountLabel: formatMoneyLabel(item.amount),
+      amountToneClass: moneyToneClass(item.amount),
       timeLabel: formatBusinessTime(item.businessTime),
     };
   });

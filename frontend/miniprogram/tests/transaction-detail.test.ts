@@ -99,9 +99,10 @@ describe("transaction edit", () => {
     assert.equal(form.businessTime, transaction.businessTime);
     assert.equal(form.remark, "备注");
     const changed: CreateTransactionForm = { ...form, type: "INCOME" };
-    assert.equal(buildUpdateTransactionSnapshot(changed, 1001, 4001, "EXPENSE", created).ok, false);
+    assert.equal(buildUpdateTransactionSnapshot(changed, 1001, 1001, 4001, "EXPENSE", created).ok, false);
     const built = buildUpdateTransactionSnapshot(
       { ...form, name: "  ", remark: "", selectedTagIds: [302, 301, 301], categoryId: null },
+      1001,
       1001,
       4001,
       "EXPENSE",
@@ -113,18 +114,29 @@ describe("transaction edit", () => {
     }
     const body = updateTransactionRequestBody(built.value);
     assert.equal("type" in body, false);
+    assert.equal(body.accountId, 1001);
     assert.equal(body.name, undefined);
     assert.equal(body.categoryId, undefined);
     assert.equal(body.remark, undefined);
     assert.deepEqual(body.tagIds, [301, 302]);
-    assert.equal(buildUpdateTransactionSnapshot({ ...form, businessTime: "2026-07-01T00:00:00+08:00" }, 1001, 4001, "EXPENSE", created).ok, false);
+    assert.equal(
+      buildUpdateTransactionSnapshot({ ...form, businessTime: "2026-07-01T00:00:00+08:00" }, 1001, 1001, 4001, "EXPENSE", created).ok,
+      true,
+    );
+    const moved = buildUpdateTransactionSnapshot(form, 1001, 1002, 4001, "EXPENSE", created);
+    assert.equal(moved.ok, true);
+    if (moved.ok) {
+      assert.equal(moved.value.sourceAccountId, 1001);
+      assert.equal(moved.value.accountId, 1002);
+      assert.equal(updateTransactionRequestBody(moved.value).accountId, 1002);
+    }
     assert.equal(resolveEditCancel("continue"), "stay");
     assert.equal(resolveEditCancel("abandon"), "detail");
   });
 
   it("retries the original snapshot after an uncertain update", async () => {
     const form = editFormFromTransaction(transaction);
-    const built = buildUpdateTransactionSnapshot(form, 1001, 4001, "EXPENSE", created);
+    const built = buildUpdateTransactionSnapshot(form, 1001, 1001, 4001, "EXPENSE", created);
     assert.equal(built.ok, true);
     if (!built.ok) {
       return;
@@ -223,7 +235,7 @@ describe("edit reference failure", () => {
       chips.filter((tag) => form.selectedTagIds.includes(tag.id)).map((tag) => tag.name),
       ["公司", "外卖"],
     );
-    const built = buildUpdateTransactionSnapshot(form, 1001, 4001, "EXPENSE", created);
+    const built = buildUpdateTransactionSnapshot(form, 1001, 1001, 4001, "EXPENSE", created);
     assert.equal(built.ok, true);
     if (!built.ok) {
       return;
@@ -241,7 +253,7 @@ describe("edit reference failure", () => {
   it("shows an explicit clear as uncategorized and omits categoryId", () => {
     const form = { ...editFormFromTransaction(transaction), categoryId: null };
     assert.equal(editCategoryText([], form.categoryId, transaction.category), "未分类");
-    const built = buildUpdateTransactionSnapshot(form, 1001, 4001, "EXPENSE", created);
+    const built = buildUpdateTransactionSnapshot(form, 1001, 1001, 4001, "EXPENSE", created);
     assert.equal(built.ok, true);
     if (!built.ok) {
       return;

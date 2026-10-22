@@ -235,7 +235,11 @@ describe("create transaction form", () => {
       type: "INCOME",
       businessTime: "2026-08-31T23:59:59+08:00",
     });
-    assert.deepEqual(saved === null ? null : postSaveResult(saved), { transactionId: 88, targetMonth: "2026-08" });
+    assert.deepEqual(saved === null ? null : postSaveResult(saved), {
+      accountId: 1001,
+      transactionId: 88,
+      targetMonth: "2026-08",
+    });
     assert.equal(businessMonth("2026-09-05T09:00:00+08:00"), "2026-09");
   });
 });
@@ -256,11 +260,12 @@ describe("beijing business time", () => {
     assert.equal(validateBusinessTime("2026-02-31T00:00:00+08:00"), false);
   });
 
-  it("allows a business time at or after account creation", () => {
+  it("allows a business time earlier than account creation", () => {
     const created = "2026-08-01T00:00:00+08:00";
-    assert.equal(isBusinessTimeAllowed("2026-07-31T23:59:59+08:00", created), false);
+    assert.equal(isBusinessTimeAllowed("2026-07-31T23:59:59+08:00", created), true);
     assert.equal(isBusinessTimeAllowed(created, created), true);
     assert.equal(isBusinessTimeAllowed("2026-10-01T00:00:00+08:00", created), true);
+    assert.equal(isBusinessTimeAllowed("not-a-time", created), false);
   });
 
   it("builds canonical business time from normalized draft parts at save", () => {

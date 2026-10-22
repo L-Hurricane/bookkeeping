@@ -26,7 +26,7 @@ Page({
     this.setData({ submitting: true, errorMessage: "", openingBalance });
     try {
       await accountApi.initializeAccount(openingBalance);
-      wx.reLaunch({ url: "/pages/account-home/index" });
+      wx.reLaunch({ url: "/pages/account-list/index" });
     } catch (error) {
       const errorMessage =
         error instanceof AccountReconciliationError || error instanceof AccountResponseError

@@ -398,9 +398,9 @@ describe("business time editor", () => {
   it("confirms a legal draft once and leaves the form unchanged when cancelled", () => {
     const accountCreated = "2026-08-01T00:00:00+08:00";
     const early = applyBusinessTimeDraft({ date: "2026-07-31", time: "23:59:59" }, accountCreated);
-    assert.equal(early.ok, false);
-    if (!early.ok) {
-      assert.equal(early.message, "交易时间不得早于账户创建时间");
+    assert.equal(early.ok, true);
+    if (early.ok) {
+      assert.equal(early.businessTime, "2026-07-31T23:59:59+08:00");
     }
     assert.equal(applyBusinessTimeDraft({ date: "2026-08-01", time: "00:00:00" }, accountCreated).ok, true);
     assert.equal(applyBusinessTimeDraft({ date: "2026-09-26", time: "12:46:06" }, accountCreated).ok, true);

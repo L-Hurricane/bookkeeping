@@ -207,7 +207,7 @@ describe("submission", () => {
     );
     assert.equal(business.phase, "editing");
     assert.equal(business.attempt, null);
-    assert.equal(business.error, "交易时间不得早于账户创建时间");
+    assert.equal(business.error, "交易时间无效");
     assert.equal(applySubmitOutcome(submitting, classifySubmitError(new ApiError(409, "CATEGORY_NOT_BOOKABLE", "x"))).error, "所选分类当前不可用于记账，请重新选择");
     assert.equal(applySubmitOutcome(submitting, classifySubmitError(new ApiError(409, "CATEGORY_TYPE_MISMATCH", "x"))).error, "所选分类与交易类型不匹配，请重新选择");
     assert.equal(applySubmitOutcome(submitting, classifySubmitError(new ApiError(409, "TAG_TYPE_MISMATCH", "x"))).error, "所选标签与交易类型不匹配，请重新选择");

@@ -143,6 +143,75 @@ class AccountMultiAccountIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
     }
 
+    @Test void putAndPatchRenameAreCompatibleWithAuthConflictInvalidAndIsolation() throws Exception {
+        var first = create("旧名", "NORMAL", "1.00", token);
+        create("占用", "CREDIT", "2.00", token);
+        long firstId = first.path("id").asLong();
+
+        var putRenamed = mvc.perform(put("/api/v1/accounts/" + firstId + "/name")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "PUT名"))))
+                .andExpect(status().isOk()).andReturn();
+        var putBody = json.readTree(putRenamed.getResponse().getContentAsString());
+        assertThat(putBody.path("id").asLong()).isEqualTo(firstId);
+        assertThat(putBody.path("name").asText()).isEqualTo("PUT名");
+        assertThat(putBody.path("kind").asText()).isEqualTo("NORMAL");
+
+        var patchRenamed = mvc.perform(patch("/api/v1/accounts/" + firstId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "PATCH名"))))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(patchRenamed.getResponse().getContentAsString()).path("name").asText())
+                .isEqualTo("PATCH名");
+
+        for (String blank : List.of("{\"name\":\"\"}", "{\"name\":\"  \"}")) {
+            mvc.perform(put("/api/v1/accounts/" + firstId + "/name")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content(blank))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+            mvc.perform(patch("/api/v1/accounts/" + firstId)
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON).content(blank))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        }
+        assertThat(accounts.findByIdAndUserId(firstId, userId).orElseThrow().getName()).isEqualTo("PATCH名");
+
+        mvc.perform(put("/api/v1/accounts/" + firstId + "/name")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "占用"))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ACCOUNT_NAME_CONFLICT"));
+        mvc.perform(patch("/api/v1/accounts/" + firstId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "占用"))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ACCOUNT_NAME_CONFLICT"));
+
+        mvc.perform(put("/api/v1/accounts/" + firstId + "/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "未登录"))))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(patch("/api/v1/accounts/" + firstId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "未登录"))))
+                .andExpect(status().isUnauthorized());
+
+        var other = newUser();
+        mvc.perform(put("/api/v1/accounts/" + firstId + "/name")
+                        .header("Authorization", "Bearer " + other.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "窃取"))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+        mvc.perform(patch("/api/v1/accounts/" + firstId)
+                        .header("Authorization", "Bearer " + other.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("name", "窃取"))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
+        assertThat(accounts.findByIdAndUserId(firstId, userId).orElseThrow().getName()).isEqualTo("PATCH名");
+    }
+
     @Test void ownershipIsolationOnCreateListAndForeignUserIdParams() throws Exception {
         var mine = create("我的", "NORMAL", "5.00", token);
         var other = newUser();

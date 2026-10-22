@@ -189,21 +189,16 @@ describe("statistics drill-down", () => {
 });
 
 describe("transaction list business time", () => {
-  it("rejects a business time that is not a real second in the requested month after account creation", async () => {
+  it("rejects malformed business times and accepts times earlier than account creation", async () => {
     const drill = { kind: "uncategorized" as const, title: "未分类" };
-    const cases = [
-      "2026-02-31T12:00:00+08:00",
-      "2026-09-02T08:00:00Z",
-      "2026-09-02T08:00+08:00",
-      "2026-08-31T23:59:59+08:00",
-      "2026-09-01T00:00:00+08:00",
-    ];
-    for (const businessTime of cases) {
-      const created = businessTime === "2026-09-01T00:00:00+08:00" ? "2026-09-15T00:00:00+08:00" : createdTime;
-      assert.equal(parseTransactionList(listBody(businessTime), "2026-09", "EXPENSE", created), null);
+    const invalid = ["2026-02-31T12:00:00+08:00", "2026-09-02T08:00:00Z", "2026-09-02T08:00+08:00", "2026-08-31T23:59:59+08:00"];
+    for (const businessTime of invalid) {
+      assert.equal(parseTransactionList(listBody(businessTime), "2026-09", "EXPENSE", createdTime), null);
       const api = apiFor(() => ({ statusCode: 200, data: listBody(businessTime) }));
-      await assert.rejects(() => api.listTransactions(1001, "2026-09", "EXPENSE", drill, created), StatisticsResponseError);
+      await assert.rejects(() => api.listTransactions(1001, "2026-09", "EXPENSE", drill, createdTime), StatisticsResponseError);
     }
+    const early = parseTransactionList(listBody("2026-09-01T00:00:00+08:00"), "2026-09", "EXPENSE", "2026-09-15T00:00:00+08:00");
+    assert.equal(early?.items[0]?.businessTime, "2026-09-01T00:00:00+08:00");
     const accepted = parseTransactionList(listBody("2026-09-15T00:00:00+08:00"), "2026-09", "EXPENSE", "2026-09-15T00:00:00+08:00");
     assert.equal(accepted?.items[0]?.businessTime, "2026-09-15T00:00:00+08:00");
   });

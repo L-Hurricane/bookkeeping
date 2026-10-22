@@ -1,6 +1,15 @@
-import { formatCurrentBalance, routeAfterAccountQuery, type Account } from "../../account/account";
+import {
+  findAccount,
+  formatCurrentBalance,
+  routeAfterAccountQuery,
+  shouldWarnNegativeBalance,
+  type Account,
+} from "../../account/account";
+import { stashLedgerHandoff, takeLedgerHandoff } from "../../account/ledger-handoff";
 import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout } from "../../account/logout-view";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
+import { moneyToneClass } from "../../account/money-tone";
+import { accountHomePath, accountListPath, accountSettingsPath, parseAccountHomeQuery } from "../../account/navigation";
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
 import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
 import {
@@ -15,6 +24,7 @@ import {
   HIGHLIGHT_MS,
   idleHighlight,
   nextLocateGeneration,
+  parsePostSaveResult,
   settleLedger,
   startHighlight,
   type LedgerLocateIntent,
@@ -59,6 +69,8 @@ Page({
   accountId: 0,
   accountCreatedTime: "",
   currency: "",
+  accountKind: "NORMAL" as Account["kind"],
+  contextReady: false,
   pendingPostSave: null as LedgerLocateIntent | null,
   highlight: idleHighlight(),
   highlightTimer: null as number | null,
@@ -70,11 +82,17 @@ Page({
   data: {
     phase: "account-loading" as "account-loading" | "account-error" | "ledger-loading" | "ready" | "ledger-error",
     name: "",
+    kindLabel: "",
     balanceLabel: "",
+    balanceToneClass: "money-zero",
+    negativeBalanceHint: "",
     monthLabel: "",
     incomeLabel: "",
+    incomeToneClass: "money-zero",
     expenseLabel: "",
+    expenseToneClass: "money-zero",
     surplusLabel: "",
+    surplusToneClass: "money-zero",
     countLabel: "",
     rows: [] as ReturnType<typeof ledgerRows>,
     empty: false,
@@ -89,7 +107,25 @@ Page({
     locateMiss: "",
   },
 
+  onLoad(query: Record<string, string | undefined>) {
+    const context = parseAccountHomeQuery(query);
+    if (context === null) {
+      wx.reLaunch({ url: accountListPath() });
+      return;
+    }
+    this.accountId = context.accountId;
+    this.contextReady = true;
+    const handoff = takeLedgerHandoff(this.accountId);
+    if (handoff !== null) {
+      this.pendingPostSave = handoff;
+      this.selectedMonth = handoff.targetMonth;
+    }
+  },
+
   onShow() {
+    if (!this.contextReady) {
+      return;
+    }
     if (this.selectedMonth.length === 0) {
       this.selectedMonth = currentBeijingMonth(new Date());
     }
@@ -148,11 +184,16 @@ Page({
         this.setData({ phase: "account-error", errorMessage: route.message });
         return;
       }
+      const account = findAccount(route.accounts, this.accountId);
+      if (account === null) {
+        this.setData({ phase: "account-error", errorMessage: "账户不存在或无权访问" });
+        return;
+      }
       this.resetSearchState();
-      this.accountId = route.account.id;
-      this.accountCreatedTime = route.account.createdTime;
-      this.currency = route.account.currency;
-      this.showAccount(route.account);
+      this.accountCreatedTime = account.createdTime;
+      this.currency = account.currency;
+      this.accountKind = account.kind;
+      this.showAccount(account);
       void this.loadLedger();
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
@@ -165,7 +206,10 @@ Page({
   showAccount(account: Account) {
     this.setData({
       name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
       balanceLabel: formatCurrentBalance(account),
+      balanceToneClass: moneyToneClass(account.currentBalance),
+      negativeBalanceHint: shouldWarnNegativeBalance(account) ? "余额为负，仍可继续记账" : "",
       monthLabel: formatMonthLabel(this.selectedMonth),
       errorMessage: "",
     });
@@ -196,10 +240,18 @@ Page({
       const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, ledger.items, {
         phase: "ready",
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
+        balanceToneClass: moneyToneClass(ledger.currentBalance),
+        negativeBalanceHint:
+          this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
+            ? "余额为负，仍可继续记账"
+            : "",
         monthLabel: formatMonthLabel(ledger.month),
         incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
+        incomeToneClass: moneyToneClass(ledger.summary.netIncome),
         expenseLabel: formatMoneyLabel(ledger.summary.netExpense),
+        expenseToneClass: moneyToneClass(ledger.summary.netExpense),
         surplusLabel: formatMoneyLabel(ledger.summary.surplus),
+        surplusToneClass: moneyToneClass(ledger.summary.surplus),
         countLabel: `${ledger.summary.transactionCount} 笔收支`,
         errorMessage: "",
         locateMiss: settlement.missMessage,
@@ -312,6 +364,9 @@ Page({
   },
 
   captureTransactionUpdate(result: unknown) {
+    if (this.redirectIfForeignAccount(result)) {
+      return;
+    }
     const current = this.locateNavigation();
     const next = acceptTransactionCreated(current, result);
     const accepted = applyAcceptedLocate(current, next);
@@ -333,8 +388,39 @@ Page({
   },
 
   receiveTransactionCreated(payload: unknown) {
+    if (this.redirectIfForeignAccount(payload)) {
+      return;
+    }
     const current = this.locateNavigation();
     this.receiveLocate(current, acceptTransactionCreated(current, payload));
+  },
+
+  redirectIfForeignAccount(payload: unknown): boolean {
+    const saved = parsePostSaveResult(payload);
+    if (saved === null || saved.accountId <= 0 || saved.accountId === this.accountId) {
+      return false;
+    }
+    stashLedgerHandoff(saved.accountId, saved);
+    wx.reLaunch({ url: accountHomePath(saved.accountId) });
+    return true;
+  },
+
+  onOpenSettings() {
+    if (this.loadGuard.loggingOut || this.accountId <= 0) {
+      return;
+    }
+    wx.navigateTo({ url: accountSettingsPath(this.accountId) });
+  },
+
+  onBackToList() {
+    if (this.loadGuard.loggingOut) {
+      return;
+    }
+    wx.navigateBack({
+      fail: () => {
+        wx.reLaunch({ url: accountListPath() });
+      },
+    });
   },
 
   receiveLocate(current: ReturnType<typeof this.locateNavigation>, next: ReturnType<typeof acceptTransactionCreated>) {

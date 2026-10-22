@@ -1,8 +1,16 @@
+import {
+  defaultSelectableAccountId,
+  findAccount,
+  type Account,
+} from "../../account/account";
+import { stashLedgerHandoff } from "../../account/ledger-handoff";
 import { createLoadGuard } from "../../account/load-guard";
+import { moneyToneClass } from "../../account/money-tone";
+import { accountHomePath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
 import { handoffPostSave } from "../../ledger/post-save";
-import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
+import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
 import type { Tag } from "../../tag/tag";
 import {
   applyDatePickerValue,
@@ -79,6 +87,9 @@ Page({
   form: createTransactionForm(new Date()),
   update: editingUpdate(),
   updateCompleted: false,
+  accounts: [] as Account[],
+  selectedAccountId: 0,
+  selectedAccountCreatedTime: "",
   categories: emptyBucket<CategoryNode>(),
   tags: emptyBucket<Tag>(),
   tagSession: initialTagEditSession(),
@@ -93,6 +104,7 @@ Page({
     typeLabel: "",
     title: "",
     amountLabel: "",
+    amountToneClass: "money-zero",
     categoryLabel: "",
     tagNames: [] as string[],
     businessTimeLabel: "",
@@ -101,6 +113,11 @@ Page({
     name: "",
     remark: "",
     amountError: "",
+    accountText: "选择账户",
+    accountPhase: "idle" as "idle" | "loading" | "ready" | "error",
+    accountRows: [] as { id: number; label: string }[],
+    accountSelectorOpen: false,
+    accountError: "",
     categoryText: "未分类",
     categoryPhase: "idle" as TypeBucket<CategoryNode>["phase"],
     categoryRows: [] as CategoryRow[],
@@ -182,10 +199,12 @@ Page({
   },
 
   onEdit() {
-    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null) {
+    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null || this.context === null) {
       return;
     }
     this.form = editFormFromTransaction(this.transaction);
+    this.selectedAccountId = this.transaction.accountId;
+    this.selectedAccountCreatedTime = this.context.accountCreatedTime;
     this.update = editingUpdate();
     this.updateCompleted = false;
     this.tagSession = enterEditSession(this.tagSession);
@@ -193,6 +212,7 @@ Page({
     this.timeDraft = null;
     wx.setNavigationBarTitle({ title: "编辑交易" });
     this.publishEdit();
+    void this.loadAccounts();
     void this.loadCategories();
     void this.loadTags();
   },
@@ -515,9 +535,10 @@ Page({
     const built = buildUpdateTransactionSnapshot(
       this.form,
       this.context.accountId,
+      this.selectedAccountId > 0 ? this.selectedAccountId : this.context.accountId,
       this.transaction.id,
       this.transaction.type,
-      this.context.accountCreatedTime,
+      this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : this.context.accountCreatedTime,
     );
     if (!built.ok) {
       this.setData({ submitError: updateValidationMessage(built.reason) });
@@ -685,9 +706,85 @@ Page({
       return;
     }
     this.updateCompleted = true;
-    emitTransactionUpdated(this, decision.result);
     wx.disableAlertBeforeUnload();
+    const result = decision.result;
+    const sourceAccountId = this.context?.accountId ?? 0;
+    if (result.accountId > 0 && result.accountId !== sourceAccountId) {
+      stashLedgerHandoff(result.accountId, result);
+      wx.reLaunch({ url: accountHomePath(result.accountId) });
+      return;
+    }
+    emitTransactionUpdated(this, result);
     wx.navigateBack();
+  },
+
+  async loadAccounts() {
+    this.setData({ accountPhase: "loading", accountError: "" });
+    try {
+      const accounts = await accountApi.listAccounts();
+      if (!this.loadGuard.pageAlive || this.screen !== "edit") {
+        return;
+      }
+      this.accounts = accounts;
+      const preferred = this.selectedAccountId > 0 ? this.selectedAccountId : this.transaction?.accountId ?? null;
+      const selectedId = defaultSelectableAccountId(accounts, preferred);
+      if (selectedId !== null) {
+        this.applySelectedAccount(selectedId);
+      }
+      this.setData({
+        accountPhase: "ready",
+        accountRows: accounts.map((account) => ({
+          id: account.id,
+          label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+        })),
+        accountError: selectedId === null && accounts.length > 1 ? "请选择账户" : "",
+      });
+    } catch (error) {
+      if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
+        return;
+      }
+      this.setData({ accountPhase: "error", accountError: "账户列表加载失败" });
+    }
+  },
+
+  applySelectedAccount(accountId: number) {
+    const account = findAccount(this.accounts, accountId);
+    if (account === null) {
+      return;
+    }
+    this.selectedAccountId = account.id;
+    this.selectedAccountCreatedTime = account.createdTime;
+    this.setData({
+      accountText: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+      accountError: "",
+    });
+  },
+
+  onOpenAccounts() {
+    if (!this.canEdit() || this.data.accountPhase !== "ready" || this.accounts.length === 0) {
+      return;
+    }
+    this.setData({ accountSelectorOpen: true });
+  },
+
+  onCloseAccounts() {
+    this.setData({ accountSelectorOpen: false });
+  },
+
+  onChooseAccount(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const accountId = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+      return;
+    }
+    this.applySelectedAccount(accountId);
+    this.setData({ accountSelectorOpen: false, submitError: "" });
+  },
+
+  onRetryAccounts() {
+    void this.loadAccounts();
   },
 
   returnToDetail() {
@@ -748,6 +845,7 @@ Page({
       typeLabel: view.typeLabel,
       title: view.title,
       amountLabel: view.amountLabel,
+      amountToneClass: moneyToneClass(this.transaction.amount),
       categoryLabel: view.categoryLabel,
       tagNames: [...view.tagNames],
       businessTimeLabel: view.businessTimeLabel,
@@ -789,7 +887,12 @@ Page({
       submitError: this.update.error,
       uncertain: this.update.phase === "uncertain",
       businessTimeText: businessTimeDisplay(this.form.businessTime) ?? "",
-      timeError: isBusinessTimeAllowed(this.form.businessTime, context.accountCreatedTime) ? "" : "交易时间不得早于账户创建时间",
+      timeError: isBusinessTimeAllowed(
+        this.form.businessTime,
+        this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : context.accountCreatedTime,
+      )
+        ? ""
+        : "请输入有效的日期和时间",
       futureHint: isFutureBusinessTime(this.form.businessTime, new Date())
         ? "未来交易保存后仍会立即影响当前余额；流水与统计归入所选自然月。"
         : "",
@@ -837,13 +940,24 @@ function emitListStale(page: object): void {
   channel.emit("listStale", {});
 }
 
-function emitTransactionUpdated(page: object, result: { transactionId: number; targetMonth: string }): void {
-  const owner = page as { getOpenerEventChannel?: () => { emit?: (name: string, data: { transactionId: number; targetMonth: string }) => void } };
+function emitTransactionUpdated(
+  page: object,
+  result: { accountId: number; transactionId: number; targetMonth: string },
+): void {
+  const owner = page as {
+    getOpenerEventChannel?: () => {
+      emit?: (name: string, data: { accountId: number; transactionId: number; targetMonth: string }) => void;
+    };
+  };
   const channel = owner.getOpenerEventChannel?.();
   if (channel === undefined || typeof channel.emit !== "function") {
     return;
   }
-  channel.emit("transactionUpdated", { transactionId: result.transactionId, targetMonth: result.targetMonth });
+  channel.emit("transactionUpdated", {
+    accountId: result.accountId,
+    transactionId: result.transactionId,
+    targetMonth: result.targetMonth,
+  });
 }
 
 function isUnauthorized(error: unknown): boolean {

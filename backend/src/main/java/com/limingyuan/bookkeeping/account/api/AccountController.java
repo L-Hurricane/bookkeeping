@@ -35,4 +35,9 @@ public class AccountController {
     public AccountService.AccountView rename(@PathVariable long accountId, @Valid @RequestBody RenameRequest request) {
         return accounts.rename(accountId, request.name());
     }
+
+    @PutMapping("/{accountId}/name")
+    public AccountService.AccountView renameByPut(@PathVariable long accountId, @Valid @RequestBody RenameRequest request) {
+        return accounts.rename(accountId, request.name());
+    }
 }

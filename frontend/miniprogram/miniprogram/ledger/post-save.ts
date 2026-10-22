@@ -38,10 +38,23 @@ export interface HighlightState {
 }
 
 export function parsePostSaveResult(value: unknown): PostSaveResult | null {
-  if (!isRecord(value) || !isPositiveId(value.transactionId) || typeof value.targetMonth !== "string" || !MONTH_PATTERN.test(value.targetMonth)) {
+  if (
+    !isRecord(value) ||
+    !isPositiveId(value.transactionId) ||
+    typeof value.targetMonth !== "string" ||
+    !MONTH_PATTERN.test(value.targetMonth)
+  ) {
     return null;
   }
-  return { transactionId: value.transactionId, targetMonth: value.targetMonth };
+  const accountId = value.accountId;
+  if (accountId !== undefined && !isPositiveId(accountId)) {
+    return null;
+  }
+  return {
+    accountId: typeof accountId === "number" ? accountId : 0,
+    transactionId: value.transactionId,
+    targetMonth: value.targetMonth,
+  };
 }
 
 export function acceptTransactionCreated(state: LocateNavigation, payload: unknown): LocateNavigation {
@@ -90,7 +103,14 @@ export function handoffPostSave(
   if (completed || phase !== "success" || postSave === null) {
     return { completed, result: null };
   }
-  return { completed: true, result: { transactionId: postSave.transactionId, targetMonth: postSave.targetMonth } };
+  return {
+    completed: true,
+    result: {
+      accountId: postSave.accountId,
+      transactionId: postSave.transactionId,
+      targetMonth: postSave.targetMonth,
+    },
+  };
 }
 
 export function settleLedger(pending: LedgerLocateIntent | null, outcome: "success" | "error", items: readonly LedgerEntry[]): LedgerSettlement {

@@ -23,7 +23,7 @@ import {
 } from "../miniprogram/ledger/post-save";
 import type { PostSaveResult } from "../miniprogram/transaction/form";
 
-const saved: PostSaveResult = { transactionId: 4001, targetMonth: "2026-08" };
+const saved: PostSaveResult = { accountId: 1001, transactionId: 4001, targetMonth: "2026-08" };
 const home = { selectedMonth: "2026-09", pending: null, highlightKey: "" };
 
 describe("post-save handoff", () => {

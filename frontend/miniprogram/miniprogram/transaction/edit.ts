@@ -36,6 +36,9 @@ export interface TransactionDetailView {
 }
 
 export interface UpdateTransactionSnapshot {
+  /** Path account: current ownership before this save. */
+  readonly sourceAccountId: number;
+  /** Target account after save (body accountId); may equal sourceAccountId. */
   readonly accountId: number;
   readonly transactionId: number;
   readonly fixedType: TransactionType;
@@ -48,6 +51,7 @@ export interface UpdateTransactionSnapshot {
 }
 
 export interface UpdateTransactionRequestBody {
+  readonly accountId: number;
   readonly amount: string;
   readonly name?: string;
   readonly categoryId?: number;
@@ -215,7 +219,8 @@ export function editFormFromTransaction(transaction: TransactionView): CreateTra
 
 export function buildUpdateTransactionSnapshot(
   form: CreateTransactionForm,
-  accountId: number,
+  sourceAccountId: number,
+  targetAccountId: number,
   transactionId: number,
   fixedType: TransactionType,
   accountCreatedTime: string,
@@ -223,7 +228,7 @@ export function buildUpdateTransactionSnapshot(
   if (form.type !== fixedType || (fixedType !== "INCOME" && fixedType !== "EXPENSE")) {
     return { ok: false, reason: "type-invalid" };
   }
-  if (!isPositiveId(accountId) || !isPositiveId(transactionId)) {
+  if (!isPositiveId(sourceAccountId) || !isPositiveId(targetAccountId) || !isPositiveId(transactionId)) {
     return { ok: false, reason: "resource-invalid" };
   }
   const amount = validateTransactionAmount(form.amount);
@@ -234,7 +239,7 @@ export function buildUpdateTransactionSnapshot(
     return { ok: false, reason: "business-time-invalid" };
   }
   if (!isBusinessTimeAllowed(form.businessTime, accountCreatedTime)) {
-    return { ok: false, reason: "before-account-creation" };
+    return { ok: false, reason: "business-time-invalid" };
   }
   if (form.categoryId !== null && !isPositiveId(form.categoryId)) {
     return { ok: false, reason: "category-invalid" };
@@ -252,7 +257,8 @@ export function buildUpdateTransactionSnapshot(
   return {
     ok: true,
     value: {
-      accountId,
+      sourceAccountId,
+      accountId: targetAccountId,
       transactionId,
       fixedType,
       amount: amount.value,
@@ -267,6 +273,7 @@ export function buildUpdateTransactionSnapshot(
 
 export function updateTransactionRequestBody(snapshot: UpdateTransactionSnapshot): UpdateTransactionRequestBody {
   return {
+    accountId: snapshot.accountId,
     amount: snapshot.amount,
     ...(snapshot.name === null ? {} : { name: snapshot.name }),
     ...(snapshot.categoryId === null ? {} : { categoryId: snapshot.categoryId }),
