@@ -13,6 +13,14 @@ class MigrationSchemaGuardTest {
         MigrationSchemaGuard.requireDisposableSchema("jdbc:mysql://localhost:3306/bookkeeping_migration_test");
     }
 
+    @Test void acceptsTheS1T03DedicatedMigrationSchema() {
+        assertThat(MigrationSchemaGuard.databaseName("jdbc:mysql://127.0.0.1:3306/bk_s1t03_6928fd20_migration"))
+                .isEqualTo("bk_s1t03_6928fd20_migration");
+        MigrationSchemaGuard.requireDisposableSchema("jdbc:mysql://localhost:3306/bk_s1t03_6928fd20_migration");
+        MigrationSchemaGuard.requireDisposableSchema(
+                "jdbc:mysql://localhost:3306/bk_s1t03_6928fd20_migration?useSSL=false");
+    }
+
     @Test void refusesTheDevelopmentAndOrdinaryTestSchemasBeforeClean() {
         assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema("jdbc:mysql://127.0.0.1:3306/bookkeeping"))
                 .isInstanceOf(IllegalStateException.class)
@@ -25,6 +33,19 @@ class MigrationSchemaGuardTest {
         assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema("jdbc:mysql://127.0.0.1:3306/"))
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema("jdbc:postgresql://127.0.0.1:5432/bookkeeping_migration_test"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test void refusesArbitraryNamesThatAreNotAllowlisted() {
+        assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema(
+                        "jdbc:mysql://127.0.0.1:3306/bk_s1t03_other_migration"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("bk_s1t03_other_migration");
+        assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema(
+                        "jdbc:mysql://127.0.0.1:3306/bk_s1t03_6928fd20"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> MigrationSchemaGuard.requireDisposableSchema(
+                        "jdbc:mysql://127.0.0.1:3306/some_custom_migration_test"))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

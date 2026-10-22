@@ -3,6 +3,7 @@ package com.limingyuan.bookkeeping.analysis;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
+import com.limingyuan.bookkeeping.support.TestSchemaGuard;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -52,7 +53,7 @@ class MockGenerationFailureHttpTest {
     @BeforeEach
     void requireTestDatabase() throws Exception {
         try (var connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo("bookkeeping_test");
+            TestSchemaGuard.requireAllowedSchema(connection.getCatalog());
         }
     }
 

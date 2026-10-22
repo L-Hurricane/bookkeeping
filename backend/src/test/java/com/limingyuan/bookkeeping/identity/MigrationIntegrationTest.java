@@ -15,7 +15,7 @@ class MigrationIntegrationTest {
         MigrationSchemaGuard.requireDisposableSchema(url);
         // This deliberately disposable schema is separate from both development and ordinary API fixtures.
         try (var connection = DriverManager.getConnection(url, username, password)) {
-            assertThat(connection.getCatalog()).isEqualTo("bookkeeping_migration_test");
+            assertThat(connection.getCatalog()).isEqualTo(MigrationSchemaGuard.databaseName(url));
             assertThat(connection.getMetaData().getDatabaseProductName()).isEqualTo("MySQL");
             assertThat(connection.getMetaData().getDatabaseMajorVersion()).isEqualTo(8);
             assertThat(connection.getMetaData().getDatabaseMinorVersion()).isEqualTo(4);
@@ -52,10 +52,79 @@ class MigrationIntegrationTest {
                         WHERE u.username = 'v10-upgrade'
                         """);
             }
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);
+            long legacyAccountId;
+            try (var connection = DriverManager.getConnection(url, username, password);
+                 var statement = connection.createStatement();
+                 var rows = statement.executeQuery("""
+                         SELECT a.id FROM accounts a JOIN users u ON u.id = a.user_id
+                         WHERE u.username = 'v10-upgrade'
+                         """)) {
+                assertThat(rows.next()).isTrue();
+                legacyAccountId = rows.getLong(1);
+            }
+            // V10 nullable category, V11 analysis, V12 multi-account kind + name unique.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
+                try (var rows = statement.executeQuery("""
+                        SELECT a.id, a.kind, a.name, a.opening_balance, t.id
+                        FROM accounts a
+                        JOIN users u ON u.id = a.user_id
+                        JOIN transactions t ON t.account_id = a.id AND t.user_id = a.user_id
+                        WHERE u.username = 'v10-upgrade'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isEqualTo(legacyAccountId);
+                    assertThat(rows.getString(2)).isEqualTo("NORMAL");
+                    assertThat(rows.getString(3)).isEqualTo("微信");
+                    assertThat(rows.getBigDecimal(4)).isEqualByComparingTo("100.00");
+                    assertThat(rows.getLong(5)).isPositive();
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'accounts' AND constraint_type = 'UNIQUE'
+                        """)) {
+                    var names = new ArrayList<String>();
+                    while (rows.next()) names.add(rows.getString(1));
+                    assertThat(names).contains("uk_accounts_id_user", "uk_accounts_user_name");
+                    assertThat(names).doesNotContain("uk_accounts_user");
+                }
+                // V12 must keep fk_accounts_user; its supporting index is now uk_accounts_user_name.
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'accounts'
+                          AND constraint_type = 'FOREIGN KEY'
+                        """)) {
+                    var names = new ArrayList<String>();
+                    while (rows.next()) names.add(rows.getString(1));
+                    assertThat(names).contains("fk_accounts_user");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT index_name, seq_in_index, column_name
+                        FROM information_schema.statistics
+                        WHERE table_schema = DATABASE() AND table_name = 'accounts'
+                          AND index_name = 'uk_accounts_user_name'
+                        ORDER BY seq_in_index
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getInt(2)).isEqualTo(1);
+                    assertThat(rows.getString(3)).isEqualTo("user_id");
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getInt(2)).isEqualTo(2);
+                    assertThat(rows.getString(3)).isEqualTo("name");
+                    assertThat(rows.next()).isFalse();
+                }
+                statement.executeUpdate("""
+                        INSERT INTO accounts (user_id, name, kind, currency, opening_balance, created_time, updated_at_utc)
+                        SELECT id, '现金', 'CREDIT', 'CNY', 0.00, '2020-02-01 00:00:00', '2026-09-01 00:00:00.000000'
+                        FROM users WHERE username = 'v10-upgrade'
+                        """);
+                assertThatThrownBy(() -> statement.executeUpdate("""
+                        INSERT INTO accounts (user_id, name, kind, currency, opening_balance, created_time, updated_at_utc)
+                        SELECT id, '微信', 'NORMAL', 'CNY', 1.00, '2020-03-01 00:00:00', '2026-09-01 00:00:00.000000'
+                        FROM users WHERE username = 'v10-upgrade'
+                        """)).isInstanceOf(SQLException.class);
                 try (var rows = statement.executeQuery("""
                         SELECT is_nullable FROM information_schema.columns
                         WHERE table_schema = DATABASE() AND table_name = 'transactions' AND column_name = 'category_id'

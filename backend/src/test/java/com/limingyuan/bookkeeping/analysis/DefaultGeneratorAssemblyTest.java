@@ -3,6 +3,7 @@ package com.limingyuan.bookkeeping.analysis;
 import com.limingyuan.bookkeeping.analysis.application.AnalysisGenerationAdmission;
 import com.limingyuan.bookkeeping.analysis.application.MonthlyAnalysisGenerator;
 import com.limingyuan.bookkeeping.analysis.application.OpenAnalysisAdmission;
+import com.limingyuan.bookkeeping.support.TestSchemaGuard;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class DefaultGeneratorAssemblyTest {
     @BeforeEach
     void requireTestDatabase() throws Exception {
         try (var connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo("bookkeeping_test");
+            TestSchemaGuard.requireAllowedSchema(connection.getCatalog());
         }
     }
 
