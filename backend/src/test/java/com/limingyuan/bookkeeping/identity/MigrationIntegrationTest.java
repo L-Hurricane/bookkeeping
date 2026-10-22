@@ -62,8 +62,8 @@ class MigrationIntegrationTest {
                 assertThat(rows.next()).isTrue();
                 legacyAccountId = rows.getLong(1);
             }
-            // V10 nullable category, V11 analysis, V12 multi-account kind + name unique.
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
+            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -172,8 +172,38 @@ class MigrationIntegrationTest {
                          """)) {
                 var names = new ArrayList<String>();
                 while (rows.next()) names.add(rows.getString(1));
-                assertThat(names).contains("uk_transactions_account_order", "fk_transactions_account",
-                        "fk_transactions_category", "fk_transaction_tags_transaction", "fk_transaction_tags_tag");
+                assertThat(names).contains("fk_transactions_account", "fk_transactions_category",
+                        "fk_transaction_tags_transaction", "fk_transaction_tags_tag");
+                assertThat(names).doesNotContain("uk_transactions_account_order");
+            }
+            try (var connection = DriverManager.getConnection(url, username, password);
+                 var statement = connection.createStatement()) {
+                // V13: same account may hold two transactions that kept colliding historical orders.
+                statement.executeUpdate("""
+                        INSERT INTO transactions (user_id, account_id, type, amount, category_id, business_time,
+                            first_saved_at_utc, first_save_order, updated_at_utc)
+                        SELECT user_id, account_id, type, 5.00, category_id, business_time,
+                            DATE_ADD(first_saved_at_utc, INTERVAL 1 SECOND), 1, updated_at_utc
+                        FROM transactions
+                        WHERE user_id = (SELECT id FROM users WHERE username = 'v10-upgrade')
+                        ORDER BY id
+                        LIMIT 1
+                        """);
+                try (var rows = statement.executeQuery("""
+                        SELECT COUNT(*) FROM transactions
+                        WHERE user_id = (SELECT id FROM users WHERE username = 'v10-upgrade')
+                          AND first_save_order = 1
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isEqualTo(2);
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT index_name FROM information_schema.statistics
+                        WHERE table_schema = DATABASE() AND table_name = 'transactions'
+                          AND index_name = 'idx_transactions_ledger'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                }
             }
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement();

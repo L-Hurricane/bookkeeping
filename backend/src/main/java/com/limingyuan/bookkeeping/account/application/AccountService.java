@@ -131,6 +131,18 @@ public class AccountService {
         return new LockedAccount(account.getId(), account.getCreatedTime());
     }
 
+    /**
+     * Lock one or two accounts in ascending id order so cross-account edits cannot deadlock.
+     * Both accounts must belong to the current user.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockAccountsForWrite(long accountId, long otherAccountId) {
+        long first = Math.min(accountId, otherAccountId);
+        long second = Math.max(accountId, otherAccountId);
+        locked(first);
+        if (second != first) locked(second);
+    }
+
     /** Lock, then allocate the next immutable account-scoped order. Create only. */
     @Transactional(propagation = Propagation.MANDATORY)
     public Allocation allocateFirstSaveOrder(long accountId) {

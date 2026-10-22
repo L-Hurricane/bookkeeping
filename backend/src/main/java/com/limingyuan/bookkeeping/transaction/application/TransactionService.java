@@ -8,6 +8,7 @@ import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.ledger.application.LedgerOrdering;
 import com.limingyuan.bookkeeping.tag.application.TagService;
 import com.limingyuan.bookkeeping.transaction.domain.TransactionType;
 import com.limingyuan.bookkeeping.transaction.persistence.*;
@@ -92,7 +93,7 @@ public class TransactionService {
         var allocation = accounts.allocateFirstSaveOrder(accountId);
         var category = bookable(fields.categoryId(), type.name());
         var ownedTags = tags.requireOwned(fields.tagIds(), type.name());
-        var businessTime = businessTime(fields.businessTime(), allocation.createdTime());
+        var businessTime = businessTime(fields.businessTime());
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         var saved = transactions.saveAndFlush(new TransactionEntity(userId, allocation.accountId(), type,
                 fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime, now,
@@ -142,17 +143,20 @@ public class TransactionService {
         return view(load(accountId, transactionId));
     }
 
-    public TransactionView edit(long accountId, long transactionId, Draft draft) {
+    public TransactionView edit(long sourceAccountId, long targetAccountId, long transactionId, Draft draft) {
         var fields = fields(draft);
         return transaction.execute(status -> {
-            var locked = accounts.lockForWrite(accountId);
-            var current = load(accountId, transactionId);
+            accounts.lockAccountsForWrite(sourceAccountId, targetAccountId);
+            var current = load(sourceAccountId, transactionId);
             var category = bookable(fields.categoryId(), current.getType().name());
             var ownedTags = tags.requireOwned(fields.tagIds(), current.getType().name());
-            var businessTime = businessTime(fields.businessTime(), locked.createdTime());
+            var businessTime = businessTime(fields.businessTime());
             var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
             current.edit(fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime,
                     blankToNull(fields.remark(), Integer.MAX_VALUE), now);
+            if (targetAccountId != sourceAccountId) {
+                current.reassignAccount(targetAccountId);
+            }
             transactions.saveAndFlush(current);
             replaceTags(current.getId(), ownedTags);
             return detail(current, category == null ? null : category.name(), ownedTags);
@@ -207,8 +211,8 @@ public class TransactionService {
                 WHERE t.account_id = :accountId AND t.user_id = :userId
                   AND t.name IS NOT NULL AND t.name <> ''
                   AND t.name LIKE :pattern ESCAPE '!'
-                ORDER BY t.business_time DESC, t.first_save_order DESC
-                """).param("accountId", accountId).param("userId", context.userId()).param("pattern", pattern)
+                """ + " ORDER BY " + LedgerOrdering.TRANSACTION_LIST)
+                .param("accountId", accountId).param("userId", context.userId()).param("pattern", pattern)
                 .query((rs, row) -> {
                     Long storedCategoryId = rs.getObject("category_id", Long.class);
                     String categoryName = rs.getString("category_name");
@@ -241,7 +245,7 @@ public class TransactionService {
         else if (untaggedOnly) sql.append("""
                  AND NOT EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id)
                 """);
-        sql.append(" ORDER BY t.business_time DESC, t.first_save_order DESC");
+        sql.append(" ORDER BY ").append(LedgerOrdering.TRANSACTION_LIST);
         var query = jdbc.sql(sql.toString())
                 .param("accountId", accountId)
                 .param("userId", context.userId())
@@ -344,13 +348,9 @@ public class TransactionService {
         return parsed.toLocalDateTime();
     }
 
-    private LocalDateTime businessTime(String raw, LocalDateTime accountCreated) {
-        var local = parseBusinessTime(raw);
-        if (local.isBefore(accountCreated)) {
-            throw new ApiFailure(409, "BUSINESS_RULE_VIOLATION", "交易时间不能早于资金账户创建时间",
-                    List.of(new ApiErrors.Detail("businessTime", "BEFORE_ACCOUNT_CREATION")));
-        }
-        return local;
+    /** v1.0 TX-06 / BAL-05: business time may precede account creation time. */
+    private LocalDateTime businessTime(String raw) {
+        return parseBusinessTime(raw);
     }
 
     private YearMonth month(String raw) {
