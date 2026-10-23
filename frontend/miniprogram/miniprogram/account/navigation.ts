@@ -20,6 +20,10 @@ export function accountSettingsPath(accountId: number): string {
   return `/pages/account-settings/index?accountId=${accountId}`;
 }
 
+export function accountPermanentDeletionPath(accountId: number): string {
+  return `/pages/account-permanent-deletion/index?accountId=${accountId}`;
+}
+
 export function parseAccountIdQuery(raw: string | undefined): number | null {
   if (raw === undefined || raw.length === 0) {
     return null;

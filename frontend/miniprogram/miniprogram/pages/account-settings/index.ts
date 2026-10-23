@@ -1,7 +1,7 @@
 import { ARCHIVE_CONFIRM, RESTORE_CONFIRM } from "../../account/archive-copy";
 import { accountKindLabel, type Account } from "../../account/account";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
-import { parseAccountSettingsQuery } from "../../account/navigation";
+import { accountPermanentDeletionPath, parseAccountSettingsQuery } from "../../account/navigation";
 import { ApiError } from "../../http/client";
 import { AccountResponseError } from "../../services/account";
 import { isUnauthorized } from "../../services/ledger";
@@ -117,6 +117,13 @@ Page({
 
   async onRestore() {
     await this.changeLifecycle("restore");
+  },
+
+  onPermanentDelete() {
+    if (this.data.submitting || this.data.phase !== "ready" || this.data.lifecycle !== "ARCHIVED") {
+      return;
+    }
+    wx.navigateTo({ url: accountPermanentDeletionPath(this.accountId) });
   },
 
   async changeLifecycle(action: "archive" | "restore") {

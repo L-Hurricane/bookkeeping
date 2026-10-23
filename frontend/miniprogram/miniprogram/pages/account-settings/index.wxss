@@ -67,3 +67,10 @@
   color: #111111;
   border: 1rpx solid #dddddd;
 }
+
+.permanent-delete {
+  margin-top: 24rpx;
+  background: #ffffff;
+  color: #b42318;
+  border: 1rpx solid #f2c0c0;
+}

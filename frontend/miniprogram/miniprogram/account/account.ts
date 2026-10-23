@@ -19,7 +19,7 @@ export type AccountStartupRoute =
 
 export const ACCOUNT_CONTRACT_MESSAGE = "账户数据不符合约定";
 
-const MONEY_RESPONSE_PATTERN = /^-?[0-9]+\.[0-9]{2}$/;
+export const MONEY_RESPONSE_PATTERN = /^-?[0-9]+\.[0-9]{2}$/;
 
 export function parseAccount(value: unknown): Account | null {
   if (!isRecord(value)) {

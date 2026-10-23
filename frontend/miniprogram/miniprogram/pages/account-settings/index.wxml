@@ -24,4 +24,5 @@
   </view>
   <button wx:if="{{lifecycle === 'ACTIVE'}}" class="archive" disabled="{{submitting}}" bindtap="onArchive">归档账户</button>
   <button wx:else class="restore" disabled="{{submitting}}" bindtap="onRestore">恢复账户</button>
+  <button wx:if="{{lifecycle === 'ARCHIVED'}}" class="permanent-delete" disabled="{{submitting}}" bindtap="onPermanentDelete">永久删除</button>
 </view>

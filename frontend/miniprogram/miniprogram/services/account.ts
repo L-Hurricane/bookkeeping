@@ -1,4 +1,8 @@
 import { parseAccount, parseAccountList, type Account, type AccountKind } from "../account/account";
+import {
+  parsePermanentDeletionPreview,
+  type PermanentDeletionPreview,
+} from "../account/permanent-deletion";
 import { ApiError, type HttpClient } from "../http/client";
 
 export class AccountResponseError extends Error {
@@ -29,6 +33,8 @@ export interface AccountApi {
   renameAccount(accountId: number, name: string): Promise<Account>;
   archiveAccount(accountId: number): Promise<Account>;
   restoreAccount(accountId: number): Promise<Account>;
+  previewPermanentDeletion(accountId: number): Promise<PermanentDeletionPreview>;
+  executePermanentDeletion(accountId: number, previewToken: string): Promise<void>;
 }
 
 export function createAccountApi(http: HttpClient): AccountApi {
@@ -115,6 +121,28 @@ export function createAccountApi(http: HttpClient): AccountApi {
 
     async restoreAccount(accountId) {
       return changeLifecycle(http, accountId, "restore");
+    },
+
+    async previewPermanentDeletion(accountId) {
+      const body = await http.request<unknown>({
+        method: "POST",
+        path: `/api/v1/accounts/${accountId}/permanent-deletion/preview`,
+        authenticated: true,
+      });
+      const preview = parsePermanentDeletionPreview(body);
+      if (preview === null) {
+        throw new AccountResponseError("永久删除预览响应无法识别");
+      }
+      return preview;
+    },
+
+    async executePermanentDeletion(accountId, previewToken) {
+      await http.request<void>({
+        method: "POST",
+        path: `/api/v1/accounts/${accountId}/permanent-deletion`,
+        body: { previewToken },
+        authenticated: true,
+      });
     },
   };
   return api;
