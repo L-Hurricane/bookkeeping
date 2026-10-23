@@ -7,6 +7,7 @@ import java.time.LocalDate;
 public record AnalysisSnapshot(
         long id,
         long userId,
+        long accountId,
         String yearMonth,
         String contextFingerprint,
         MonthlyAnalysisReport report,

@@ -76,17 +76,17 @@ class AnalysisGenerationStoreIntegrationTest {
 
     @Test void firstPermitReservesOneSlot() {
         long userId = newUser();
-        var permit = granted(store.acquire(userId, MONTH, fingerprint("a")));
+        var permit = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("a")));
         assertThat(permit.fencingToken()).isEqualTo(1L);
         assertThat(permit.permitDate()).isEqualTo(LocalDate.of(2026, 10, 10));
-        assertThat(store.findCoordination(userId, MONTH, fingerprint("a")).orElseThrow().state()).isEqualTo(GenerationState.IN_PROGRESS);
+        assertThat(store.findCoordination(userId, accountOf(userId), MONTH, fingerprint("a")).orElseThrow().state()).isEqualTo(GenerationState.IN_PROGRESS);
         assertThat(quota(userId)).isEqualTo(new Quota(1, 0));
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("a"))).isEmpty();
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("a"))).isEmpty();
     }
 
     @Test void oneScopeCannotGrantTwoPermits() throws Exception {
         long userId = newUser();
-        var results = concurrent(() -> store.acquire(userId, MONTH, fingerprint("same")), 2);
+        var results = concurrent(() -> store.acquire(userId, accountOf(userId), MONTH, fingerprint("same")), 2);
         assertThat(results.stream().filter(PermitAcquisition.Granted.class::isInstance)).hasSize(1);
         assertThat(results.stream().filter(PermitAcquisition.Busy.class::isInstance)).hasSize(1);
         assertThat(quota(userId)).isEqualTo(new Quota(1, 0));
@@ -94,23 +94,23 @@ class AnalysisGenerationStoreIntegrationTest {
 
     @Test void differentScopesShareTheDailyLimitWhileInProgress() {
         long userId = newUser();
-        for (int i = 0; i < AnalysisGenerationStore.DAILY_SUCCESS_LIMIT; i++) granted(store.acquire(userId, MONTH, fingerprint("p" + i)));
-        assertThat(store.acquire(userId, "2026-11", fingerprint("other"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
+        for (int i = 0; i < AnalysisGenerationStore.DAILY_SUCCESS_LIMIT; i++) granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("p" + i)));
+        assertThat(store.acquire(userId, accountOf(userId), "2026-11", fingerprint("other"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
         assertThat(quota(userId)).isEqualTo(new Quota(3, 0));
     }
 
     @Test void fourthSuccessfulAnalysisIsRejected() {
         long userId = newUser();
         for (int i = 0; i < 3; i++) succeed(userId, fingerprint("done" + i), "报告" + i);
-        assertThat(store.acquire(userId, MONTH, fingerprint("fourth"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
+        assertThat(store.acquire(userId, accountOf(userId), MONTH, fingerprint("fourth"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
         assertThat(quota(userId)).isEqualTo(new Quota(0, 3));
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("fourth"))).isEmpty();
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("fourth"))).isEmpty();
     }
 
     @Test void reusingASnapshotDoesNotConsumeQuota() {
         long userId = newUser();
         var first = succeed(userId, fingerprint("reuse"), "第一次");
-        var again = store.acquire(userId, MONTH, fingerprint("reuse"));
+        var again = store.acquire(userId, accountOf(userId), MONTH, fingerprint("reuse"));
         assertThat(again).isInstanceOf(PermitAcquisition.Reused.class);
         assertThat(((PermitAcquisition.Reused) again).snapshot().id()).isEqualTo(first.id());
         assertThat(quota(userId)).isEqualTo(new Quota(0, 1));
@@ -118,33 +118,33 @@ class AnalysisGenerationStoreIntegrationTest {
 
     @Test void modelFailureReleasesTheReservation() {
         long userId = newUser();
-        var permit = granted(store.acquire(userId, MONTH, fingerprint("fail")));
+        var permit = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("fail")));
         assertThat(store.completeFailure(permit)).isInstanceOf(FailureSettlement.Applied.class);
         assertThat(quota(userId)).isEqualTo(new Quota(0, 0));
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("fail"))).isEmpty();
-        assertThat(store.findCoordination(userId, MONTH, fingerprint("fail")).orElseThrow().state()).isEqualTo(GenerationState.FAILED);
-        var retry = granted(store.acquire(userId, MONTH, fingerprint("fail")));
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("fail"))).isEmpty();
+        assertThat(store.findCoordination(userId, accountOf(userId), MONTH, fingerprint("fail")).orElseThrow().state()).isEqualTo(GenerationState.FAILED);
+        var retry = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("fail")));
         assertThat(retry.fencingToken()).isGreaterThan(permit.fencingToken());
         assertThat(quota(userId)).isEqualTo(new Quota(1, 0));
     }
 
     @Test void snapshotAndQuotaCommitTogether() {
         long userId = newUser();
-        var permit = granted(store.acquire(userId, MONTH, fingerprint("atomic")));
+        var permit = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("atomic")));
         jdbc.sql("UPDATE analysis_quota_days SET reserved_count = 0 WHERE user_id = :id").param("id", userId).update();
         assertThatThrownBy(() -> store.completeSuccess(permit, report("不会留下"), provenance()))
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("atomic"))).isEmpty();
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("atomic"))).isEmpty();
         assertThat(countSnapshots(userId)).isZero();
     }
 
     @Test void expiredLeaseCanBeRecoveredAndTheOldTokenCannotSucceed() {
         long userId = newUser();
-        var expired = granted(store.acquire(userId, MONTH, fingerprint("lease")));
+        var expired = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("lease")));
         clock.advance(Duration.ofMinutes(4));
         assertThat(store.completeSuccess(expired, report("过期"), provenance())).isInstanceOf(SuccessSettlement.StalePermit.class);
         assertThat(countSnapshots(userId)).isZero();
-        var recovered = granted(store.acquire(userId, MONTH, fingerprint("lease")));
+        var recovered = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("lease")));
         assertThat(recovered.fencingToken()).isGreaterThan(expired.fencingToken());
         assertThat(store.completeSuccess(expired, report("旧令牌"), provenance())).isInstanceOf(SuccessSettlement.StalePermit.class);
         var snapshot = applied(store.completeSuccess(recovered, report("恢复后"), provenance()));
@@ -155,18 +155,18 @@ class AnalysisGenerationStoreIntegrationTest {
 
     @Test void expiredReservationsOnOtherScopesAreReclaimed() {
         long userId = newUser();
-        var first = granted(store.acquire(userId, MONTH, fingerprint("s0")));
-        var second = granted(store.acquire(userId, MONTH, fingerprint("s1")));
-        var third = granted(store.acquire(userId, "2026-11", fingerprint("s2")));
+        var first = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("s0")));
+        var second = granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("s1")));
+        var third = granted(store.acquire(userId, accountOf(userId), "2026-11", fingerprint("s2")));
         clock.advance(Duration.ofMinutes(4));
-        var fourth = granted(store.acquire(userId, "2026-12", fingerprint("s3")));
+        var fourth = granted(store.acquire(userId, accountOf(userId), "2026-12", fingerprint("s3")));
         assertThat(fourth.fencingToken()).isEqualTo(1L);
         assertThat(quota(userId)).isEqualTo(new Quota(1, 0));
         assertThat(countSnapshots(userId)).isZero();
         for (var expired : List.of(first, second, third)) {
             assertThat(store.completeSuccess(expired, report("过期"), provenance())).isInstanceOf(SuccessSettlement.StalePermit.class);
             assertThat(store.completeFailure(expired)).isInstanceOf(FailureSettlement.StalePermit.class);
-            assertThat(store.findCoordination(userId, expired.yearMonth(), expired.contextFingerprint()).orElseThrow().state())
+            assertThat(store.findCoordination(userId, expired.accountId(), expired.yearMonth(), expired.contextFingerprint()).orElseThrow().state())
                     .isEqualTo(GenerationState.FAILED);
         }
         assertThat(quota(userId)).isEqualTo(new Quota(1, 0));
@@ -175,14 +175,14 @@ class AnalysisGenerationStoreIntegrationTest {
     @Test void reclamationLeavesConsumedQuotaAndLivePermits() {
         long userId = newUser();
         var saved = succeed(userId, fingerprint("done"), "已成功");
-        var expired = granted(store.acquire(userId, "2026-11", fingerprint("expired")));
+        var expired = granted(store.acquire(userId, accountOf(userId), "2026-11", fingerprint("expired")));
         clock.advance(Duration.ofMinutes(2));
-        var live = granted(store.acquire(userId, "2026-12", fingerprint("live")));
+        var live = granted(store.acquire(userId, accountOf(userId), "2026-12", fingerprint("live")));
         clock.advance(Duration.ofMinutes(2));
-        granted(store.acquire(userId, MONTH, fingerprint("next")));
-        assertThat(store.findCoordination(userId, live.yearMonth(), live.contextFingerprint()).orElseThrow().state())
+        granted(store.acquire(userId, accountOf(userId), MONTH, fingerprint("next")));
+        assertThat(store.findCoordination(userId, live.accountId(), live.yearMonth(), live.contextFingerprint()).orElseThrow().state())
                 .isEqualTo(GenerationState.IN_PROGRESS);
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("done")).orElseThrow()).isEqualTo(saved);
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("done")).orElseThrow()).isEqualTo(saved);
         applied(store.completeSuccess(live, report("仍有效"), provenance()));
         assertThat(store.completeSuccess(expired, report("过期"), provenance())).isInstanceOf(SuccessSettlement.StalePermit.class);
         assertThat(store.completeFailure(expired)).isInstanceOf(FailureSettlement.StalePermit.class);
@@ -193,13 +193,13 @@ class AnalysisGenerationStoreIntegrationTest {
     @Test void reclamationDoesNotTouchAnotherUsersReservation() {
         long owner = newUser();
         long other = newUser();
-        granted(store.acquire(other, MONTH, fingerprint("other")));
-        for (int i = 0; i < 3; i++) granted(store.acquire(owner, MONTH, fingerprint("held" + i)));
+        granted(store.acquire(other, accountOf(other), MONTH, fingerprint("other")));
+        for (int i = 0; i < 3; i++) granted(store.acquire(owner, accountOf(owner), MONTH, fingerprint("held" + i)));
         clock.advance(Duration.ofMinutes(4));
-        granted(store.acquire(owner, "2026-11", fingerprint("recovered")));
+        granted(store.acquire(owner, accountOf(owner), "2026-11", fingerprint("recovered")));
         assertThat(quota(owner)).isEqualTo(new Quota(1, 0));
         assertThat(quota(other)).isEqualTo(new Quota(1, 0));
-        assertThat(store.findCoordination(other, MONTH, fingerprint("other")).orElseThrow().state())
+        assertThat(store.findCoordination(other, accountOf(other), MONTH, fingerprint("other")).orElseThrow().state())
                 .isEqualTo(GenerationState.IN_PROGRESS);
     }
 
@@ -208,10 +208,10 @@ class AnalysisGenerationStoreIntegrationTest {
         var dated = new JdbcAnalysisGenerationStore(jdbc, transactions, clock, Duration.ofMinutes(30));
         long userId = newUser();
         var held = new ArrayList<GenerationPermit>();
-        for (int i = 0; i < 3; i++) held.add(granted(dated.acquire(userId, MONTH, fingerprint("night" + i))));
+        for (int i = 0; i < 3; i++) held.add(granted(dated.acquire(userId, accountOf(userId), MONTH, fingerprint("night" + i))));
         assertThat(held).allSatisfy(permit -> assertThat(permit.permitDate()).isEqualTo(LocalDate.of(2026, 10, 10)));
         clock.set(Instant.parse("2026-10-10T16:30:00Z"));
-        var next = granted(dated.acquire(userId, "2026-11", fingerprint("after-midnight")));
+        var next = granted(dated.acquire(userId, accountOf(userId), "2026-11", fingerprint("after-midnight")));
         assertThat(next.permitDate()).isEqualTo(LocalDate.of(2026, 10, 11));
         assertThat(quotaOn(userId, LocalDate.of(2026, 10, 10))).isEqualTo(new Quota(0, 0));
         assertThat(quotaOn(userId, LocalDate.of(2026, 10, 11))).isEqualTo(new Quota(1, 0));
@@ -226,7 +226,7 @@ class AnalysisGenerationStoreIntegrationTest {
         clock.set(Instant.parse("2026-10-10T15:50:00Z"));
         var dated = new JdbcAnalysisGenerationStore(jdbc, transactions, clock, Duration.ofHours(2));
         long userId = newUser();
-        var permit = granted(dated.acquire(userId, MONTH, fingerprint("midnight")));
+        var permit = granted(dated.acquire(userId, accountOf(userId), MONTH, fingerprint("midnight")));
         assertThat(permit.permitDate()).isEqualTo(LocalDate.of(2026, 10, 10));
         clock.set(Instant.parse("2026-10-10T16:10:00Z"));
         var snapshot = applied(dated.completeSuccess(permit, report("跨日"), provenance()));
@@ -240,8 +240,8 @@ class AnalysisGenerationStoreIntegrationTest {
         long userId = newUser();
         var first = succeed(userId, fingerprint("old"), "历史概况");
         var second = succeed(userId, fingerprint("new"), "最新概况");
-        assertThat(store.findSuccessful(userId, MONTH, fingerprint("old")).orElseThrow()).isEqualTo(first);
-        assertThat(store.findLatest(userId, MONTH).orElseThrow().id()).isEqualTo(second.id());
+        assertThat(store.findSuccessful(userId, accountOf(userId), MONTH, fingerprint("old")).orElseThrow()).isEqualTo(first);
+        assertThat(store.findLatest(userId, accountOf(userId), MONTH).orElseThrow().id()).isEqualTo(second.id());
         assertThat(countSnapshots(userId)).isEqualTo(2);
     }
 
@@ -249,16 +249,16 @@ class AnalysisGenerationStoreIntegrationTest {
         long first = newUser();
         long second = newUser();
         for (int i = 0; i < 3; i++) succeed(first, fingerprint("u" + i), "用户一");
-        assertThat(store.findLatest(second, MONTH)).isEmpty();
-        assertThat(store.findSuccessful(second, MONTH, fingerprint("u0"))).isEmpty();
-        granted(store.acquire(second, MONTH, fingerprint("own")));
+        assertThat(store.findLatest(second, accountOf(second), MONTH)).isEmpty();
+        assertThat(store.findSuccessful(second, accountOf(second), MONTH, fingerprint("u0"))).isEmpty();
+        granted(store.acquire(second, accountOf(second), MONTH, fingerprint("own")));
         assertThat(quota(first)).isEqualTo(new Quota(0, 3));
         assertThat(quota(second)).isEqualTo(new Quota(1, 0));
     }
 
     @Test void concurrentSettlementCannotExceedTheDailyCap() throws Exception {
         long userId = newUser();
-        var acquisitions = concurrent(() -> store.acquire(userId, MONTH, fingerprint(UUID.randomUUID().toString())), 6);
+        var acquisitions = concurrent(() -> store.acquire(userId, accountOf(userId), MONTH, fingerprint(UUID.randomUUID().toString())), 6);
         var permits = acquisitions.stream().filter(PermitAcquisition.Granted.class::isInstance)
                 .map(item -> ((PermitAcquisition.Granted) item).permit()).toList();
         assertThat(permits).hasSize(3);
@@ -270,11 +270,68 @@ class AnalysisGenerationStoreIntegrationTest {
         applied(store.completeSuccess(permits.get(2), report("三次"), provenance()));
         assertThat(countSnapshots(userId)).isEqualTo(3);
         assertThat(quota(userId)).isEqualTo(new Quota(0, 3));
-        assertThat(store.acquire(userId, MONTH, fingerprint("extra"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
+        assertThat(store.acquire(userId, accountOf(userId), MONTH, fingerprint("extra"))).isInstanceOf(PermitAcquisition.QuotaExceeded.class);
+    }
+
+
+    @Test void sameFingerprintOnTwoAccountsNeverReusesOrSharesInProgress() {
+        long userId = newUser();
+        long accountA = accountOf(userId);
+        long accountB = secondAccount(userId);
+        String fingerprint = fingerprint("same-facts");
+        var first = succeed(userId, accountA, fingerprint, "账户A");
+        assertThat(store.acquire(userId, accountA, MONTH, fingerprint)).isInstanceOf(PermitAcquisition.Reused.class);
+        assertThat(((PermitAcquisition.Reused) store.acquire(userId, accountA, MONTH, fingerprint)).snapshot().id())
+                .isEqualTo(first.id());
+        assertThat(store.findSuccessful(userId, accountB, MONTH, fingerprint)).isEmpty();
+        var onB = granted(store.acquire(userId, accountB, MONTH, fingerprint));
+        assertThat(onB.accountId()).isEqualTo(accountB);
+        assertThat(store.acquire(userId, accountB, MONTH, fingerprint)).isInstanceOf(PermitAcquisition.Busy.class);
+        assertThat(store.acquire(userId, accountA, MONTH, fingerprint)).isInstanceOf(PermitAcquisition.Reused.class);
+        assertThat(store.findCoordination(userId, accountA, MONTH, fingerprint).orElseThrow().state())
+                .isEqualTo(GenerationState.SUCCEEDED);
+        assertThat(store.findCoordination(userId, accountB, MONTH, fingerprint).orElseThrow().state())
+                .isEqualTo(GenerationState.IN_PROGRESS);
+    }
+
+    @Test void differentFingerprintsDoNotBleedStaleAcrossAccounts() {
+        long userId = newUser();
+        long accountA = accountOf(userId);
+        long accountB = secondAccount(userId);
+        var onA = succeed(userId, accountA, fingerprint("facts-a"), "仅A");
+        assertThat(store.findLatest(userId, accountB, MONTH)).isEmpty();
+        assertThat(store.findSuccessful(userId, accountB, MONTH, fingerprint("facts-a"))).isEmpty();
+        assertThat(store.findLatest(userId, accountA, MONTH).orElseThrow().id()).isEqualTo(onA.id());
+        var onB = succeed(userId, accountB, fingerprint("facts-b"), "仅B");
+        assertThat(store.findLatest(userId, accountA, MONTH).orElseThrow().id()).isEqualTo(onA.id());
+        assertThat(store.findLatest(userId, accountB, MONTH).orElseThrow().id()).isEqualTo(onB.id());
+    }
+
+    @Test void legacyNullAccountRowsRemainButAreInvisibleToAccountLookups() {
+        long userId = newUser();
+        long accountId = accountOf(userId);
+        jdbc.sql("""
+                INSERT INTO analysis_snapshots
+                    (user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure,
+                     surplus_reasons, points_to_watch, provider, model, prompt_version, latency_millis, permit_date,
+                     generated_at_utc)
+                VALUES
+                    (:userId, NULL, :month, :fingerprint, '遗留报告', '支出', '结余', '关注',
+                     'dashscope', 'qwen3.7-flash', 'v1', 1, '2026-10-01', '2026-10-01 00:00:00.000000')
+                """).param("userId", userId).param("month", MONTH).param("fingerprint", fingerprint("legacy")).update();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM analysis_snapshots WHERE user_id = :id AND account_id IS NULL")
+                .param("id", userId).query(Integer.class).single()).isEqualTo(1);
+        assertThat(store.findSuccessful(userId, accountId, MONTH, fingerprint("legacy"))).isEmpty();
+        assertThat(store.findLatest(userId, accountId, MONTH)).isEmpty();
+        assertThat(countSnapshots(userId)).isEqualTo(1);
     }
 
     private com.limingyuan.bookkeeping.analysis.application.AnalysisSnapshot succeed(long userId, String fingerprint, String overview) {
-        var permit = granted(store.acquire(userId, MONTH, fingerprint));
+        return succeed(userId, accountOf(userId), fingerprint, overview);
+    }
+
+    private com.limingyuan.bookkeeping.analysis.application.AnalysisSnapshot succeed(long userId, long accountId, String fingerprint, String overview) {
+        var permit = granted(store.acquire(userId, accountId, MONTH, fingerprint));
         return applied(store.completeSuccess(permit, report(overview), provenance()));
     }
 
@@ -333,7 +390,25 @@ class AnalysisGenerationStoreIntegrationTest {
         bootstrap.ensureUser(name, tokens.generate());
         long id = users.findByUsername(name).orElseThrow().getId();
         fixtures.add(id);
+        jdbc.sql("""
+                INSERT INTO accounts (user_id, name, kind, currency, opening_balance, created_time, updated_at_utc)
+                VALUES (:userId, :name, 'NORMAL', 'CNY', 0.00, '2020-01-01 00:00:00', '2026-10-10 00:00:00.000000')
+                """).param("userId", id).param("name", "账户-" + id).update();
         return id;
+    }
+
+    private long accountOf(long userId) {
+        return jdbc.sql("SELECT id FROM accounts WHERE user_id = :id ORDER BY id ASC LIMIT 1")
+                .param("id", userId).query(Long.class).single();
+    }
+
+    private long secondAccount(long userId) {
+        jdbc.sql("""
+                INSERT INTO accounts (user_id, name, kind, currency, opening_balance, created_time, updated_at_utc)
+                VALUES (:userId, :name, 'CREDIT', 'CNY', 0.00, '2020-01-01 00:00:00', '2026-10-10 00:00:00.000000')
+                """).param("userId", userId).param("name", "第二账户-" + userId).update();
+        return jdbc.sql("SELECT id FROM accounts WHERE user_id = :id ORDER BY id DESC LIMIT 1")
+                .param("id", userId).query(Long.class).single();
     }
 
     private static String fingerprint(String suffix) {

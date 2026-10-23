@@ -62,8 +62,8 @@ class MigrationIntegrationTest {
                 assertThat(rows.next()).isTrue();
                 legacyAccountId = rows.getLong(1);
             }
-            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision.
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
+            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision, V14 analysis account scope.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -213,6 +213,43 @@ class MigrationIntegrationTest {
                          """)) {
                 assertThat(rows.next()).isTrue();
                 assertThat(rows.getString(1)).isEqualTo("CASCADE");
+            }
+            try (var connection = DriverManager.getConnection(url, username, password);
+                 var statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO analysis_snapshots
+                            (user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure,
+                             surplus_reasons, points_to_watch, provider, model, prompt_version, latency_millis, permit_date,
+                             generated_at_utc)
+                        SELECT id, NULL, '2026-09', '1:legacy-v14', '遗留', '支出', '结余', '关注',
+                               'dashscope', 'qwen3.7-flash', 'v1', 1, '2026-09-01', '2026-09-01 00:00:00.000000'
+                        FROM users WHERE username = 'v10-upgrade'
+                        """);
+                try (var rows = statement.executeQuery("""
+                        SELECT is_nullable FROM information_schema.columns
+                        WHERE table_schema = DATABASE() AND table_name = 'analysis_snapshots'
+                          AND column_name = 'account_id'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getString(1)).isEqualTo("YES");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'analysis_generations'
+                          AND constraint_type = 'UNIQUE'
+                        """)) {
+                    var names = new ArrayList<String>();
+                    while (rows.next()) names.add(rows.getString(1));
+                    assertThat(names).contains("uk_analysis_generations_account_scope");
+                    assertThat(names).doesNotContain("uk_analysis_generations_scope");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT COUNT(*) FROM analysis_snapshots
+                        WHERE account_id IS NULL AND context_fingerprint = '1:legacy-v14'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isEqualTo(1);
+                }
             }
         } finally {
             flyway.clean();
