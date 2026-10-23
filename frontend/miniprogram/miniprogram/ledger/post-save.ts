@@ -1,3 +1,5 @@
+import { businessMonth } from "../transaction/business-time";
+import type { TransferPostSavePayload } from "../transfer/post-save";
 import type { LedgerEntry } from "./ledger";
 import type { PostSaveResult } from "../transaction/form";
 import type { SubmissionPhase } from "../transaction/submission";
@@ -6,10 +8,11 @@ const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export const LOCATE_MISS_MESSAGE = "交易已保存，但暂未定位到记录";
 export const ADJUSTMENT_LOCATE_MISS_MESSAGE = "余额调整已保存，但暂未定位到记录";
+export const TRANSFER_LOCATE_MISS_MESSAGE = "转账已保存，但暂未定位到记录";
 export const HIGHLIGHT_MS = 2500;
 
 export interface LedgerLocateIntent {
-  readonly kind: "transaction" | "adjustment";
+  readonly kind: "transaction" | "adjustment" | "transfer";
   readonly recordId: number;
   readonly targetMonth: string;
 }
@@ -80,6 +83,41 @@ export function acceptAdjustmentCreated(state: LocateNavigation, payload: unknow
   return acceptLocate(pending);
 }
 
+export function acceptTransferCreated(state: LocateNavigation, payload: unknown): LocateNavigation {
+  const pending = parseTransferCreated(payload);
+  if (pending === null) {
+    return state;
+  }
+  return acceptLocate(pending);
+}
+
+export function parseTransferCreated(value: unknown): LedgerLocateIntent | null {
+  const saved = parseTransferPostSave(value);
+  if (saved === null) {
+    return null;
+  }
+  const targetMonth = resolveTransferTargetMonth(saved.sourceAccountId, saved);
+  if (targetMonth === null) {
+    return null;
+  }
+  return { kind: "transfer", recordId: saved.transferId, targetMonth };
+}
+
+export function resolveTransferTargetMonth(
+  sourceAccountId: number,
+  transfer: Pick<TransferPostSavePayload, "fromAccountId" | "toAccountId" | "fromBusinessTime" | "toBusinessTime">,
+): string | null {
+  let businessTime: string;
+  if (sourceAccountId === transfer.fromAccountId) {
+    businessTime = transfer.fromBusinessTime;
+  } else if (sourceAccountId === transfer.toAccountId) {
+    businessTime = transfer.toBusinessTime;
+  } else {
+    businessTime = transfer.toBusinessTime;
+  }
+  return businessMonth(businessTime);
+}
+
 function acceptLocate(pending: LedgerLocateIntent): LocateNavigation {
   return { selectedMonth: pending.targetMonth, pending, highlightKey: "" };
 }
@@ -119,18 +157,25 @@ export function settleLedger(pending: LedgerLocateIntent | null, outcome: "succe
   }
   const locate = locateLedgerRecord(items, pending);
   if (locate === null) {
-    return { pending, locate: null, missMessage: pending.kind === "adjustment" ? ADJUSTMENT_LOCATE_MISS_MESSAGE : LOCATE_MISS_MESSAGE };
+    const missMessage =
+      pending.kind === "adjustment"
+        ? ADJUSTMENT_LOCATE_MISS_MESSAGE
+        : pending.kind === "transfer"
+          ? TRANSFER_LOCATE_MISS_MESSAGE
+          : LOCATE_MISS_MESSAGE;
+    return { pending, locate: null, missMessage };
   }
   return { pending: null, locate, missMessage: "" };
 }
 
 export function locateLedgerRecord(items: readonly LedgerEntry[], intent: LedgerLocateIntent): LocatedTransaction | null {
-  const wanted = intent.kind === "transaction" ? "TRANSACTION" : "BALANCE_ADJUSTMENT";
+  const wanted =
+    intent.kind === "transaction" ? "TRANSACTION" : intent.kind === "transfer" ? "TRANSFER" : "BALANCE_ADJUSTMENT";
   const index = items.findIndex((item) => item.kind === wanted && item.id === intent.recordId);
   if (index < 0) {
     return null;
   }
-  const prefix = intent.kind === "transaction" ? "transaction" : "adjustment";
+  const prefix = intent.kind === "transaction" ? "transaction" : intent.kind === "transfer" ? "transfer" : "adjustment";
   return { key: `${prefix}-${intent.recordId}`, index, disposition: index === 0 ? "top" : "center" };
 }
 
@@ -179,4 +224,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPositiveId(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function parseTransferPostSave(value: unknown): TransferPostSavePayload | null {
+  if (
+    !isRecord(value) ||
+    !isPositiveId(value.sourceAccountId) ||
+    !isPositiveId(value.transferId) ||
+    !isPositiveId(value.fromAccountId) ||
+    !isPositiveId(value.toAccountId) ||
+    typeof value.fromBusinessTime !== "string" ||
+    typeof value.toBusinessTime !== "string"
+  ) {
+    return null;
+  }
+  return {
+    sourceAccountId: value.sourceAccountId,
+    transferId: value.transferId,
+    fromAccountId: value.fromAccountId,
+    toAccountId: value.toAccountId,
+    fromBusinessTime: value.fromBusinessTime,
+    toBusinessTime: value.toBusinessTime,
+  };
 }

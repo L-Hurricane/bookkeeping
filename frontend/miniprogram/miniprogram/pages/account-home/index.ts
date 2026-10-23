@@ -13,6 +13,7 @@ import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger
 import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
 import {
   acceptAdjustmentCreated,
+  acceptTransferCreated,
   acceptTransactionCreated,
   applyAcceptedLocate,
   canRunLocate,
@@ -48,6 +49,12 @@ import {
 } from "../../transaction/transaction-search";
 import { validateBusinessTime } from "../../transaction/business-time";
 import { adjustmentCreatePath, adjustmentDetailPath, canOpenAdjustmentDetail, canOpenBalanceAdjustment } from "../../balance-adjustment/navigation";
+import {
+  canOpenTransfer,
+  canOpenTransferDetail,
+  transferCreatePath,
+  transferDetailPath,
+} from "../../transfer/navigation";
 import { statisticsPagePath } from "../../statistics/drilldown";
 import { canOpenStatistics } from "../../statistics/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
@@ -320,9 +327,40 @@ Page({
     });
   },
 
+  onTransfer() {
+    if (this.archived || !canOpenTransfer(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({
+      url: transferCreatePath(this.accountId, this.accountCreatedTime),
+      events: {
+        transferCreated: (result: unknown) => {
+          this.receiveTransferCreated(result);
+        },
+      },
+    });
+  },
+
   onOpenRecord(event: WechatMiniprogram.BaseEvent) {
     const kind = event.currentTarget.dataset["kind"];
     const recordId = Number(event.currentTarget.dataset["id"]);
+    if (typeof kind === "string" && canOpenTransferDetail(kind, this.loadGuard.loggingOut)) {
+      if (!Number.isSafeInteger(recordId) || recordId <= 0 || !validateBusinessTime(this.accountCreatedTime)) {
+        return;
+      }
+      wx.navigateTo({
+        url: transferDetailPath(this.accountId, recordId, this.accountCreatedTime),
+        events: {
+          transferUpdated: (result: unknown) => {
+            this.receiveTransferCreated(result);
+          },
+          listStale: () => {
+            this.detailReturn = noteListStale(this.openList()).visit;
+          },
+        },
+      });
+      return;
+    }
     if (typeof kind === "string" && canOpenAdjustmentDetail(kind, this.loadGuard.loggingOut)) {
       if (!Number.isSafeInteger(recordId) || recordId <= 0) {
         return;
@@ -380,6 +418,11 @@ Page({
   receiveAdjustmentCreated(payload: unknown) {
     const current = this.locateNavigation();
     this.receiveLocate(current, acceptAdjustmentCreated(current, payload));
+  },
+
+  receiveTransferCreated(payload: unknown) {
+    const current = this.locateNavigation();
+    this.receiveLocate(current, acceptTransferCreated(current, payload));
   },
 
   receiveTransactionCreated(payload: unknown) {

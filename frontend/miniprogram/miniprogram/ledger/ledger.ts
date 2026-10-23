@@ -41,7 +41,15 @@ export interface BalanceAdjustmentEntry {
   readonly businessTime: string;
 }
 
-export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry;
+export interface TransferEntry {
+  readonly kind: "TRANSFER";
+  readonly id: number;
+  readonly displayName: string;
+  readonly amount: string;
+  readonly businessTime: string;
+}
+
+export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry | TransferEntry;
 
 export interface Ledger {
   readonly accountId: number;
@@ -54,7 +62,7 @@ export interface Ledger {
 export interface LedgerRow {
   readonly recordId: number;
   readonly key: string;
-  readonly kind: "transaction" | "adjustment";
+  readonly kind: "transaction" | "adjustment" | "transfer";
   readonly title: string;
   readonly detail: string;
   readonly typeLabel: string;
@@ -108,6 +116,19 @@ export function formatMoneyLabel(amount: string): string {
 
 export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
   return items.map((item) => {
+    if (item.kind === "TRANSFER") {
+      return {
+        recordId: item.id,
+        key: `transfer-${item.id}`,
+        kind: "transfer",
+        title: item.displayName,
+        detail: "",
+        typeLabel: "转账",
+        amountLabel: formatMoneyLabel(item.amount),
+        amountToneClass: moneyToneClass(item.amount),
+        timeLabel: formatBusinessTime(item.businessTime),
+      };
+    }
     if (item.kind === "BALANCE_ADJUSTMENT") {
       return {
         recordId: item.id,
@@ -172,6 +193,18 @@ function parseEntry(value: unknown): LedgerEntry | null {
     }
     return {
       kind: "BALANCE_ADJUSTMENT",
+      id: value.id,
+      displayName: value.displayName,
+      amount: value.amount,
+      businessTime: value.businessTime,
+    };
+  }
+  if (value.kind === "TRANSFER") {
+    if (typeof value.displayName !== "string" || value.displayName.length === 0) {
+      return null;
+    }
+    return {
+      kind: "TRANSFER",
       id: value.id,
       displayName: value.displayName,
       amount: value.amount,

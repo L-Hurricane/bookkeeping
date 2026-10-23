@@ -12,6 +12,7 @@ import { createLedgerApi, type LedgerApi } from "./ledger";
 import { createStatisticsApi, type StatisticsApi } from "./statistics";
 import { createTagApi, type TagApi } from "./tag";
 import { createTransactionApi, type TransactionApi } from "./transaction";
+import { createTransferApi, type TransferApi } from "./transfer";
 
 export const authNavigation: AuthNavigation = createAuthNavigation({
   currentRoute() {
@@ -43,3 +44,4 @@ export const monthlyAnalysisApi: MonthlyAnalysisApi = createMonthlyAnalysisApi(h
 export const tagApi: TagApi = createTagApi(http);
 export const transactionApi: TransactionApi = createTransactionApi(http);
 export const balanceAdjustmentApi: BalanceAdjustmentApi = createBalanceAdjustmentApi(http);
+export const transferApi: TransferApi = createTransferApi(http);

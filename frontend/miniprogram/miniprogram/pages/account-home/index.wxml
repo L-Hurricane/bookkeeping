@@ -18,6 +18,7 @@
       <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
       <text class="hint" wx:if="{{negativeBalanceHint}}">{{negativeBalanceHint}}</text>
       <button class="adjust" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
+      <button class="transfer" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onTransfer">转账</button>
       <button class="create" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
     </view>
     <view class="month">

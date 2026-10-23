@@ -160,6 +160,16 @@
   font-size: 28rpx;
 }
 
+.transfer {
+  margin-top: 12rpx;
+  background: #f0f0f0;
+  color: #111111;
+}
+
+.type.transfer {
+  color: #245bdb;
+}
+
 .create {
   margin-top: 12rpx;
   background: #111111;

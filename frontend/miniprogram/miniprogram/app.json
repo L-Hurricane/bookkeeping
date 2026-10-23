@@ -12,6 +12,8 @@
     "pages/transaction-detail/index",
     "pages/balance-adjustment-create/index",
     "pages/balance-adjustment-detail/index",
+    "pages/transfer-create/index",
+    "pages/transfer-detail/index",
     "pages/statistics/index",
     "pages/statistics-detail/index",
     "pages/monthly-analysis/index"
