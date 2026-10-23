@@ -32,8 +32,8 @@ public class AccountPermanentDeletionService {
     public record AffectedAccountView(long accountId, String name, String balanceBefore, String balanceAfter,
             String change) { }
 
-    public record PreviewView(int transactionCount, int adjustmentCount, int transferCount, int analysisRecordCount,
-            List<AffectedAccountView> affectedAccounts, String previewToken) { }
+    public record PreviewView(int transactionCount, int adjustmentCount, int transferCount, int analysisSnapshotCount,
+            int analysisGenerationCount, List<AffectedAccountView> affectedAccounts, String previewToken) { }
 
     public PreviewView preview(long accountId) {
         long userId = context.userId();
@@ -49,7 +49,8 @@ public class AccountPermanentDeletionService {
                 snapshot.transactionIds().size(),
                 snapshot.adjustmentIds().size(),
                 snapshot.transfers().size(),
-                store.countAnalysisRecords(accountId),
+                snapshot.analysisSnapshotIds().size(),
+                snapshot.analysisGenerationIds().size(),
                 AccountPermanentDeletionImpacts.views(impacts),
                 AccountPermanentDeletionPreviewToken.issue(snapshot.basis()));
     }
@@ -81,8 +82,8 @@ public class AccountPermanentDeletionService {
             if (!AccountPermanentDeletionPreviewToken.matches(current.basis(), token)) {
                 throw previewStale();
             }
-            if (store.countAnalysisRecords(accountId) > 0) {
-                throw analysisRecordsRemain();
+            if (store.hasAnalysisReferenceConflict(accountId, userId)) {
+                throw analysisReferenceConflict();
             }
             deleteAll(refreshed, current);
         });
@@ -91,6 +92,8 @@ public class AccountPermanentDeletionService {
     private void deleteAll(AccountEntity account, DeletionSnapshot snapshot) {
         long accountId = account.getId();
         long userId = context.userId();
+        store.deleteAnalysisGenerations(accountId, userId);
+        store.deleteAnalysisSnapshots(accountId, userId);
         store.deleteTransactionTags(snapshot.transactionIds());
         store.deleteTransactions(accountId, userId);
         store.deleteAdjustments(accountId, userId);
@@ -103,6 +106,8 @@ public class AccountPermanentDeletionService {
         long userId = context.userId();
         List<Long> transactionIds = store.findTransactionIds(accountId, userId);
         List<Long> adjustmentIds = store.findAdjustmentIds(accountId, userId);
+        List<Long> analysisSnapshotIds = store.findAnalysisSnapshotIds(accountId, userId);
+        List<Long> analysisGenerationIds = store.findAnalysisGenerationIds(accountId, userId);
         List<TransferBasis> transferRows = store.findTransfersTouchingAccount(accountId, userId);
         var balanceBefore = AccountPermanentDeletionImpacts.counterpartBalanceBefore(
                 accountId, transferRows, store::currentBalance);
@@ -112,8 +117,10 @@ public class AccountPermanentDeletionService {
                     .orElseThrow(this::missing)
                     .getName());
         }
-        var basis = new Basis(accountId, transactionIds, adjustmentIds, transferRows, balanceBefore);
-        return new DeletionSnapshot(transactionIds, adjustmentIds, transferRows, balanceBefore, names, basis);
+        var basis = new Basis(accountId, transactionIds, adjustmentIds, analysisSnapshotIds, analysisGenerationIds,
+                transferRows, balanceBefore);
+        return new DeletionSnapshot(transactionIds, adjustmentIds, analysisSnapshotIds, analysisGenerationIds,
+                transferRows, balanceBefore, names, basis);
     }
 
     private void requireArchived(AccountEntity account) {
@@ -134,13 +141,15 @@ public class AccountPermanentDeletionService {
         return new ApiFailure(409, "PREVIEW_STALE", "删除影响已变化，请重新预览并确认");
     }
 
-    private ApiFailure analysisRecordsRemain() {
-        return new ApiFailure(409, "ANALYSIS_RECORDS_REMAIN", "该账户仍有分析记录，本次未删除任何数据");
+    private ApiFailure analysisReferenceConflict() {
+        return new ApiFailure(409, "ANALYSIS_REFERENCE_CONFLICT", "分析记录存在跨账户或跨用户引用，本次未删除任何数据");
     }
 
     private record DeletionSnapshot(
             List<Long> transactionIds,
             List<Long> adjustmentIds,
+            List<Long> analysisSnapshotIds,
+            List<Long> analysisGenerationIds,
             List<TransferBasis> transfers,
             Map<Long, java.math.BigDecimal> counterpartBalanceBefore,
             Map<Long, String> accountNames,

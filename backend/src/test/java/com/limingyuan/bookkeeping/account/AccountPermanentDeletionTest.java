@@ -101,16 +101,117 @@ class AccountPermanentDeletionTest {
     }
 
     @Test
-    void analysisRecordsBlockDeletion() {
+    void previewCountsAndDeletesAccountAnalysisRowsInOrder() {
         var store = new InMemoryDeletionStore(1L);
         store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
-        store.analysisCount = 2;
+        store.addSnapshot(20L, 1L, 301L);
+        store.addSnapshot(20L, 1L, 302L);
+        store.addGeneration(20L, 1L, 401L, 301L);
+        store.addGeneration(20L, 1L, 402L, null);
+        store.transactionIds.add(1L);
         var service = service(store, 1L);
         var preview = service.preview(20L);
-        assertThat(preview.analysisRecordCount()).isEqualTo(2);
+        assertThat(preview.analysisSnapshotCount()).isEqualTo(2);
+        assertThat(preview.analysisGenerationCount()).isEqualTo(2);
+        service.execute(20L, preview.previewToken());
+        assertThat(store.deletionSteps).containsExactly(
+                "analysis_generations",
+                "analysis_snapshots",
+                "transaction_tags",
+                "transactions",
+                "adjustments",
+                "transfers",
+                "account");
+        assertThat(store.findAnalysisSnapshotIds(20L, 1L)).isEmpty();
+        assertThat(store.findAnalysisGenerationIds(20L, 1L)).isEmpty();
+        assertThat(store.findAccount(20L, 1L)).isEmpty();
+    }
+
+    @Test
+    void analysisRowsAllowConfirmAndDelete() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.addGeneration(20L, 1L, 501L, null);
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
+        assertThat(preview.analysisGenerationCount()).isEqualTo(1);
+        service.execute(20L, preview.previewToken());
+        assertThat(store.deleteInvoked).isTrue();
+    }
+
+    @Test
+    void otherAccountOtherUserNullQuotaAndLocksRemainUntouched() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.putAccount(archived(21L, 1L, "其他账户", AccountLifecycle.ARCHIVED));
+        store.addSnapshot(20L, 1L, 601L);
+        store.addSnapshot(21L, 1L, 602L);
+        store.addSnapshot(20L, 2L, 603L);
+        store.addSnapshot(null, 1L, 604L);
+        store.addGeneration(20L, 1L, 701L, 601L);
+        store.addGeneration(21L, 1L, 702L, 602L);
+        store.addGeneration(null, 1L, 703L, 604L);
+        store.quotaDays.put(1L, 1);
+        store.userLocks.add(1L);
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
+        service.execute(20L, preview.previewToken());
+        assertThat(store.snapshotExists(601L)).isFalse();
+        assertThat(store.snapshotExists(602L)).isTrue();
+        assertThat(store.snapshotExists(603L)).isTrue();
+        assertThat(store.snapshotExists(604L)).isTrue();
+        assertThat(store.generationExists(701L)).isFalse();
+        assertThat(store.generationExists(702L)).isTrue();
+        assertThat(store.generationExists(703L)).isTrue();
+        assertThat(store.quotaDays.get(1L)).isEqualTo(1);
+        assertThat(store.userLocks).containsExactly(1L);
+    }
+
+    @Test
+    void crossAccountGenerationReferenceRejectsWithoutDeleting() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.putAccount(archived(21L, 1L, "其他", AccountLifecycle.ARCHIVED));
+        store.addSnapshot(21L, 1L, 801L);
+        store.addGeneration(20L, 1L, 901L, 801L);
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
         assertThatThrownBy(() -> service.execute(20L, preview.previewToken()))
                 .isInstanceOf(ApiFailure.class)
-                .satisfies(ex -> assertThat(((ApiFailure) ex).code()).isEqualTo("ANALYSIS_RECORDS_REMAIN"));
+                .satisfies(ex -> {
+                    var failure = (ApiFailure) ex;
+                    assertThat(failure.code()).isEqualTo("ANALYSIS_REFERENCE_CONFLICT");
+                    assertThat(failure.getMessage()).contains("跨账户");
+                });
+        assertThat(store.deleteInvoked).isFalse();
+        assertThat(store.deletionSteps).isEmpty();
+        assertThat(store.findAccount(20L, 1L)).isPresent();
+    }
+
+    @Test
+    void inboundCrossAccountSnapshotReferenceRejectsWithoutDeleting() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.addSnapshot(20L, 1L, 811L);
+        store.addGeneration(null, 1L, 911L, 811L);
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
+        assertThatThrownBy(() -> service.execute(20L, preview.previewToken()))
+                .isInstanceOf(ApiFailure.class)
+                .satisfies(ex -> assertThat(((ApiFailure) ex).code()).isEqualTo("ANALYSIS_REFERENCE_CONFLICT"));
+        assertThat(store.deleteInvoked).isFalse();
+    }
+
+    @Test
+    void analysisIdsAddedAfterPreviewRejectAsStale() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
+        store.addSnapshot(20L, 1L, 999L);
+        assertThatThrownBy(() -> service.execute(20L, preview.previewToken()))
+                .isInstanceOf(ApiFailure.class)
+                .satisfies(ex -> assertThat(((ApiFailure) ex).code()).isEqualTo("PREVIEW_STALE"));
         assertThat(store.deleteInvoked).isFalse();
     }
 
@@ -131,6 +232,23 @@ class AccountPermanentDeletionTest {
         assertThat(store.deletedAdjustmentIds).containsExactly(2L);
         assertThat(store.findAccount(20L, 1L)).isEmpty();
         assertThat(store.transfers).isEmpty();
+    }
+
+    @Test
+    void failureBeforeAccountDeleteRollsBackTransaction() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.transactionIds.add(1L);
+        store.failOnStep = "analysis_generations";
+        var tx = new RecordingTransactionManager();
+        var service = new AccountPermanentDeletionService(store, new RecordingLocks(store), userContext(1L), tx);
+        var preview = service.preview(20L);
+        assertThatThrownBy(() -> service.execute(20L, preview.previewToken())).isInstanceOf(RuntimeException.class);
+        assertThat(tx.committed).isFalse();
+        assertThat(tx.rolledBack).isTrue();
+        assertThat(store.findAccount(20L, 1L)).isPresent();
+        assertThat(store.transactionIds).containsExactly(1L);
+        assertThat(store.deleteInvoked).isFalse();
     }
 
     @Test
@@ -214,8 +332,13 @@ class AccountPermanentDeletionTest {
         final List<Long> adjustmentIds = new ArrayList<>();
         final List<TransferBasis> transfers = new ArrayList<>();
         final Map<Long, BigDecimal> balances = new HashMap<>();
-        int analysisCount;
+        final Map<Long, AnalysisSnapshotRow> snapshots = new LinkedHashMap<>();
+        final Map<Long, AnalysisGenerationRow> generations = new LinkedHashMap<>();
+        final Map<Long, Integer> quotaDays = new HashMap<>();
+        final List<Long> userLocks = new ArrayList<>();
+        final List<String> deletionSteps = new ArrayList<>();
         boolean deleteInvoked;
+        String failOnStep;
         final List<Long> deletedTransferIds = new ArrayList<>();
         final List<Long> deletedTransactionIds = new ArrayList<>();
         final List<Long> deletedAdjustmentIds = new ArrayList<>();
@@ -227,6 +350,22 @@ class AccountPermanentDeletionTest {
         void putAccount(AccountEntity account) {
             accounts.put(account.getId(), account);
             balances.putIfAbsent(account.getId(), account.getOpeningBalance());
+        }
+
+        void addSnapshot(Long accountId, long userId, long id) {
+            snapshots.put(id, new AnalysisSnapshotRow(id, userId, accountId));
+        }
+
+        void addGeneration(Long accountId, long userId, long id, Long snapshotId) {
+            generations.put(id, new AnalysisGenerationRow(id, userId, accountId, snapshotId));
+        }
+
+        boolean snapshotExists(long id) {
+            return snapshots.containsKey(id);
+        }
+
+        boolean generationExists(long id) {
+            return generations.containsKey(id);
         }
 
         @Override
@@ -264,37 +403,117 @@ class AccountPermanentDeletionTest {
         }
 
         @Override
-        public int countAnalysisRecords(long accountId) {
-            return analysisCount;
+        public List<Long> findAnalysisSnapshotIds(long accountId, long userId) {
+            return snapshots.values().stream()
+                    .filter(row -> row.userId == userId && row.accountId != null && row.accountId == accountId)
+                    .map(AnalysisSnapshotRow::id)
+                    .sorted()
+                    .toList();
         }
 
         @Override
-        public void deleteTransactionTags(List<Long> transactionIds) { }
+        public List<Long> findAnalysisGenerationIds(long accountId, long userId) {
+            return generations.values().stream()
+                    .filter(row -> row.userId == userId && row.accountId != null && row.accountId == accountId)
+                    .map(AnalysisGenerationRow::id)
+                    .sorted()
+                    .toList();
+        }
+
+        @Override
+        public boolean hasAnalysisReferenceConflict(long accountId, long userId) {
+            for (var generation : generations.values()) {
+                if (generation.userId != userId || generation.accountId == null || generation.accountId != accountId) {
+                    continue;
+                }
+                if (generation.snapshotId == null) {
+                    continue;
+                }
+                var snapshot = snapshots.get(generation.snapshotId);
+                if (snapshot == null || snapshot.userId != userId || snapshot.accountId == null
+                        || snapshot.accountId != accountId) {
+                    return true;
+                }
+            }
+            for (var snapshot : snapshots.values()) {
+                if (snapshot.userId != userId || snapshot.accountId == null || snapshot.accountId != accountId) {
+                    continue;
+                }
+                for (var generation : generations.values()) {
+                    if (generation.snapshotId != null && generation.snapshotId == snapshot.id) {
+                        if (generation.userId != userId || generation.accountId == null
+                                || generation.accountId != accountId) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public void deleteAnalysisGenerations(long accountId, long userId) {
+            recordStep("analysis_generations");
+            generations.entrySet().removeIf(entry -> entry.getValue().userId == userId
+                    && entry.getValue().accountId != null
+                    && entry.getValue().accountId == accountId);
+        }
+
+        @Override
+        public void deleteAnalysisSnapshots(long accountId, long userId) {
+            recordStep("analysis_snapshots");
+            snapshots.entrySet().removeIf(entry -> entry.getValue().userId == userId
+                    && entry.getValue().accountId != null
+                    && entry.getValue().accountId == accountId);
+        }
+
+        @Override
+        public void deleteTransactionTags(List<Long> transactionIds) {
+            recordStep("transaction_tags");
+        }
 
         @Override
         public void deleteTransactions(long accountId, long userId) {
+            recordStep("transactions");
             deletedTransactionIds.addAll(transactionIds);
             transactionIds.clear();
         }
 
         @Override
         public void deleteAdjustments(long accountId, long userId) {
+            recordStep("adjustments");
             deletedAdjustmentIds.addAll(adjustmentIds);
             adjustmentIds.clear();
         }
 
         @Override
         public void deleteTransfers(long userId, List<Long> transferIds) {
+            recordStep("transfers");
             deletedTransferIds.addAll(transferIds);
             transfers.removeIf(t -> transferIds.contains(t.id()));
         }
 
         @Override
         public void deleteAccount(AccountEntity account) {
+            recordStep("account");
+            if ("account".equals(failOnStep)) {
+                throw new RuntimeException("simulated account delete failure");
+            }
             deleteInvoked = true;
             accounts.remove(account.getId());
         }
+
+        private void recordStep(String step) {
+            if (step.equals(failOnStep)) {
+                throw new RuntimeException("simulated failure at " + step);
+            }
+            deletionSteps.add(step);
+        }
     }
+
+    private record AnalysisSnapshotRow(long id, long userId, Long accountId) { }
+
+    private record AnalysisGenerationRow(long id, long userId, Long accountId, Long snapshotId) { }
 
     private static final class RecordingLocks implements AccountDeletionLocks {
         private final InMemoryDeletionStore store;
@@ -313,6 +532,29 @@ class AccountPermanentDeletionTest {
                 locked.add(store.accounts.get(accountId));
             }
             return locked;
+        }
+    }
+
+    private static final class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+        boolean committed;
+        boolean rolledBack;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) { }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            committed = true;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            rolledBack = true;
         }
     }
 }

@@ -17,7 +17,15 @@ public interface AccountPermanentDeletionStore {
 
     BigDecimal currentBalance(long accountId);
 
-    int countAnalysisRecords(long accountId);
+    List<Long> findAnalysisSnapshotIds(long accountId, long userId);
+
+    List<Long> findAnalysisGenerationIds(long accountId, long userId);
+
+    boolean hasAnalysisReferenceConflict(long accountId, long userId);
+
+    void deleteAnalysisGenerations(long accountId, long userId);
+
+    void deleteAnalysisSnapshots(long accountId, long userId);
 
     void deleteTransactionTags(List<Long> transactionIds);
 

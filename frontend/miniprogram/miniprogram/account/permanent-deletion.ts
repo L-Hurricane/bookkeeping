@@ -14,7 +14,8 @@ export interface PermanentDeletionPreview {
   readonly transactionCount: number;
   readonly adjustmentCount: number;
   readonly transferCount: number;
-  readonly analysisRecordCount: number;
+  readonly analysisSnapshotCount: number;
+  readonly analysisGenerationCount: number;
   readonly affectedAccounts: readonly PermanentDeletionAffectedAccount[];
   readonly previewToken: string;
 }
@@ -33,14 +34,17 @@ export interface AffectedAccountRow {
 export type PermanentDeletionExecuteOutcome =
   | "success"
   | "preview_stale"
+  | "analysis_reference_conflict"
   | "analysis_records_remain"
   | "account_not_archived"
   | "not_found"
   | "other";
 
 export const PERMANENT_DELETION_IRREVERSIBLE_HINT =
-  "永久删除后不可恢复。该账户及其普通交易、余额调整和关联转账将一并删除。";
+  "永久删除后不可恢复。该账户及其普通交易、余额调整、关联转账，以及本账户的 AI 历史报告与生成记录将一并删除。";
 export const PERMANENT_DELETION_NO_COUNTERPART_HINT = "没有其他账户会因本次删除而改变余额。";
+export const ANALYSIS_REFERENCE_CONFLICT_MESSAGE =
+  "分析记录存在跨账户或跨用户引用，本次未删除任何数据";
 export const ANALYSIS_RECORDS_REMAIN_MESSAGE = "该账户仍有分析记录，本次未删除任何数据";
 export const PREVIEW_STALE_MESSAGE = "删除影响已变化，请重新预览并确认";
 export const ACCOUNT_NOT_ARCHIVED_MESSAGE = "只有已归档账户可以永久删除";
@@ -89,29 +93,30 @@ function parseAffectedAccount(value: unknown): PermanentDeletionAffectedAccount 
   };
 }
 
+function parseNonNegativeInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
 export function parsePermanentDeletionPreview(value: unknown): PermanentDeletionPreview | null {
   if (!isRecord(value)) {
     return null;
   }
-  const transactionCount = value.transactionCount;
-  const adjustmentCount = value.adjustmentCount;
-  const transferCount = value.transferCount;
-  const analysisRecordCount = value.analysisRecordCount;
+  const transactionCount = parseNonNegativeInt(value.transactionCount);
+  const adjustmentCount = parseNonNegativeInt(value.adjustmentCount);
+  const transferCount = parseNonNegativeInt(value.transferCount);
+  const analysisSnapshotCount = parseNonNegativeInt(value.analysisSnapshotCount);
+  const analysisGenerationCount = parseNonNegativeInt(value.analysisGenerationCount);
   const previewToken = value.previewToken;
   const affectedRaw = value.affectedAccounts;
   if (
-    typeof transactionCount !== "number" ||
-    !Number.isInteger(transactionCount) ||
-    transactionCount < 0 ||
-    typeof adjustmentCount !== "number" ||
-    !Number.isInteger(adjustmentCount) ||
-    adjustmentCount < 0 ||
-    typeof transferCount !== "number" ||
-    !Number.isInteger(transferCount) ||
-    transferCount < 0 ||
-    typeof analysisRecordCount !== "number" ||
-    !Number.isInteger(analysisRecordCount) ||
-    analysisRecordCount < 0
+    transactionCount === null ||
+    adjustmentCount === null ||
+    transferCount === null ||
+    analysisSnapshotCount === null ||
+    analysisGenerationCount === null
   ) {
     return null;
   }
@@ -133,7 +138,8 @@ export function parsePermanentDeletionPreview(value: unknown): PermanentDeletion
     transactionCount,
     adjustmentCount,
     transferCount,
-    analysisRecordCount,
+    analysisSnapshotCount,
+    analysisGenerationCount,
     affectedAccounts,
     previewToken: previewToken as string,
   };
@@ -156,8 +162,8 @@ export function affectedAccountRows(preview: PermanentDeletionPreview): Affected
   }));
 }
 
-export function canConfirmPermanentDeletion(analysisRecordCount: number, submitting: boolean): boolean {
-  return !submitting && analysisRecordCount === 0;
+export function canConfirmPermanentDeletion(submitting: boolean): boolean {
+  return !submitting;
 }
 
 export function classifyPermanentDeletionExecute(error: unknown): PermanentDeletionExecuteOutcome {
@@ -169,6 +175,9 @@ export function classifyPermanentDeletionExecute(error: unknown): PermanentDelet
   }
   if (error.code === "PREVIEW_STALE") {
     return "preview_stale";
+  }
+  if (error.code === "ANALYSIS_REFERENCE_CONFLICT") {
+    return "analysis_reference_conflict";
   }
   if (error.code === "ANALYSIS_RECORDS_REMAIN") {
     return "analysis_records_remain";
@@ -186,6 +195,9 @@ export function isPermanentDeletionExecuteSuccess(outcome: PermanentDeletionExec
 export function permanentDeletionExecuteErrorMessage(outcome: PermanentDeletionExecuteOutcome): string {
   if (outcome === "preview_stale") {
     return PREVIEW_STALE_MESSAGE;
+  }
+  if (outcome === "analysis_reference_conflict") {
+    return ANALYSIS_REFERENCE_CONFLICT_MESSAGE;
   }
   if (outcome === "analysis_records_remain") {
     return ANALYSIS_RECORDS_REMAIN_MESSAGE;

@@ -20,7 +20,8 @@ const previewBody = {
   transactionCount: 2,
   adjustmentCount: 1,
   transferCount: 1,
-  analysisRecordCount: 0,
+  analysisSnapshotCount: 1,
+  analysisGenerationCount: 2,
   affectedAccounts: [
     {
       accountId: 1002,
@@ -68,11 +69,14 @@ describe("permanent deletion preview", () => {
     assert.equal(preview?.transactionCount, 2);
     assert.equal(preview?.adjustmentCount, 1);
     assert.equal(preview?.transferCount, 1);
+    assert.equal(preview?.analysisSnapshotCount, 1);
+    assert.equal(preview?.analysisGenerationCount, 2);
     assert.equal(preview?.previewToken, "preview-token-abc");
     assert.equal(preview?.affectedAccounts[0]?.change, "-200.00");
 
     assert.equal(parsePermanentDeletionPreview({ ...previewBody, previewToken: "" }), null);
     assert.equal(parsePermanentDeletionPreview({ ...previewBody, affectedAccounts: [{ accountId: 1 }] }), null);
+    assert.equal(parsePermanentDeletionPreview({ ...previewBody, analysisSnapshotCount: undefined }), null);
   });
 
   it("maps affected account money colors from server strings", () => {
@@ -84,12 +88,11 @@ describe("permanent deletion preview", () => {
     assert.equal(rows[0]?.balanceBeforeToneClass, moneyToneClass("500.00"));
   });
 
-  it("blocks confirm when analysis records remain", () => {
-    const blocked = parsePermanentDeletionPreview({ ...previewBody, analysisRecordCount: 2 });
-    assert.notEqual(blocked, null);
-    assert.equal(canConfirmPermanentDeletion(blocked!.analysisRecordCount, false), false);
-    assert.equal(canConfirmPermanentDeletion(0, false), true);
-    assert.equal(canConfirmPermanentDeletion(0, true), false);
+  it("allows confirm when account analysis rows exist", () => {
+    const withAnalysis = parsePermanentDeletionPreview(previewBody);
+    assert.notEqual(withAnalysis, null);
+    assert.equal(canConfirmPermanentDeletion(false), true);
+    assert.equal(canConfirmPermanentDeletion(true), false);
   });
 
   it("rejects non-archived entry", () => {
@@ -102,6 +105,7 @@ describe("permanent deletion execute errors", () => {
   it("does not treat conflict or missing responses as success", () => {
     assert.equal(isPermanentDeletionExecuteSuccess("success"), true);
     assert.equal(isPermanentDeletionExecuteSuccess("preview_stale"), false);
+    assert.equal(isPermanentDeletionExecuteSuccess("analysis_reference_conflict"), false);
     assert.equal(isPermanentDeletionExecuteSuccess("analysis_records_remain"), false);
     assert.equal(isPermanentDeletionExecuteSuccess("account_not_archived"), false);
     assert.equal(isPermanentDeletionExecuteSuccess("not_found"), false);
@@ -109,6 +113,12 @@ describe("permanent deletion execute errors", () => {
     assert.equal(
       classifyPermanentDeletionExecute(new ApiError(409, "PREVIEW_STALE", "删除影响已变化，请重新预览并确认")),
       "preview_stale",
+    );
+    assert.equal(
+      classifyPermanentDeletionExecute(
+        new ApiError(409, "ANALYSIS_REFERENCE_CONFLICT", "分析记录存在跨账户或跨用户引用，本次未删除任何数据"),
+      ),
+      "analysis_reference_conflict",
     );
     assert.equal(
       classifyPermanentDeletionExecute(new ApiError(409, "ANALYSIS_RECORDS_REMAIN", "该账户仍有分析记录，本次未删除任何数据")),
@@ -120,6 +130,10 @@ describe("permanent deletion execute errors", () => {
     );
     assert.equal(classifyPermanentDeletionExecute(new ApiError(404, "RESOURCE_NOT_FOUND", "资源不存在")), "not_found");
     assert.equal(permanentDeletionExecuteErrorMessage("preview_stale"), "删除影响已变化，请重新预览并确认");
+    assert.equal(
+      permanentDeletionExecuteErrorMessage("analysis_reference_conflict"),
+      "分析记录存在跨账户或跨用户引用，本次未删除任何数据",
+    );
   });
 });
 

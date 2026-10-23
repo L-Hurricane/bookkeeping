@@ -2,7 +2,6 @@ import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/lo
 import { accountArchivePath, parseAccountSettingsQuery } from "../../account/navigation";
 import {
   affectedAccountRows,
-  ANALYSIS_RECORDS_REMAIN_MESSAGE,
   canConfirmPermanentDeletion,
   classifyPermanentDeletionExecute,
   mayEnterPermanentDeletion,
@@ -27,11 +26,10 @@ Page({
     transactionCount: 0,
     adjustmentCount: 0,
     transferCount: 0,
-    analysisRecordCount: 0,
+    analysisSnapshotCount: 0,
+    analysisGenerationCount: 0,
     affectedRows: [] as ReturnType<typeof affectedAccountRows>,
     showNoCounterpart: false,
-    analysisBlocked: false,
-    analysisBlockedMessage: ANALYSIS_RECORDS_REMAIN_MESSAGE,
     confirmEnabled: false,
     submitting: false,
     errorMessage: "",
@@ -68,7 +66,7 @@ Page({
       return;
     }
     this.previewToken = "";
-    this.setData({ phase: "loading", submitting: false, errorMessage: "", analysisBlocked: false, confirmEnabled: false });
+    this.setData({ phase: "loading", submitting: false, errorMessage: "", confirmEnabled: false });
     try {
       const account = await accountApi.loadAccount(this.accountId);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
@@ -108,18 +106,16 @@ Page({
 
   applyPreview(preview: PermanentDeletionPreview) {
     this.previewToken = preview.previewToken;
-    const analysisBlocked = preview.analysisRecordCount > 0;
     this.setData({
       phase: "ready",
       transactionCount: preview.transactionCount,
       adjustmentCount: preview.adjustmentCount,
       transferCount: preview.transferCount,
-      analysisRecordCount: preview.analysisRecordCount,
+      analysisSnapshotCount: preview.analysisSnapshotCount,
+      analysisGenerationCount: preview.analysisGenerationCount,
       affectedRows: affectedAccountRows(preview),
       showNoCounterpart: preview.affectedAccounts.length === 0,
-      analysisBlocked,
-      analysisBlockedMessage: ANALYSIS_RECORDS_REMAIN_MESSAGE,
-      confirmEnabled: canConfirmPermanentDeletion(preview.analysisRecordCount, false),
+      confirmEnabled: canConfirmPermanentDeletion(false),
       submitting: false,
       errorMessage: "",
     });
@@ -170,19 +166,9 @@ Page({
         void this.refreshPreviewAfterStale();
         return;
       }
-      if (outcome === "analysis_records_remain") {
-        this.setData({
-          submitting: false,
-          analysisBlocked: true,
-          analysisBlockedMessage: ANALYSIS_RECORDS_REMAIN_MESSAGE,
-          confirmEnabled: false,
-          errorMessage: permanentDeletionExecuteErrorMessage(outcome),
-        });
-        return;
-      }
       this.setData({
         submitting: false,
-        confirmEnabled: canConfirmPermanentDeletion(this.data.analysisRecordCount, false),
+        confirmEnabled: canConfirmPermanentDeletion(false),
         errorMessage: permanentDeletionExecuteErrorMessage(outcome),
       });
     }

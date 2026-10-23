@@ -21,20 +21,20 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     private final BalanceAdjustmentRepository adjustments;
     private final TransferRepository transfers;
     private final CurrentBalance balances;
-    private final AccountPermanentDeletionAnalysisCounter analysisRecords;
+    private final AccountPermanentDeletionAnalysisCounter analysis;
     private final TrustedUserContext context;
 
     public JpaAccountPermanentDeletionStore(AccountRepository accounts, TransactionRepository transactions,
             TransactionTagRepository transactionTags, BalanceAdjustmentRepository adjustments,
             TransferRepository transfers, CurrentBalance balances,
-            AccountPermanentDeletionAnalysisCounter analysisRecords, TrustedUserContext context) {
+            AccountPermanentDeletionAnalysisCounter analysis, TrustedUserContext context) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.transactionTags = transactionTags;
         this.adjustments = adjustments;
         this.transfers = transfers;
         this.balances = balances;
-        this.analysisRecords = analysisRecords;
+        this.analysis = analysis;
         this.context = context;
     }
 
@@ -67,8 +67,33 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     }
 
     @Override
-    public int countAnalysisRecords(long accountId) {
-        return analysisRecords.countForAccount(accountId);
+    public List<Long> findAnalysisSnapshotIds(long accountId, long userId) {
+        requireUser(userId);
+        return analysis.snapshotIdsForAccount(accountId);
+    }
+
+    @Override
+    public List<Long> findAnalysisGenerationIds(long accountId, long userId) {
+        requireUser(userId);
+        return analysis.generationIdsForAccount(accountId);
+    }
+
+    @Override
+    public boolean hasAnalysisReferenceConflict(long accountId, long userId) {
+        requireUser(userId);
+        return analysis.hasReferenceConflict(accountId);
+    }
+
+    @Override
+    public void deleteAnalysisGenerations(long accountId, long userId) {
+        requireUser(userId);
+        analysis.deleteGenerationsForAccount(accountId);
+    }
+
+    @Override
+    public void deleteAnalysisSnapshots(long accountId, long userId) {
+        requireUser(userId);
+        analysis.deleteSnapshotsForAccount(accountId);
     }
 
     @Override
@@ -104,5 +129,11 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     public void deleteAccount(AccountEntity account) {
         accounts.delete(account);
         accounts.flush();
+    }
+
+    private void requireUser(long userId) {
+        if (userId != context.userId()) {
+            throw new IllegalStateException("user scope mismatch");
+        }
     }
 }
