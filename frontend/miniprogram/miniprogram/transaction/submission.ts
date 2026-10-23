@@ -169,6 +169,9 @@ export function definiteFailureMessage(code: string, details: readonly ApiErrorD
   if (code === "RESOURCE_NOT_FOUND") {
     return "账户或关联数据已发生变化，请返回后重试";
   }
+  if (code === "ACCOUNT_ARCHIVED") {
+    return "账户已归档，恢复后才能继续记账或编辑";
+  }
   return "保存失败，请检查后重试";
 }
 

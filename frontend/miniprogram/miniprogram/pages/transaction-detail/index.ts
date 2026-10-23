@@ -1,3 +1,4 @@
+import { ARCHIVED_HISTORY_HINT } from "../../account/archive-copy";
 import {
   defaultSelectableAccountId,
   findAccount,
@@ -6,7 +7,7 @@ import {
 import { stashLedgerHandoff } from "../../account/ledger-handoff";
 import { createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
-import { accountHomePath } from "../../account/navigation";
+import { accountHomePath, accountSettingsPath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
 import { handoffPostSave } from "../../ledger/post-save";
@@ -96,6 +97,7 @@ Page({
   timeDraft: null as BusinessTimeDraft | null,
   deletePhase: "idle" as "idle" | "deleting" | "uncertain",
   screen: "loading" as Screen,
+  readOnly: false,
 
   data: {
     screen: "loading" as Screen,
@@ -143,6 +145,8 @@ Page({
     timeDraftError: "",
     deleteLocked: false,
     deleteHint: "",
+    readOnly: false,
+    archiveHint: "",
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -174,9 +178,15 @@ Page({
     this.setData({ screen: "loading", errorMessage: "" });
     try {
       const transaction = await transactionApi.getTransaction(context.accountId, context.transactionId);
+      const account = await accountApi.loadAccount(context.accountId);
       if (!this.loadGuard.pageAlive || generation !== this.detailGeneration) {
         return;
       }
+      if (account === null) {
+        this.showMissing();
+        return;
+      }
+      this.readOnly = account.lifecycle === "ARCHIVED";
       this.transaction = transaction;
       this.publishDetail();
     } catch (error) {
@@ -199,7 +209,7 @@ Page({
   },
 
   onEdit() {
-    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null || this.context === null) {
+    if (this.readOnly || this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null || this.context === null) {
       return;
     }
     this.form = editFormFromTransaction(this.transaction);
@@ -218,7 +228,7 @@ Page({
   },
 
   onDelete() {
-    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
+    if (this.readOnly || this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
       return;
     }
     wx.showModal({
@@ -852,7 +862,17 @@ Page({
       remarkLabel: view.remarkLabel,
       deleteLocked: false,
       deleteHint: "",
+      readOnly: this.readOnly,
+      archiveHint: this.readOnly ? ARCHIVED_HISTORY_HINT : "",
     });
+  },
+
+  onOpenSettings() {
+    const context = this.context;
+    if (context === null || this.deletePhase === "deleting") {
+      return;
+    }
+    wx.navigateTo({ url: accountSettingsPath(context.accountId) });
   },
 
   publishEdit() {

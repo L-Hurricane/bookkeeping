@@ -299,6 +299,11 @@ describe("transaction delete", () => {
     assert.equal(classifyDeleteError(new ApiError(404, "RESOURCE_NOT_FOUND", "不存在")).kind, "absent");
     assert.equal(classifyDeleteError(new ApiError(401, "SESSION_INVALID", "会话无效")).kind, "unauthorized");
     assert.equal(classifyDeleteError(new ApiError(403, "FORBIDDEN", "拒绝")).kind, "definite");
+    const archivedDelete = classifyDeleteError(new ApiError(409, "ACCOUNT_ARCHIVED", "账户已归档"));
+    assert.equal(archivedDelete.kind, "definite");
+    if (archivedDelete.kind === "definite") {
+      assert.equal(archivedDelete.message, "账户已归档，恢复后才能继续记账或编辑");
+    }
     const path = transactionDetailPath(1001, 4001, created, "2026-09");
     const parsed = parseDetailPageContext({
       accountId: "1001",

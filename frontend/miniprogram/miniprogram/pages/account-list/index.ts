@@ -1,13 +1,13 @@
 import {
   accountKindLabel,
   formatCurrentBalance,
-  routeAfterAccountQuery,
+  routeActiveAccounts,
   shouldWarnNegativeBalance,
   type Account,
 } from "../../account/account";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
-import { accountCreatePath, accountHomePath } from "../../account/navigation";
+import { accountArchivePath, accountCreatePath, accountHomePath } from "../../account/navigation";
 import { logoutFailureView } from "../../account/logout-view";
 import { isUnauthorized } from "../../services/ledger";
 import { accountApi, authApi, authNavigation } from "../../services/runtime";
@@ -27,6 +27,7 @@ Page({
   data: {
     phase: "loading" as "loading" | "ready" | "error",
     rows: [] as AccountRow[],
+    hasArchived: false,
     errorMessage: "",
     loggingOut: false,
     logoutErrorMessage: "",
@@ -51,7 +52,11 @@ Page({
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
-      const route = routeAfterAccountQuery(items);
+      const archived = items.length === 0 ? await accountApi.listAccounts("ARCHIVED") : [];
+      if (!canApplyLoadResult(this.loadGuard, generation)) {
+        return;
+      }
+      const route = routeActiveAccounts(items, archived);
       if (route.destination === "init") {
         wx.reLaunch({ url: "/pages/account-init/index" });
         return;
@@ -60,7 +65,12 @@ Page({
         this.setData({ phase: "error", errorMessage: route.message });
         return;
       }
-      this.setData({ phase: "ready", rows: route.accounts.map(toRow), errorMessage: "" });
+      this.setData({
+        phase: "ready",
+        rows: route.accounts.map(toRow),
+        hasArchived: archived.length > 0,
+        errorMessage: "",
+      });
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
         return;
@@ -89,6 +99,13 @@ Page({
       return;
     }
     wx.navigateTo({ url: accountCreatePath() });
+  },
+
+  onOpenArchive() {
+    if (this.loadGuard.loggingOut) {
+      return;
+    }
+    wx.navigateTo({ url: accountArchivePath() });
   },
 
   async onLogout() {

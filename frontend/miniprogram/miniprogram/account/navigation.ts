@@ -8,6 +8,10 @@ export function accountCreatePath(): string {
   return "/pages/account-create/index";
 }
 
+export function accountArchivePath(): string {
+  return "/pages/account-archive/index";
+}
+
 export function accountHomePath(accountId: number): string {
   return `/pages/account-home/index?accountId=${accountId}`;
 }

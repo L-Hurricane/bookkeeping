@@ -1,4 +1,5 @@
 export type AccountKind = "NORMAL" | "CREDIT";
+export type AccountLifecycle = "ACTIVE" | "ARCHIVED";
 
 export interface Account {
   readonly id: number;
@@ -8,6 +9,7 @@ export interface Account {
   readonly openingBalance: string;
   readonly currentBalance: string;
   readonly createdTime: string;
+  readonly lifecycle: AccountLifecycle;
 }
 
 export type AccountStartupRoute =
@@ -30,16 +32,17 @@ export function parseAccount(value: unknown): Account | null {
   const openingBalance = value.openingBalance;
   const currentBalance = value.currentBalance;
   const createdTime = value.createdTime;
+  const lifecycle = value.lifecycle;
   if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) {
     return null;
   }
-  if (!isNonEmptyString(name) || !isNonEmptyString(currency) || !isAccountKind(kind)) {
+  if (!isNonEmptyString(name) || !isNonEmptyString(currency) || !isAccountKind(kind) || !isAccountLifecycle(lifecycle)) {
     return null;
   }
   if (!isMoneyResponse(openingBalance) || !isMoneyResponse(currentBalance) || !isCreatedTime(createdTime)) {
     return null;
   }
-  return { id, name, kind, currency, openingBalance, currentBalance, createdTime };
+  return { id, name, kind, currency, openingBalance, currentBalance, createdTime, lifecycle };
 }
 
 export function parseAccountList(value: unknown): Account[] | null {
@@ -62,6 +65,14 @@ export function routeAfterAccountQuery(items: Account[]): AccountStartupRoute {
     return { destination: "init" };
   }
   return { destination: "list", accounts: items };
+}
+
+/** An empty active list is initialization only when the user also has no archived account. */
+export function routeActiveAccounts(active: readonly Account[], archived: readonly Account[]): AccountStartupRoute {
+  if (active.length === 0 && archived.length === 0) {
+    return { destination: "init" };
+  }
+  return { destination: "list", accounts: active };
 }
 
 export function formatCurrentBalance(account: Account): string {
@@ -111,6 +122,10 @@ export function defaultSelectableAccountId(
 
 function isAccountKind(value: unknown): value is AccountKind {
   return value === "NORMAL" || value === "CREDIT";
+}
+
+function isAccountLifecycle(value: unknown): value is AccountLifecycle {
+  return value === "ACTIVE" || value === "ARCHIVED";
 }
 
 function isNegativeMoney(value: string): boolean {

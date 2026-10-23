@@ -16,9 +16,12 @@
   <text class="label">账户名称</text>
   <input class="field" type="text" maxlength="64" value="{{name}}" disabled="{{submitting}}" bindinput="onNameInput" />
   <text class="hint">更名不影响已有交易与余额。</text>
+  <text class="hint" wx:if="{{lifecycle === 'ARCHIVED'}}">已归档。余额和历史保持不变，继续记账或编辑前需要先恢复。</text>
   <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
   <view class="actions">
     <button class="cancel" disabled="{{submitting}}" bindtap="onBack">取消</button>
     <button class="save" disabled="{{submitting}}" bindtap="onSave">保存名称</button>
   </view>
+  <button wx:if="{{lifecycle === 'ACTIVE'}}" class="archive" disabled="{{submitting}}" bindtap="onArchive">归档账户</button>
+  <button wx:else class="restore" disabled="{{submitting}}" bindtap="onRestore">恢复账户</button>
 </view>

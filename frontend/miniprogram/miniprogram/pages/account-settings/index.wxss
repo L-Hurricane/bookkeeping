@@ -59,3 +59,11 @@
   background: #f0f0f0;
   color: #333333;
 }
+
+.archive,
+.restore {
+  margin-top: 24rpx;
+  background: #ffffff;
+  color: #111111;
+  border: 1rpx solid #dddddd;
+}

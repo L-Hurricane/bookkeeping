@@ -48,7 +48,9 @@
   </view>
   <text class="error" wx:if="{{actionError}}">{{actionError}}</text>
   <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
-  <view class="actions">
+  <text class="hint" wx:if="{{readOnly}}">{{archiveHint}}</text>
+  <button wx:if="{{readOnly}}" bindtap="onOpenSettings">账户设置</button>
+  <view class="actions" wx:if="{{!readOnly}}">
     <button class="edit" disabled="{{deleteLocked}}" bindtap="onEdit">编辑</button>
     <button class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除</button>
   </view>

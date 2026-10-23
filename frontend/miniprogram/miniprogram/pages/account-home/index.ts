@@ -1,7 +1,6 @@
+import { ARCHIVED_HISTORY_HINT } from "../../account/archive-copy";
 import {
-  findAccount,
   formatCurrentBalance,
-  routeAfterAccountQuery,
   shouldWarnNegativeBalance,
   type Account,
 } from "../../account/account";
@@ -70,6 +69,7 @@ Page({
   accountCreatedTime: "",
   currency: "",
   accountKind: "NORMAL" as Account["kind"],
+  archived: false,
   contextReady: false,
   pendingPostSave: null as LedgerLocateIntent | null,
   highlight: idleHighlight(),
@@ -86,6 +86,8 @@ Page({
     balanceLabel: "",
     balanceToneClass: "money-zero",
     negativeBalanceHint: "",
+    archived: false,
+    archiveHint: "",
     monthLabel: "",
     incomeLabel: "",
     incomeToneClass: "money-zero",
@@ -171,20 +173,10 @@ Page({
     }
     this.setData({ phase: "account-loading", errorMessage: "" });
     try {
-      const items = await accountApi.listAccounts();
+      const account = await accountApi.loadAccount(this.accountId);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
-      const route = routeAfterAccountQuery(items);
-      if (route.destination === "init") {
-        wx.reLaunch({ url: "/pages/account-init/index" });
-        return;
-      }
-      if (route.destination === "error") {
-        this.setData({ phase: "account-error", errorMessage: route.message });
-        return;
-      }
-      const account = findAccount(route.accounts, this.accountId);
       if (account === null) {
         this.setData({ phase: "account-error", errorMessage: "账户不存在或无权访问" });
         return;
@@ -193,6 +185,7 @@ Page({
       this.accountCreatedTime = account.createdTime;
       this.currency = account.currency;
       this.accountKind = account.kind;
+      this.archived = account.lifecycle === "ARCHIVED";
       this.showAccount(account);
       void this.loadLedger();
     } catch (error) {
@@ -209,7 +202,9 @@ Page({
       kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
       balanceLabel: formatCurrentBalance(account),
       balanceToneClass: moneyToneClass(account.currentBalance),
-      negativeBalanceHint: shouldWarnNegativeBalance(account) ? "余额为负，仍可继续记账" : "",
+      negativeBalanceHint: this.archived || !shouldWarnNegativeBalance(account) ? "" : "余额为负，仍可继续记账",
+      archived: this.archived,
+      archiveHint: this.archived ? ARCHIVED_HISTORY_HINT : "",
       monthLabel: formatMonthLabel(this.selectedMonth),
       errorMessage: "",
     });
@@ -242,7 +237,7 @@ Page({
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
         balanceToneClass: moneyToneClass(ledger.currentBalance),
         negativeBalanceHint:
-          this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
+          !this.archived && this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
             ? "余额为负，仍可继续记账"
             : "",
         monthLabel: formatMonthLabel(ledger.month),
@@ -289,7 +284,7 @@ Page({
   },
 
   onCreate() {
-    if (!canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+    if (this.archived || !canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
     wx.navigateTo({
@@ -312,7 +307,7 @@ Page({
   },
 
   onAdjust() {
-    if (!canOpenBalanceAdjustment(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+    if (this.archived || !canOpenBalanceAdjustment(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
     wx.navigateTo({

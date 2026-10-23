@@ -15,9 +15,10 @@
       <text class="kind">{{kindLabel}}</text>
       <text class="label">当前余额</text>
       <text class="balance {{balanceToneClass}}">{{balanceLabel}}</text>
+      <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
       <text class="hint" wx:if="{{negativeBalanceHint}}">{{negativeBalanceHint}}</text>
-      <button class="adjust" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
-      <button class="create" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
+      <button class="adjust" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
+      <button class="create" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
     </view>
     <view class="month">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>

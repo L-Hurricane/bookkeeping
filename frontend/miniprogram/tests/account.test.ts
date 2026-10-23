@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   defaultSelectableAccountId,
   parseAccount,
+  routeActiveAccounts,
   routeAfterAccountQuery,
   shouldWarnNegativeBalance,
   type Account,
@@ -28,6 +29,7 @@ const account: Account = {
   openingBalance: "100.00",
   currentBalance: "60.50",
   createdTime: "2026-09-01T10:00:00+08:00",
+  lifecycle: "ACTIVE",
 };
 
 function memoryStorage(): KeyValueStorage {
@@ -165,13 +167,27 @@ describe("account query routing", () => {
     assert.equal(parseAccount({ ...account, currentBalance: "60.5" }), null);
     assert.equal(parseAccount({ ...account, createdTime: "tomorrow" }), null);
     assert.equal(parseAccount({ ...account, kind: "SAVINGS" }), null);
+    assert.equal(parseAccount({ ...account, lifecycle: "CLOSED" }), null);
+    assert.equal(parseAccount({ ...account, lifecycle: undefined }), null);
     assert.equal(parseAccount(account)?.currentBalance, "60.50");
     assert.equal(parseAccount(account)?.kind, "NORMAL");
+    assert.equal(parseAccount(account)?.lifecycle, "ACTIVE");
   });
 
   it("rejects a malformed account response", async () => {
     const accounts = apiFor(() => ({ statusCode: 200, data: { items: [{ id: "1001" }] } }));
     await assert.rejects(() => accounts.listAccounts(), (error: unknown) => error instanceof AccountResponseError);
+  });
+
+  it("stays on the normal list when every account is archived", () => {
+    const archived = { ...account, lifecycle: "ARCHIVED" as const };
+    assert.equal(routeActiveAccounts([], []).destination, "init");
+    const route = routeActiveAccounts([], [archived]);
+    assert.equal(route.destination, "list");
+    if (route.destination === "list") {
+      assert.equal(route.accounts.length, 0);
+    }
+    assert.equal(routeActiveAccounts([account], []).destination, "list");
   });
 
   it("keeps more than one account on the overview list", () => {
@@ -221,6 +237,38 @@ describe("multi-account create rename and selection", () => {
     assert.equal(created.currentBalance, "-12.00");
     const renamed = await accounts.renameAccount(1002, "家庭信用卡");
     assert.equal(renamed.name, "家庭信用卡");
+  });
+
+  it("lists archived accounts and posts archive or restore", async () => {
+    const archived = { ...account, lifecycle: "ARCHIVED" as const };
+    const accounts = apiFor((request) => {
+      if (request.method === "GET" && request.url.endsWith("/api/v1/accounts?lifecycle=ARCHIVED")) {
+        return { statusCode: 200, data: { items: [archived] } };
+      }
+      if (request.method === "GET" && request.url.endsWith("/api/v1/accounts")) {
+        return { statusCode: 200, data: { items: [account] } };
+      }
+      if (request.method === "POST" && request.url.endsWith("/api/v1/accounts/1001/archive")) {
+        return { statusCode: 200, data: archived };
+      }
+      if (request.method === "POST" && request.url.endsWith("/api/v1/accounts/1001/restore")) {
+        return { statusCode: 200, data: account };
+      }
+      return { statusCode: 500, data: { error: { code: "INTERNAL_ERROR", message: "unexpected" } } };
+    });
+    assert.equal((await accounts.listAccounts()).length, 1);
+    assert.equal((await accounts.listAccounts("ARCHIVED"))[0]?.lifecycle, "ARCHIVED");
+    assert.equal((await accounts.loadAccount(1001))?.lifecycle, "ACTIVE");
+    const hidden = apiFor((request) => {
+      if (request.url.endsWith("/api/v1/accounts?lifecycle=ARCHIVED")) {
+        return { statusCode: 200, data: { items: [archived] } };
+      }
+      return { statusCode: 200, data: { items: [] } };
+    });
+    assert.equal((await hidden.loadAccount(1001))?.lifecycle, "ARCHIVED");
+    assert.equal(await hidden.loadAccount(9), null);
+    assert.equal((await accounts.archiveAccount(1001)).lifecycle, "ARCHIVED");
+    assert.equal((await accounts.restoreAccount(1001)).lifecycle, "ACTIVE");
   });
 
   it("defaults the only usable account and keeps a preferred id among many", () => {

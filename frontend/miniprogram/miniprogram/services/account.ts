@@ -22,18 +22,21 @@ export interface CreateAccountInput {
 }
 
 export interface AccountApi {
-  listAccounts(): Promise<Account[]>;
+  listAccounts(lifecycle?: "ACTIVE" | "ARCHIVED"): Promise<Account[]>;
+  loadAccount(accountId: number): Promise<Account | null>;
   initializeAccount(openingBalance: string): Promise<Account>;
   createAccount(input: CreateAccountInput): Promise<Account>;
   renameAccount(accountId: number, name: string): Promise<Account>;
+  archiveAccount(accountId: number): Promise<Account>;
+  restoreAccount(accountId: number): Promise<Account>;
 }
 
 export function createAccountApi(http: HttpClient): AccountApi {
-  return {
-    async listAccounts() {
+  const api: AccountApi = {
+    async listAccounts(lifecycle) {
       const body = await http.request<unknown>({
         method: "GET",
-        path: "/api/v1/accounts",
+        path: lifecycle === "ARCHIVED" ? "/api/v1/accounts?lifecycle=ARCHIVED" : "/api/v1/accounts",
         authenticated: true,
       });
       const accounts = parseAccountList(body);
@@ -41,6 +44,16 @@ export function createAccountApi(http: HttpClient): AccountApi {
         throw new AccountResponseError("账户响应无法识别");
       }
       return accounts;
+    },
+
+    async loadAccount(accountId) {
+      const active = await api.listAccounts();
+      const visible = active.find((item) => item.id === accountId);
+      if (visible !== undefined) {
+        return visible;
+      }
+      const archived = await api.listAccounts("ARCHIVED");
+      return archived.find((item) => item.id === accountId) ?? null;
     },
 
     async initializeAccount(openingBalance) {
@@ -95,7 +108,30 @@ export function createAccountApi(http: HttpClient): AccountApi {
       }
       return account;
     },
+
+    async archiveAccount(accountId) {
+      return changeLifecycle(http, accountId, "archive");
+    },
+
+    async restoreAccount(accountId) {
+      return changeLifecycle(http, accountId, "restore");
+    },
   };
+  return api;
+}
+
+async function changeLifecycle(http: HttpClient, accountId: number, action: "archive" | "restore"): Promise<Account> {
+  const body = await http.request<unknown>({
+    method: "POST",
+    path: `/api/v1/accounts/${accountId}/${action}`,
+    authenticated: true,
+  });
+  const account = parseAccount(body);
+  const expected = action === "archive" ? "ARCHIVED" : "ACTIVE";
+  if (account === null || account.id !== accountId || account.lifecycle !== expected) {
+    throw new AccountResponseError("账户响应无法识别");
+  }
+  return account;
 }
 
 async function reconcileInitializedAccount(http: HttpClient): Promise<Account> {

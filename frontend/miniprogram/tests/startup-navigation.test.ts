@@ -12,6 +12,7 @@ const account: Account = {
   openingBalance: "50.00",
   currentBalance: "50.00",
   createdTime: "2026-09-01T10:00:00+08:00",
+  lifecycle: "ACTIVE",
 };
 
 describe("startup navigation", () => {

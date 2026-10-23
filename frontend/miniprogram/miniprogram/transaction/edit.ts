@@ -356,6 +356,9 @@ function updateFailureMessage(code: string, details: readonly ApiErrorDetail[] |
   if (code === "TAG_TYPE_MISMATCH") {
     return "所选标签与交易类型不匹配，请重新选择";
   }
+  if (code === "ACCOUNT_ARCHIVED") {
+    return "账户已归档，恢复后才能继续记账或编辑";
+  }
   return "保存失败，请检查后重试";
 }
 
@@ -413,6 +416,9 @@ export function classifyDeleteError(error: unknown): DeleteOutcome {
   }
   if (error.status === 404) {
     return { kind: "absent" };
+  }
+  if (error.status === 409 && error.code === "ACCOUNT_ARCHIVED") {
+    return { kind: "definite", message: "账户已归档，恢复后才能继续记账或编辑" };
   }
   if (error.status === 400 || error.status === 403 || error.status === 409) {
     return { kind: "definite", message: "删除失败，请稍后重试" };

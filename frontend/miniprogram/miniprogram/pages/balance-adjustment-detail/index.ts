@@ -1,4 +1,6 @@
+import { ARCHIVED_HISTORY_HINT, ARCHIVED_WRITE_MESSAGE } from "../../account/archive-copy";
 import { createLoadGuard } from "../../account/load-guard";
+import { accountSettingsPath } from "../../account/navigation";
 import type { AdjustmentRecord } from "../../balance-adjustment/contract";
 import {
   adjustmentDetailAccess,
@@ -9,7 +11,7 @@ import {
 } from "../../balance-adjustment/detail";
 import { parseAdjustmentDetailContext, type AdjustmentDetailContext } from "../../balance-adjustment/navigation";
 import { ApiError } from "../../http/client";
-import { balanceAdjustmentApi } from "../../services/runtime";
+import { accountApi, balanceAdjustmentApi } from "../../services/runtime";
 
 type Screen = "invalid" | "loading" | "error" | "missing" | "detail" | "delete-uncertain";
 
@@ -20,6 +22,7 @@ Page({
   generation: 0,
   deletePhase: "idle" as AdjustmentDeletePhase,
   screen: "loading" as Screen,
+  readOnly: false,
 
   data: {
     screen: "loading" as Screen,
@@ -29,6 +32,8 @@ Page({
     actionError: "",
     deleteLocked: false,
     deleteHint: "",
+    readOnly: false,
+    archiveHint: "",
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -61,9 +66,15 @@ Page({
     this.setData({ screen: "loading" });
     try {
       const adjustment = await balanceAdjustmentApi.getAdjustment(context.accountId, context.adjustmentId);
+      const account = await accountApi.loadAccount(context.accountId);
       if (!this.loadGuard.pageAlive || generation !== this.generation) {
         return;
       }
+      if (account === null) {
+        this.showMissing();
+        return;
+      }
+      this.readOnly = account.lifecycle === "ARCHIVED";
       this.adjustment = adjustment;
       this.publish();
     } catch (error) {
@@ -80,7 +91,7 @@ Page({
   },
 
   onDelete() {
-    if (this.screen !== "detail" || !adjustmentDetailAccess(this.deletePhase).delete || this.adjustment === null) {
+    if (this.readOnly || this.screen !== "detail" || !adjustmentDetailAccess(this.deletePhase).delete || this.adjustment === null) {
       return;
     }
     wx.showModal({
@@ -141,7 +152,13 @@ Page({
       this.deletePhase = "idle";
       this.screen = "detail";
       this.syncAlert();
-      this.setData({ screen: "detail", actionError: "删除失败，请稍后重试", deleteLocked: false, deleteHint: "" });
+      const archived = error instanceof ApiError && error.code === "ACCOUNT_ARCHIVED";
+      this.setData({
+        screen: "detail",
+        actionError: archived ? ARCHIVED_WRITE_MESSAGE : "删除失败，请稍后重试",
+        deleteLocked: false,
+        deleteHint: "",
+      });
     }
   },
 
@@ -169,7 +186,17 @@ Page({
       actionError: "",
       deleteLocked: false,
       deleteHint: "",
+      readOnly: this.readOnly,
+      archiveHint: this.readOnly ? ARCHIVED_HISTORY_HINT : "",
     });
+  },
+
+  onOpenSettings() {
+    const context = this.context;
+    if (context === null || this.deletePhase === "deleting") {
+      return;
+    }
+    wx.navigateTo({ url: accountSettingsPath(context.accountId) });
   },
 
   showMissing() {

@@ -4,6 +4,7 @@
     "pages/login/index",
     "pages/account-init/index",
     "pages/account-list/index",
+    "pages/account-archive/index",
     "pages/account-home/index",
     "pages/account-create/index",
     "pages/account-settings/index",
