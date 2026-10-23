@@ -72,6 +72,7 @@ public class AdjustmentService {
         accounts.lockForWrite(accountId);
         var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
         if (existing != null) return outcome(accountId, existing, hash, target);
+        accounts.requireWritable(accountId);
         var before = balances.of(accountId);
         var delta = target.subtract(before);
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
@@ -106,7 +107,7 @@ public class AdjustmentService {
 
     public void delete(long accountId, long adjustmentId) {
         transaction.executeWithoutResult(status -> {
-            accounts.lockForWrite(accountId);
+            accounts.requireWritable(accountId);
             var current = load(accountId, adjustmentId);
             adjustments.delete(current);
             adjustments.flush();

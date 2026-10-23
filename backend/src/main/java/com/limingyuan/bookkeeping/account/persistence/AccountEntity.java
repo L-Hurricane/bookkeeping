@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.account.persistence;
 
 import com.limingyuan.bookkeeping.account.domain.AccountKind;
+import com.limingyuan.bookkeeping.account.domain.AccountLifecycle;
 import com.limingyuan.bookkeeping.account.domain.AccountNames;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -15,6 +16,9 @@ public class AccountEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16, columnDefinition = "VARCHAR(16)")
     private AccountKind kind;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16, columnDefinition = "VARCHAR(16)")
+    private AccountLifecycle lifecycle = AccountLifecycle.ACTIVE;
     @Column(nullable = false, columnDefinition = "CHAR(3)") private String currency;
     @Column(name = "opening_balance", nullable = false, precision = 19, scale = 2) private BigDecimal openingBalance;
     @Column(name = "created_time", nullable = false, columnDefinition = "DATETIME(0)") private LocalDateTime createdTime;
@@ -43,6 +47,7 @@ public class AccountEntity {
     public long getUserId() { return userId; }
     public String getName() { return name; }
     public AccountKind getKind() { return kind; }
+    public AccountLifecycle getLifecycle() { return lifecycle; }
     public String getCurrency() { return currency; }
     public BigDecimal getOpeningBalance() { return openingBalance; }
     public LocalDateTime getCreatedTime() { return createdTime; }
@@ -51,6 +56,17 @@ public class AccountEntity {
 
     public void rename(String name, LocalDateTime updatedAtUtc) {
         this.name = AccountNames.required(name);
+        this.updatedAtUtc = updatedAtUtc;
+    }
+
+    /** Archive keeps every stored amount and history row. */
+    public void archive(LocalDateTime updatedAtUtc) {
+        this.lifecycle = AccountLifecycle.ARCHIVED;
+        this.updatedAtUtc = updatedAtUtc;
+    }
+
+    public void restore(LocalDateTime updatedAtUtc) {
+        this.lifecycle = AccountLifecycle.ACTIVE;
         this.updatedAtUtc = updatedAtUtc;
     }
 

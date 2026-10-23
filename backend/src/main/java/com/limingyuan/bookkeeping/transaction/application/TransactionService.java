@@ -165,7 +165,7 @@ public class TransactionService {
 
     public void delete(long accountId, long transactionId) {
         transaction.executeWithoutResult(status -> {
-            accounts.lockForWrite(accountId);
+            accounts.requireWritable(accountId);
             var current = load(accountId, transactionId);
             associations.deleteByTransactionId(current.getId());
             associations.flush();

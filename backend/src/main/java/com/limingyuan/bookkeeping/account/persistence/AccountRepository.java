@@ -1,5 +1,6 @@
 package com.limingyuan.bookkeeping.account.persistence;
 
+import com.limingyuan.bookkeeping.account.domain.AccountLifecycle;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
     List<AccountEntity> findAllByUserIdOrderByIdAsc(long userId);
+    List<AccountEntity> findAllByUserIdAndLifecycleOrderByIdAsc(long userId, AccountLifecycle lifecycle);
     boolean existsByUserId(long userId);
     boolean existsByUserIdAndName(long userId, String name);
     boolean existsByUserIdAndNameAndIdNot(long userId, String name, long id);

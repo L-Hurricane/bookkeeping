@@ -62,8 +62,9 @@ class MigrationIntegrationTest {
                 assertThat(rows.next()).isTrue();
                 legacyAccountId = rows.getLong(1);
             }
-            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision, V14 analysis account scope.
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(5);
+            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision,
+            // V14 analysis account scope, V15 account lifecycle.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -80,6 +81,28 @@ class MigrationIntegrationTest {
                     assertThat(rows.getString(3)).isEqualTo("微信");
                     assertThat(rows.getBigDecimal(4)).isEqualByComparingTo("100.00");
                     assertThat(rows.getLong(5)).isPositive();
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT a.lifecycle FROM accounts a
+                        JOIN users u ON u.id = a.user_id
+                        WHERE u.username = 'v10-upgrade'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getString(1)).isEqualTo("ACTIVE");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'accounts'
+                          AND constraint_name = 'ck_accounts_lifecycle'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT index_name FROM information_schema.statistics
+                        WHERE table_schema = DATABASE() AND table_name = 'accounts'
+                          AND column_name = 'lifecycle'
+                        """)) {
+                    assertThat(rows.next()).isFalse();
                 }
                 try (var rows = statement.executeQuery("""
                         SELECT constraint_name FROM information_schema.table_constraints

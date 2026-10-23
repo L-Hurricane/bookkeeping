@@ -22,7 +22,13 @@ public class AccountController {
     public record RenameRequest(@NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String name) { }
     public record AccountList(List<AccountService.AccountView> items) { }
     @GetMapping
-    public AccountList list() { return new AccountList(accounts.list()); }
+    public AccountList list(@RequestParam(required = false) String lifecycle) {
+        return new AccountList(accounts.list(lifecycle));
+    }
+    @PostMapping("/{accountId}/archive")
+    public AccountService.AccountView archive(@PathVariable long accountId) { return accounts.archive(accountId); }
+    @PostMapping("/{accountId}/restore")
+    public AccountService.AccountView restore(@PathVariable long accountId) { return accounts.restore(accountId); }
     @PostMapping("/initialize")
     public ResponseEntity<AccountService.AccountView> initialize(@Valid @RequestBody InitializeRequest request) {
         return ResponseEntity.status(201).body(accounts.initialize(request.openingBalance()));
