@@ -33,5 +33,6 @@ S2 计划 Review 原件登记 SHA-256 为 `629dd55f3f891b8ae10faebd87f40a55035f9
 ## 当前 S2 任务入口
 
 - 已启动：S2-T00 文档归档与仓库外 A+B-lite 自测；S2-T01 只提交 V15 设计，不执行 DDL。
-- 未启动：S2-T02 及之后。DB-01 专项批准前不改正式 Schema。
+- DB-01 执行批准记录：`docs/implementation/s2-db-01-approval-2026-10-23.md`。它引用设计提交 `23f705411f1edb10dae3dbb1a3c712670ef42151`，不修改上面的正式计划 SHA。
+- DB-01 专用库演练结果：`docs/implementation/s2-db-01-drill-2026-10-23.md`。开发库十分钟 RTO 未测。
 - M1 自动门禁通过后必须暂停，向负责人复盘；确认前不得开始 M2。
