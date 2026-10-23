@@ -10,7 +10,10 @@ import com.limingyuan.bookkeeping.identity.TrustedUserContext;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.TreeSet;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -189,6 +192,46 @@ public class AccountService {
         var secondAccount = second == first ? firstAccount : locked(second);
         requireActive(firstAccount);
         if (second != first) requireActive(secondAccount);
+    }
+
+    /**
+     * Lock the given accounts in ascending id order. Does not check lifecycle.
+     * Caller owns the MySQL transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<AccountEntity> lockOwnedInIdOrder(Collection<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "请求参数不合法");
+        }
+        var lockedAccounts = new ArrayList<AccountEntity>();
+        for (long accountId : new TreeSet<>(accountIds)) {
+            lockedAccounts.add(locked(accountId));
+        }
+        return lockedAccounts;
+    }
+
+    /** Reject an archived account that is already locked in this transaction. */
+    public void rejectIfArchived(AccountEntity account) {
+        requireActive(account);
+    }
+
+    /**
+     * One shared first-save order for two already locked accounts.
+     * Both counters move to {@code max(last) + 1}.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public long assignSharedFirstSaveOrder(long leftAccountId, long rightAccountId) {
+        var left = locked(leftAccountId);
+        var right = locked(rightAccountId);
+        rejectIfArchived(left);
+        rejectIfArchived(right);
+        var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        long order = Math.max(left.getLastFirstSaveOrder(), right.getLastFirstSaveOrder()) + 1;
+        left.raiseFirstSaveOrderTo(order, now);
+        right.raiseFirstSaveOrderTo(order, now);
+        accounts.saveAndFlush(left);
+        accounts.saveAndFlush(right);
+        return order;
     }
 
     /** Lock, then allocate the next immutable account-scoped order. Create only. */

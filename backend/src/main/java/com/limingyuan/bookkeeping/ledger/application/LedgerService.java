@@ -71,6 +71,18 @@ public class LedgerService {
                     FROM balance_adjustments b
                     WHERE b.account_id = :accountId AND b.user_id = :userId
                       AND b.business_time >= :start AND b.business_time < :end
+                    UNION ALL
+                    SELECT 'TRANSFER', t.id, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN -t.amount ELSE t.amount END,
+                           NULL, NULL, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN t.from_business_time ELSE t.to_business_time END,
+                           t.first_save_order, t.first_saved_at_utc
+                    FROM transfers t
+                    WHERE t.user_id = :userId
+                      AND (
+                        (t.from_account_id = :accountId AND t.from_business_time >= :start AND t.from_business_time < :end)
+                        OR (t.to_account_id = :accountId AND t.to_business_time >= :start AND t.to_business_time < :end)
+                      )
                 ) entries
                 """ + " ORDER BY " + LedgerOrdering.LEDGER).param("accountId", accountId).param("userId", context.userId())
                 .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
@@ -83,6 +95,9 @@ public class LedgerService {
         for (var row : rows) {
             if ("BALANCE_ADJUSTMENT".equals(row.kind())) {
                 items.add(new LedgerItem(row.kind(), row.id(), null, "余额调整", Money.format(row.amount()), null, null,
+                        TIME.format(row.businessTime().atZone(BEIJING))));
+            } else if ("TRANSFER".equals(row.kind())) {
+                items.add(new LedgerItem(row.kind(), row.id(), null, "转账", Money.format(row.amount()), null, null,
                         TIME.format(row.businessTime().atZone(BEIJING))));
             } else {
                 items.add(new LedgerItem(row.kind(), row.id(), row.transactionType(), displayName(row.name(), row.categoryName()),

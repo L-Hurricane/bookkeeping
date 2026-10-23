@@ -13,7 +13,7 @@ public final class LedgerOrdering {
     public static final String TRANSACTION_LIST =
             "t.business_time DESC, t.first_save_order DESC, t.first_saved_at_utc DESC, t.id DESC";
 
-    /** Mixed Transaction + BalanceAdjustment ledger. */
+    /** Mixed Transaction, Transfer, and BalanceAdjustment ledger. */
     public static final String LEDGER =
             "business_time DESC, first_save_order DESC, first_saved_at_utc DESC, kind DESC, id DESC";
 

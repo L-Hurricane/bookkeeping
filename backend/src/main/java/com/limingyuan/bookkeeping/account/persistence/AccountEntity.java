@@ -76,4 +76,13 @@ public class AccountEntity {
         this.updatedAtUtc = updatedAtUtc;
         return this.lastFirstSaveOrder;
     }
+
+    /** Raise this account's counter to a shared order. Call only while this row is locked. */
+    public void raiseFirstSaveOrderTo(long order, LocalDateTime updatedAtUtc) {
+        if (order < this.lastFirstSaveOrder) {
+            throw new IllegalStateException("first save order cannot move backwards");
+        }
+        this.lastFirstSaveOrder = order;
+        this.updatedAtUtc = updatedAtUtc;
+    }
 }

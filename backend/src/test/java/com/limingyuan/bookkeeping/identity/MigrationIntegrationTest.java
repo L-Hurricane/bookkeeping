@@ -63,8 +63,8 @@ class MigrationIntegrationTest {
                 legacyAccountId = rows.getLong(1);
             }
             // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision,
-            // V14 analysis account scope, V15 account lifecycle.
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(6);
+            // V14 analysis account scope, V15 account lifecycle, V16 transfers.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -103,6 +103,10 @@ class MigrationIntegrationTest {
                           AND column_name = 'lifecycle'
                         """)) {
                     assertThat(rows.next()).isFalse();
+                }
+                try (var rows = statement.executeQuery("SELECT COUNT(*) FROM transfers")) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getLong(1)).isZero();
                 }
                 try (var rows = statement.executeQuery("""
                         SELECT constraint_name FROM information_schema.table_constraints
@@ -185,7 +189,7 @@ class MigrationIntegrationTest {
                  var rows = statement.executeQuery("SHOW TABLES")) {
                 var names = new ArrayList<String>();
                 while (rows.next()) names.add(rows.getString(1));
-                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments", "analysis_snapshots", "analysis_quota_days", "analysis_generations", "analysis_user_locks", "flyway_schema_history");
+                assertThat(names).containsExactlyInAnyOrder("users", "sessions", "accounts", "categories", "tags", "transactions", "transaction_tags", "idempotency_records", "balance_adjustments", "transfers", "analysis_snapshots", "analysis_quota_days", "analysis_generations", "analysis_user_locks", "flyway_schema_history");
             }
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement();
