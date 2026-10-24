@@ -1,4 +1,5 @@
 import type { LoadGuard } from "../account/load-guard";
+import { moneyToneClass } from "../account/money-tone";
 import { formatBusinessTime, formatMoneyLabel, ledgerRows, type LedgerEntry, type LedgerRow } from "../ledger/ledger";
 import type { ListShow } from "../navigation/scroll-restore";
 import { isBusinessTimeAllowed, validateBusinessTime } from "./business-time";
@@ -134,10 +135,15 @@ export function shouldRefreshSearchOnListShow(show: ListShow, searchKeyword: str
 export interface LedgerLoadSetDataCommon {
   readonly phase: "ready";
   readonly balanceLabel: string;
+  readonly balanceToneClass: string;
+  readonly negativeBalanceHint: string;
   readonly monthLabel: string;
   readonly incomeLabel: string;
+  readonly incomeToneClass: string;
   readonly expenseLabel: string;
+  readonly expenseToneClass: string;
   readonly surplusLabel: string;
+  readonly surplusToneClass: string;
   readonly countLabel: string;
   readonly errorMessage: string;
   readonly locateMiss: string;
@@ -201,6 +207,7 @@ export function searchLedgerRows(items: readonly TransactionSearchItem[]): Ledge
       detail: tags.length === 0 ? category : `${category} ${tags}`,
       typeLabel: item.type === "INCOME" ? "收入" : "支出",
       amountLabel: formatMoneyLabel(item.amount),
+      amountToneClass: moneyToneClass(item.amount),
       timeLabel: formatBusinessTime(item.businessTime),
     };
   });

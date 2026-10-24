@@ -65,7 +65,7 @@ export function createTransactionApi(http: HttpClient): TransactionApi {
     async updateTransaction(snapshot) {
       const body = await http.request<unknown>({
         method: "PUT",
-        path: transactionResourcePath(snapshot.accountId, snapshot.transactionId),
+        path: transactionResourcePath(snapshot.sourceAccountId, snapshot.transactionId),
         body: updateTransactionRequestBody(snapshot),
         authenticated: true,
       });

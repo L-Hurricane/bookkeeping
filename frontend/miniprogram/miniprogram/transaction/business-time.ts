@@ -215,9 +215,10 @@ export function applyBusinessTimeDraft(
   if (businessTime === null) {
     return { ok: false, message: "请输入有效的日期和时间" };
   }
-  if (!isBusinessTimeAllowed(businessTime, accountCreatedTime)) {
-    return { ok: false, message: "交易时间不得早于账户创建时间" };
+  if (!validateBusinessTime(businessTime)) {
+    return { ok: false, message: "交易时间格式不正确" };
   }
+  void accountCreatedTime;
   return { ok: true, businessTime };
 }
 
@@ -242,11 +243,18 @@ export function isFutureBusinessTime(value: string, now: Date): boolean {
   return validateBusinessTime(value) && value > current;
 }
 
+/**
+ * v1.0 / BAL-05 / TX-06: business time may be earlier than account creation.
+ * accountCreatedTime remains in the signature for call-site compatibility; only format validity is required.
+ */
 export function isBusinessTimeAllowed(businessTime: string, accountCreatedTime: string): boolean {
-  if (!validateBusinessTime(businessTime) || !validateBusinessTime(accountCreatedTime)) {
+  if (!validateBusinessTime(businessTime)) {
     return false;
   }
-  return businessTime >= accountCreatedTime;
+  if (accountCreatedTime.length > 0 && !validateBusinessTime(accountCreatedTime)) {
+    return false;
+  }
+  return true;
 }
 
 function formatDate(year: number, month: number, day: number): string {

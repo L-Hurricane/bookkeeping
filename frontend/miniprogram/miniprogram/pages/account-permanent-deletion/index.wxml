@@ -1,0 +1,38 @@
+<view class="page" wx:if="{{phase === 'invalid'}}">
+  <text class="error">账户参数无效</text>
+  <button class="cancel" bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{phase === 'loading'}}">
+  <text class="status">正在加载删除影响预览</text>
+</view>
+<view class="page" wx:elif="{{phase === 'blocked'}}">
+  <text class="error">{{errorMessage}}</text>
+  <button class="cancel" bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{phase === 'error'}}">
+  <text class="error">{{errorMessage}}</text>
+  <button bindtap="onRetry">重新加载</button>
+  <button class="cancel" bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:else>
+  <text class="warning">{{irreversibleHint}}</text>
+  <text class="section-title">将删除的业务记录</text>
+  <text class="count-row">普通交易：{{transactionCount}} 笔</text>
+  <text class="count-row">余额调整：{{adjustmentCount}} 笔</text>
+  <text class="count-row">关联转账：{{transferCount}} 笔</text>
+  <text class="count-row">AI 历史报告：{{analysisSnapshotCount}} 条</text>
+  <text class="count-row">AI 生成记录：{{analysisGenerationCount}} 条</text>
+  <text class="section-title">其他账户余额影响</text>
+  <text class="hint" wx:if="{{showNoCounterpart}}">{{noCounterpartHint}}</text>
+  <view class="counterpart" wx:for="{{affectedRows}}" wx:key="accountId">
+    <text class="counterpart-name">{{item.name}}</text>
+    <text class="counterpart-line">删除前：<text class="{{item.balanceBeforeToneClass}}">{{item.balanceBeforeLabel}}</text></text>
+    <text class="counterpart-line">删除后：<text class="{{item.balanceAfterToneClass}}">{{item.balanceAfterLabel}}</text></text>
+    <text class="counterpart-line">变化：<text class="{{item.changeToneClass}}">{{item.changeLabel}}</text></text>
+  </view>
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  <view class="actions">
+    <button class="cancel" disabled="{{submitting}}" bindtap="onBack">取消</button>
+    <button class="confirm" disabled="{{!confirmEnabled}}" bindtap="onConfirm">确认永久删除</button>
+  </view>
+</view>

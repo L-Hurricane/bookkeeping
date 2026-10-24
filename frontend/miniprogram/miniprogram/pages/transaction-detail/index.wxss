@@ -28,6 +28,18 @@
   font-weight: 600;
 }
 
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
+}
+
 .fact {
   margin-top: 28rpx;
 }

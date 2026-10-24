@@ -1,0 +1,11 @@
+@import "../account-list/index.wxss";
+
+.restore {
+  margin-top: 12rpx;
+  padding: 0 20rpx;
+  background: #ffffff;
+  color: #111111;
+  font-size: 24rpx;
+  line-height: 56rpx;
+  border: 1rpx solid #dddddd;
+}

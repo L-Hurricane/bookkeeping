@@ -25,7 +25,7 @@
   <view class="hero">
     <text class="type-label">{{typeLabel}}</text>
     <text class="title">{{title}}</text>
-    <text class="amount">{{amountLabel}}</text>
+    <text class="amount {{amountToneClass}}">{{amountLabel}}</text>
   </view>
   <view class="fact">
     <text class="label">分类</text>
@@ -48,7 +48,9 @@
   </view>
   <text class="error" wx:if="{{actionError}}">{{actionError}}</text>
   <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
-  <view class="actions">
+  <text class="hint" wx:if="{{readOnly}}">{{archiveHint}}</text>
+  <button wx:if="{{readOnly}}" bindtap="onOpenSettings">账户设置</button>
+  <view class="actions" wx:if="{{!readOnly}}">
     <button class="edit" disabled="{{deleteLocked}}" bindtap="onEdit">编辑</button>
     <button class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除</button>
   </view>
@@ -57,6 +59,14 @@
   <text class="label">交易类型</text>
   <text>{{typeLabel}}</text>
   <text class="hint">已保存后不可修改</text>
+  <text class="label">资金账户</text>
+  <view wx:if="{{accountPhase === 'loading'}}"><text class="hint">正在读取账户</text></view>
+  <view wx:elif="{{accountPhase === 'error'}}">
+    <text class="error">{{accountError}}</text>
+    <button bindtap="onRetryAccounts">重新加载</button>
+  </view>
+  <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenAccounts">{{accountText}} ></view>
+  <text class="error" wx:if="{{accountError && accountPhase === 'ready'}}">{{accountError}}</text>
   <text class="label">金额</text>
   <input class="amount" type="text" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
   <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
@@ -99,6 +109,15 @@
   <view class="actions">
     <button class="cancel" bindtap="onCancelEdit">取消</button>
     <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
+  </view>
+  <view class="mask" wx:if="{{accountSelectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseAccounts"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseAccount">{{item.label}}</view>
+      </scroll-view>
+      <button bindtap="onCloseAccounts">关闭</button>
+    </view>
   </view>
   <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseCategories"></view>

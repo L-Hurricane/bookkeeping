@@ -1,0 +1,76 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.label {
+  display: block;
+  margin-top: 28rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.value {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 32rpx;
+}
+
+.field {
+  margin-top: 8rpx;
+  padding: 20rpx 24rpx;
+  background: #ffffff;
+  border: 1rpx solid #dddddd;
+  border-radius: 8rpx;
+}
+
+.hint,
+.status {
+  display: block;
+  margin-top: 12rpx;
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.error {
+  display: block;
+  margin-top: 24rpx;
+  color: #b42318;
+}
+
+.actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 40rpx;
+}
+
+.cancel,
+.save {
+  flex: 1;
+}
+
+.save {
+  background: #111111;
+  color: #ffffff;
+}
+
+.cancel {
+  background: #f0f0f0;
+  color: #333333;
+}
+
+.archive,
+.restore {
+  margin-top: 24rpx;
+  background: #ffffff;
+  color: #111111;
+  border: 1rpx solid #dddddd;
+}
+
+.permanent-delete {
+  margin-top: 24rpx;
+  background: #ffffff;
+  color: #b42318;
+  border: 1rpx solid #f2c0c0;
+}

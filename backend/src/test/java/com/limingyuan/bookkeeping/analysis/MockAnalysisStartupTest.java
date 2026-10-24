@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.analysis;
 
 import com.limingyuan.bookkeeping.BookkeepingApplication;
+import com.limingyuan.bookkeeping.support.TestSchemaGuard;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -12,8 +13,7 @@ class MockAnalysisStartupTest {
 
     @BeforeAll
     static void requireTestDatabase() {
-        String schema = schema(System.getenv("TEST_DB_URL"));
-        if (!"bookkeeping_test".equals(schema)) throw new IllegalStateException("refused schema " + schema);
+        TestSchemaGuard.requireAllowedSchema(TestSchemaGuard.databaseName(System.getenv("TEST_DB_URL")));
     }
 
     @Test void configuredKeyFailsStartupWithoutRevealingIt() {
@@ -61,12 +61,5 @@ class MockAnalysisStartupTest {
         }
         assertThat(message).isNotNull();
         return message;
-    }
-
-    private static String schema(String url) {
-        if (url == null || url.isBlank()) return "";
-        String path = url.substring(url.lastIndexOf('/') + 1);
-        int query = path.indexOf('?');
-        return query < 0 ? path : path.substring(0, query);
     }
 }

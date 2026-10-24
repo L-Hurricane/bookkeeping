@@ -7,6 +7,7 @@ import java.time.LocalDate;
 public record GenerationStatus(
         long generationId,
         long userId,
+        long accountId,
         String yearMonth,
         String contextFingerprint,
         GenerationState state,

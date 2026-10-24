@@ -140,14 +140,13 @@ class AdjustmentIntegrationTest {
         assertThat(accountOrder()).isEqualTo(3);
     }
 
-    @Test void failedCreateRollsBackAndForeignUserIsHidden() throws Exception {
-        var failed = submit("early", "5.00", "2019-01-01T00:00:00+08:00", null);
-        assertThat(failed.getResponse().getStatus()).isEqualTo(409);
-        assertThat(accountOrder()).isZero();
-        assertThat(countAdjustments()).isZero();
-        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE operation_id = 'early'").query(Long.class).single()).isZero();
-        var created = adjust("4.00", "2026-09-07T08:00:00+08:00", null, "owned");
-        long id = created.path("adjustment").path("id").asLong();
+    @Test void allowsBusinessTimeBeforeAccountCreationAndForeignUserIsHidden() throws Exception {
+        var early = adjust("5.00", "2019-01-01T00:00:00+08:00", null, "early");
+        assertThat(early.path("adjustment").path("businessTime").asText()).isEqualTo("2019-01-01T00:00:00+08:00");
+        assertThat(early.path("adjustment").path("adjustmentAmount").asText()).isEqualTo("5.00");
+        assertThat(balance()).isEqualTo("5.00");
+        assertThat(accountOrder()).isEqualTo(1);
+        long id = early.path("adjustment").path("id").asLong();
         var other = newUser("other");
         long otherAccount = initialize(other.token(), "0");
         mvc.perform(get("/api/v1/accounts/" + otherAccount + "/balance-adjustments/" + id).header("Authorization", "Bearer " + other.token()))

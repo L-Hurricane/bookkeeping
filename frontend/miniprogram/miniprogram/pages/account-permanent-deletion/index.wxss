@@ -1,0 +1,105 @@
+.page {
+  min-height: 100vh;
+  padding: 32rpx 32rpx 48rpx;
+  box-sizing: border-box;
+}
+
+.status,
+.hint {
+  display: block;
+  color: #888888;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.warning {
+  display: block;
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  background: #fff4f4;
+  color: #912018;
+  font-size: 26rpx;
+  line-height: 1.5;
+  border-radius: 8rpx;
+}
+
+.section-title {
+  display: block;
+  margin-top: 32rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333333;
+}
+
+.count-row {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 28rpx;
+  color: #444444;
+}
+
+.counterpart {
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  background: #ffffff;
+  border: 1rpx solid #e8e8e8;
+  border-radius: 8rpx;
+}
+
+.counterpart-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.counterpart-line {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: #555555;
+}
+
+.money-positive {
+  color: #c41d1d;
+}
+
+.money-negative {
+  color: #0f7b3a;
+}
+
+.money-zero {
+  color: #666666;
+}
+
+.error {
+  display: block;
+  margin-top: 24rpx;
+  color: #b42318;
+  font-size: 26rpx;
+}
+
+.actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 40rpx;
+}
+
+.cancel,
+.confirm {
+  flex: 1;
+}
+
+.confirm {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.confirm[disabled] {
+  background: #e8e8e8;
+  color: #999999;
+}
+
+.cancel {
+  background: #f0f0f0;
+  color: #333333;
+}

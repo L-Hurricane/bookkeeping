@@ -25,6 +25,7 @@ public class TransactionController {
             @JsonDeserialize(using = StrictStringDeserializer.class) String remark) { }
 
     public record EditRequest(
+            Long accountId,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String amount,
             @JsonDeserialize(using = StrictStringDeserializer.class) String name,
             Long categoryId,
@@ -54,8 +55,9 @@ public class TransactionController {
     @PutMapping("/{transactionId}")
     public TransactionService.TransactionView edit(@PathVariable long accountId, @PathVariable long transactionId,
             @Valid @RequestBody EditRequest request) {
-        return transactions.edit(accountId, transactionId, draft(request.amount(), request.name(), request.categoryId(),
-                request.tagIds(), request.businessTime(), request.remark()));
+        long targetAccountId = request.accountId() == null ? accountId : request.accountId();
+        return transactions.edit(accountId, targetAccountId, transactionId, draft(request.amount(), request.name(),
+                request.categoryId(), request.tagIds(), request.businessTime(), request.remark()));
     }
 
     @DeleteMapping("/{transactionId}")

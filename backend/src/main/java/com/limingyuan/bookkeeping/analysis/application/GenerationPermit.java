@@ -8,6 +8,7 @@ public record GenerationPermit(
         long generationId,
         long fencingToken,
         long userId,
+        long accountId,
         String yearMonth,
         String contextFingerprint,
         LocalDate permitDate,

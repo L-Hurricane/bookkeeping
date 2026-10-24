@@ -1,0 +1,13 @@
+@import "../transfer-create/index.wxss";
+
+.readonly-hint {
+  margin-top: 16rpx;
+  color: #888888;
+  font-size: 26rpx;
+}
+
+.delete {
+  margin-top: 24rpx;
+  background: transparent;
+  color: #b42318;
+}

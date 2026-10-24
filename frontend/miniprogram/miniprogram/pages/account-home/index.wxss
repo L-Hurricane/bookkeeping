@@ -4,6 +4,17 @@
   box-sizing: border-box;
 }
 
+.nav {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.nav-link {
+  color: #666666;
+  font-size: 28rpx;
+}
+
 .header {
   display: flex;
   flex-direction: column;
@@ -13,6 +24,12 @@
 .name {
   font-size: 40rpx;
   font-weight: 600;
+}
+
+.kind,
+.hint {
+  color: #888888;
+  font-size: 24rpx;
 }
 
 .label,
@@ -27,6 +44,18 @@
 .balance {
   font-size: 56rpx;
   font-weight: 600;
+}
+
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
 }
 
 .search {
@@ -129,6 +158,16 @@
   background: transparent;
   color: #666666;
   font-size: 28rpx;
+}
+
+.transfer {
+  margin-top: 12rpx;
+  background: #f0f0f0;
+  color: #111111;
+}
+
+.type.transfer {
+  color: #245bdb;
 }
 
 .create {

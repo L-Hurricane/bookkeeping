@@ -1,0 +1,74 @@
+<view class="page" wx:if="{{screen === 'invalid'}}">
+  <text class="error">转账页面参数无效</text>
+  <button bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'loading'}}">
+  <text class="hint">正在读取账户</text>
+</view>
+<view class="page" wx:elif="{{screen === 'error'}}">
+  <text class="error">账户读取失败，请重新加载</text>
+  <button bindtap="onRetryAccounts">重新加载</button>
+  <button bindtap="onBack">返回</button>
+</view>
+<view class="page" wx:elif="{{screen === 'ready'}}">
+  <text class="label">转出账户</text>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenFromAccounts">{{fromAccountText}} ></view>
+  <text class="label">转入账户</text>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenToAccounts">{{toAccountText}} ></view>
+  <text class="amount-label">转账金额</text>
+  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmount" />
+  <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
+  <text class="label">转出时间</text>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenFromTime">{{fromTimeText}} ></view>
+  <text class="label">转入时间</text>
+  <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenToTime">{{toTimeText}} ></view>
+  <view class="sync-row">
+    <text class="sync-hint">{{syncHint}}</text>
+    <text class="sync-action {{formLocked ? 'locked' : ''}}" bindtap="onToggleSync">{{syncAction}}</text>
+  </view>
+  <text class="error" wx:if="{{submitError}}">{{submitError}}</text>
+  <text class="hint" wx:if="{{uncertain}}">{{uncertainHint}}</text>
+  <button wx:if="{{uncertain}}" bindtap="onRetrySave">重试确认</button>
+  <view class="actions">
+    <button class="cancel" bindtap="onCancel">取消</button>
+    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
+  </view>
+  <view class="mask" wx:if="{{fromSelectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseFromAccounts"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseFromAccount">{{item.label}}</view>
+      </scroll-view>
+      <button bindtap="onCloseFromAccounts">关闭</button>
+    </view>
+  </view>
+  <view class="mask" wx:if="{{toSelectorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseToAccounts"></view>
+    <view class="panel">
+      <scroll-view class="panel-list" scroll-y>
+        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseToAccount">{{item.label}}</view>
+      </scroll-view>
+      <button bindtap="onCloseToAccounts">关闭</button>
+    </view>
+  </view>
+  <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelTime"></view>
+    <view class="panel">
+      <text class="editor-title">编辑{{timeEditorSide === 'from' ? '转出' : '转入'}}时间</text>
+      <text class="label">日期</text>
+      <input class="field" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" />
+      <text class="label">时间</text>
+      <input class="field" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" />
+      <view class="shortcuts {{formLocked ? 'locked' : ''}}">
+        <text class="shortcut" bindtap="onTimeNow">现在</text>
+        <text class="shortcut" bindtap="onTimeToday">今天</text>
+        <text class="shortcut" bindtap="onTimeYesterday">昨天</text>
+      </view>
+      <text class="error" wx:if="{{timeDraftError}}">{{timeDraftError}}</text>
+      <view class="editor-actions">
+        <button bindtap="onCancelTime">取消</button>
+        <button class="save" bindtap="onConfirmTime">确定</button>
+      </view>
+    </view>
+  </view>
+</view>
