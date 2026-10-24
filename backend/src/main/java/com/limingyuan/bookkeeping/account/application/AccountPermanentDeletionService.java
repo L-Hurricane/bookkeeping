@@ -10,6 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.function.LongFunction;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,7 +41,7 @@ public class AccountPermanentDeletionService {
         long userId = context.userId();
         var account = store.findAccount(accountId, userId).orElseThrow(this::missing);
         requireArchived(account);
-        var snapshot = snapshotFor(account);
+        var snapshot = snapshotFor(account, false);
         var impacts = AccountPermanentDeletionImpacts.counterpartImpacts(
                 accountId,
                 snapshot.transfers(),
@@ -64,10 +66,11 @@ public class AccountPermanentDeletionService {
         transaction.executeWithoutResult(status -> {
             var account = store.findAccount(accountId, userId).orElseThrow(this::missing);
             requireArchived(account);
-            var snapshot = snapshotFor(account);
+            // Plain read: choose the account lock set only. REPEATABLE READ keeps this snapshot.
+            var discovered = store.findTransfersTouchingAccount(accountId, userId);
             var lockIds = new TreeSet<Long>();
             lockIds.add(accountId);
-            for (var transfer : snapshot.transfers()) {
+            for (var transfer : discovered) {
                 if (transfer.fromAccountId() != accountId) {
                     lockIds.add(transfer.fromAccountId());
                 }
@@ -75,42 +78,69 @@ public class AccountPermanentDeletionService {
                     lockIds.add(transfer.toAccountId());
                 }
             }
-            locks.lockOwnedInIdOrder(lockIds);
-            var refreshed = store.findAccount(accountId, userId).orElseThrow(this::missing);
+            var lockedAccounts = locks.lockOwnedInIdOrder(lockIds);
+            AccountEntity refreshed = null;
+            for (var candidate : lockedAccounts) {
+                if (candidate != null && candidate.getId() == accountId) {
+                    refreshed = candidate;
+                }
+            }
+            if (refreshed == null) {
+                throw missing();
+            }
             requireArchived(refreshed);
-            var current = snapshotFor(refreshed);
+            // FOR UPDATE after the account locks. This current read sees commits that landed
+            // before the lock. Account writers block on the account row. Analysis writers do not
+            // lock the account, so the analysis FOR UPDATE also holds the next-key range until
+            // this transaction ends. Deletes name these ids. A foreign-key failure rolls back.
+            var current = snapshotFor(refreshed, true);
             if (!AccountPermanentDeletionPreviewToken.matches(current.basis(), token)) {
                 throw previewStale();
             }
-            if (store.hasAnalysisReferenceConflict(accountId, userId)) {
+            if (store.lockAnalysisReferenceConflict(accountId, userId)) {
                 throw analysisReferenceConflict();
             }
-            deleteAll(refreshed, current);
+            try {
+                deleteAll(refreshed, current);
+            } catch (DataIntegrityViolationException ex) {
+                throw previewStale();
+            }
         });
     }
 
     private void deleteAll(AccountEntity account, DeletionSnapshot snapshot) {
         long accountId = account.getId();
         long userId = context.userId();
-        store.deleteAnalysisGenerations(accountId, userId);
-        store.deleteAnalysisSnapshots(accountId, userId);
+        store.deleteAnalysisGenerations(accountId, userId, snapshot.analysisGenerationIds());
+        store.deleteAnalysisSnapshots(accountId, userId, snapshot.analysisSnapshotIds());
         store.deleteTransactionTags(snapshot.transactionIds());
-        store.deleteTransactions(accountId, userId);
-        store.deleteAdjustments(accountId, userId);
+        store.deleteTransactions(accountId, userId, snapshot.transactionIds());
+        store.deleteAdjustments(accountId, userId, snapshot.adjustmentIds());
         store.deleteTransfers(userId, snapshot.transferIds());
         store.deleteAccount(account);
     }
 
-    private DeletionSnapshot snapshotFor(AccountEntity account) {
+    private DeletionSnapshot snapshotFor(AccountEntity account, boolean locking) {
         long accountId = account.getId();
         long userId = context.userId();
-        List<Long> transactionIds = store.findTransactionIds(accountId, userId);
-        List<Long> adjustmentIds = store.findAdjustmentIds(accountId, userId);
-        List<Long> analysisSnapshotIds = store.findAnalysisSnapshotIds(accountId, userId);
-        List<Long> analysisGenerationIds = store.findAnalysisGenerationIds(accountId, userId);
-        List<TransferBasis> transferRows = store.findTransfersTouchingAccount(accountId, userId);
+        List<Long> transactionIds = locking
+                ? store.lockTransactionIds(accountId, userId)
+                : store.findTransactionIds(accountId, userId);
+        List<Long> adjustmentIds = locking
+                ? store.lockAdjustmentIds(accountId, userId)
+                : store.findAdjustmentIds(accountId, userId);
+        List<Long> analysisSnapshotIds = locking
+                ? store.lockAnalysisSnapshotIds(accountId, userId)
+                : store.findAnalysisSnapshotIds(accountId, userId);
+        List<Long> analysisGenerationIds = locking
+                ? store.lockAnalysisGenerationIds(accountId, userId)
+                : store.findAnalysisGenerationIds(accountId, userId);
+        List<TransferBasis> transferRows = locking
+                ? store.lockTransfersTouchingAccount(accountId, userId)
+                : store.findTransfersTouchingAccount(accountId, userId);
+        LongFunction<java.math.BigDecimal> balances = locking ? store::lockCurrentBalance : store::currentBalance;
         var balanceBefore = AccountPermanentDeletionImpacts.counterpartBalanceBefore(
-                accountId, transferRows, store::currentBalance);
+                accountId, transferRows, balances);
         var names = new LinkedHashMap<Long, String>();
         for (long counterpartId : balanceBefore.keySet()) {
             names.put(counterpartId, store.findAccount(counterpartId, userId)

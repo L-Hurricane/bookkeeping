@@ -13,7 +13,8 @@ public interface TransactionRepository extends JpaRepository<TransactionEntity, 
     @Query("select t.id from TransactionEntity t where t.accountId = :accountId and t.userId = :userId order by t.id")
     List<Long> findAllIdsByAccountIdAndUserId(@Param("accountId") long accountId, @Param("userId") long userId);
 
-    @Modifying
-    @Query("delete from TransactionEntity t where t.accountId = :accountId and t.userId = :userId")
-    void deleteAllByAccountIdAndUserId(@Param("accountId") long accountId, @Param("userId") long userId);
+    @Modifying(flushAutomatically = true)
+    @Query("delete from TransactionEntity t where t.accountId = :accountId and t.userId = :userId and t.id in :ids")
+    void deleteByAccountIdAndUserIdAndIdIn(@Param("accountId") long accountId, @Param("userId") long userId,
+            @Param("ids") java.util.Collection<Long> ids);
 }

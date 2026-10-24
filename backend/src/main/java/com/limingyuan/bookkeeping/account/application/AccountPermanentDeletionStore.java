@@ -23,15 +23,29 @@ public interface AccountPermanentDeletionStore {
 
     boolean hasAnalysisReferenceConflict(long accountId, long userId);
 
-    void deleteAnalysisGenerations(long accountId, long userId);
+    List<Long> lockTransactionIds(long accountId, long userId);
 
-    void deleteAnalysisSnapshots(long accountId, long userId);
+    List<Long> lockAdjustmentIds(long accountId, long userId);
+
+    List<TransferBasis> lockTransfersTouchingAccount(long accountId, long userId);
+
+    BigDecimal lockCurrentBalance(long accountId);
+
+    List<Long> lockAnalysisSnapshotIds(long accountId, long userId);
+
+    List<Long> lockAnalysisGenerationIds(long accountId, long userId);
+
+    boolean lockAnalysisReferenceConflict(long accountId, long userId);
+
+    void deleteAnalysisGenerations(long accountId, long userId, List<Long> ids);
+
+    void deleteAnalysisSnapshots(long accountId, long userId, List<Long> ids);
 
     void deleteTransactionTags(List<Long> transactionIds);
 
-    void deleteTransactions(long accountId, long userId);
+    void deleteTransactions(long accountId, long userId, List<Long> ids);
 
-    void deleteAdjustments(long accountId, long userId);
+    void deleteAdjustments(long accountId, long userId, List<Long> ids);
 
     void deleteTransfers(long userId, List<Long> transferIds);
 

@@ -9,8 +9,11 @@ import com.limingyuan.bookkeeping.transaction.persistence.TransactionRepository;
 import com.limingyuan.bookkeeping.transaction.persistence.TransactionTagRepository;
 import com.limingyuan.bookkeeping.transfer.persistence.TransferRepository;
 import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,11 +26,12 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     private final CurrentBalance balances;
     private final AccountPermanentDeletionAnalysisCounter analysis;
     private final TrustedUserContext context;
+    private final JdbcClient jdbc;
 
     public JpaAccountPermanentDeletionStore(AccountRepository accounts, TransactionRepository transactions,
             TransactionTagRepository transactionTags, BalanceAdjustmentRepository adjustments,
             TransferRepository transfers, CurrentBalance balances,
-            AccountPermanentDeletionAnalysisCounter analysis, TrustedUserContext context) {
+            AccountPermanentDeletionAnalysisCounter analysis, TrustedUserContext context, JdbcClient jdbc) {
         this.accounts = accounts;
         this.transactions = transactions;
         this.transactionTags = transactionTags;
@@ -36,6 +40,7 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
         this.balances = balances;
         this.analysis = analysis;
         this.context = context;
+        this.jdbc = jdbc;
     }
 
     @Override
@@ -85,15 +90,89 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     }
 
     @Override
-    public void deleteAnalysisGenerations(long accountId, long userId) {
-        requireUser(userId);
-        analysis.deleteGenerationsForAccount(accountId);
+    public List<Long> lockTransactionIds(long accountId, long userId) {
+        return jdbc.sql("""
+                SELECT id FROM transactions
+                WHERE account_id = :accountId AND user_id = :userId
+                ORDER BY id
+                FOR UPDATE
+                """).param("accountId", accountId).param("userId", userId).query(Long.class).list();
     }
 
     @Override
-    public void deleteAnalysisSnapshots(long accountId, long userId) {
+    public List<Long> lockAdjustmentIds(long accountId, long userId) {
+        return jdbc.sql("""
+                SELECT id FROM balance_adjustments
+                WHERE account_id = :accountId AND user_id = :userId
+                ORDER BY id
+                FOR UPDATE
+                """).param("accountId", accountId).param("userId", userId).query(Long.class).list();
+    }
+
+    @Override
+    public List<TransferBasis> lockTransfersTouchingAccount(long accountId, long userId) {
+        var byId = new LinkedHashMap<Long, TransferBasis>();
+        for (var row : lockTransferSide("""
+                SELECT id, from_account_id, to_account_id, amount
+                FROM transfers
+                WHERE user_id = :userId AND from_account_id = :accountId
+                ORDER BY id
+                FOR UPDATE
+                """, accountId, userId)) {
+            byId.put(row.id(), row);
+        }
+        for (var row : lockTransferSide("""
+                SELECT id, from_account_id, to_account_id, amount
+                FROM transfers
+                WHERE user_id = :userId AND to_account_id = :accountId
+                ORDER BY id
+                FOR UPDATE
+                """, accountId, userId)) {
+            byId.putIfAbsent(row.id(), row);
+        }
+        return byId.values().stream().sorted(Comparator.comparing(TransferBasis::id)).toList();
+    }
+
+    @Override
+    public BigDecimal lockCurrentBalance(long accountId) {
+        return balances.ofLocked(accountId);
+    }
+
+    @Override
+    public List<Long> lockAnalysisSnapshotIds(long accountId, long userId) {
         requireUser(userId);
-        analysis.deleteSnapshotsForAccount(accountId);
+        return analysis.lockSnapshotIdsForAccount(accountId);
+    }
+
+    @Override
+    public List<Long> lockAnalysisGenerationIds(long accountId, long userId) {
+        requireUser(userId);
+        return analysis.lockGenerationsForAccount(accountId).stream()
+                .map(AccountPermanentDeletionAnalysisCounter.LockedGeneration::id)
+                .toList();
+    }
+
+    @Override
+    public boolean lockAnalysisReferenceConflict(long accountId, long userId) {
+        requireUser(userId);
+        var snapshots = analysis.lockSnapshotIdsForAccount(accountId);
+        var generations = analysis.lockGenerationsForAccount(accountId);
+        if (AccountPermanentDeletionAnalysisCounter.outboundConflict(snapshots, generations)) {
+            return true;
+        }
+        return analysis.lockInboundReferenceConflict(accountId, snapshots);
+    }
+
+    @Override
+    public void deleteAnalysisGenerations(long accountId, long userId, List<Long> ids) {
+        requireUser(userId);
+        analysis.deleteGenerationsByIds(accountId, ids);
+    }
+
+    @Override
+    public void deleteAnalysisSnapshots(long accountId, long userId, List<Long> ids) {
+        requireUser(userId);
+        analysis.deleteSnapshotsByIds(accountId, ids);
     }
 
     @Override
@@ -105,14 +184,20 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     }
 
     @Override
-    public void deleteTransactions(long accountId, long userId) {
-        transactions.deleteAllByAccountIdAndUserId(accountId, userId);
+    public void deleteTransactions(long accountId, long userId, List<Long> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+        transactions.deleteByAccountIdAndUserIdAndIdIn(accountId, userId, ids);
         transactions.flush();
     }
 
     @Override
-    public void deleteAdjustments(long accountId, long userId) {
-        adjustments.deleteAllByAccountIdAndUserId(accountId, userId);
+    public void deleteAdjustments(long accountId, long userId, List<Long> ids) {
+        if (ids.isEmpty()) {
+            return;
+        }
+        adjustments.deleteByAccountIdAndUserIdAndIdIn(accountId, userId, ids);
         adjustments.flush();
     }
 
@@ -129,6 +214,13 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     public void deleteAccount(AccountEntity account) {
         accounts.delete(account);
         accounts.flush();
+    }
+
+    private List<TransferBasis> lockTransferSide(String sql, long accountId, long userId) {
+        return jdbc.sql(sql).param("accountId", accountId).param("userId", userId)
+                .query((row, rowNum) -> new TransferBasis(row.getLong("id"), row.getLong("from_account_id"),
+                        row.getLong("to_account_id"), row.getBigDecimal("amount")))
+                .list();
     }
 
     private void requireUser(long userId) {

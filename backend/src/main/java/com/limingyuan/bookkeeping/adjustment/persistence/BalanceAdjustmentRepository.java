@@ -13,7 +13,8 @@ public interface BalanceAdjustmentRepository extends JpaRepository<BalanceAdjust
     @Query("select a.id from BalanceAdjustmentEntity a where a.accountId = :accountId and a.userId = :userId order by a.id")
     List<Long> findAllIdsByAccountIdAndUserId(@Param("accountId") long accountId, @Param("userId") long userId);
 
-    @Modifying
-    @Query("delete from BalanceAdjustmentEntity a where a.accountId = :accountId and a.userId = :userId")
-    void deleteAllByAccountIdAndUserId(@Param("accountId") long accountId, @Param("userId") long userId);
+    @Modifying(flushAutomatically = true)
+    @Query("delete from BalanceAdjustmentEntity a where a.accountId = :accountId and a.userId = :userId and a.id in :ids")
+    void deleteByAccountIdAndUserIdAndIdIn(@Param("accountId") long accountId, @Param("userId") long userId,
+            @Param("ids") java.util.Collection<Long> ids);
 }
