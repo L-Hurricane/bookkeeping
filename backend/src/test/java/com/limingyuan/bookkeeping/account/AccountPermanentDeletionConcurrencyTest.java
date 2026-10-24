@@ -9,22 +9,23 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Two-connection interleaving for the next T10 retest. Not a T09R result.
  *
- * <p>Class stays disabled until a lead authorizes V16 on {@code bookkeeping_migration_test}.
- * Enabling it does not run Flyway. It refuses every other database name. T09R did not execute it,
- * so a green unit test is not evidence that MySQL concurrency passed.
+ * <p>The class runs only when {@code S2_T10_JDBC_URL} names {@code bookkeeping_migration_test}.
+ * It does not run Flyway. {@code open()} refuses every other database name.
  *
  * <p>Both connections use {@code REPEATABLE READ}. A plain {@code SELECT} fixes A's snapshot.
  * A later plain {@code SELECT} stays on that snapshot. {@code SELECT ... FOR UPDATE} is the
  * current read the service uses after the account lock.
  */
-@Disabled("S2-T10 only, after an authorized V16 database. T09R must not run this class.")
+@EnabledIfEnvironmentVariable(
+        named = "S2_T10_JDBC_URL",
+        matches = "jdbc:mysql://127\\.0\\.0\\.1:3306/bookkeeping_migration_test(\\?.*)?")
 class AccountPermanentDeletionConcurrencyTest {
     @Test
     void transactionCommittedBeforeAccountLockIsSeenByForUpdateAndLeftInPlace() throws Exception {
