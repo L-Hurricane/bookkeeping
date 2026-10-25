@@ -81,6 +81,7 @@
   <view wx:if="{{categoryPhase === 'ready'}}" class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
   <text wx:else>{{categoryText}}</text>
   <text class="label">标签</text>
+  <text class="hint">可以同时选择上级和下级。取消不会改动已保存的关联。</text>
   <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
   <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
     <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
