@@ -9,10 +9,10 @@
 ## 当前执行状态
 
 - S2-T10 / M2-AUTO-GATE：**PASS**。组长 2026-10-24 裁断。未解决 P0/P1/P2 为 0。残留 P3 是模拟完整性异常下的事务回滚，没有直接触发 InnoDB `RESTRICT`，非阻断，未标成已修复。
-- S2-T11 / M2-HUMAN-GATE：**未结项**。负责人 2026-10-25 只确认 UAT-06 五项检查 PASS。归档、转账、永久删除、金额颜色和 A+B-lite 去留仍没有负责人总评。独立前端测试 219 项通过，定向复核 P0/P1/P2/P3 为 0。这不代表整项人工 PASS，也不代表 S2 CLOSED。记录：`docs/implementation/s2-t11-closeout-candidate-2026-10-25.md`。
-- 已审核代码：`bf7074a15a1e7e2b14b34e3d1ffeef3d48e9b35b`。本状态记录提交在其后，完整 HEAD 以 `git rev-parse HEAD` 为准。
+- S2-T11 / M2-HUMAN-GATE：**CLOSED**。负责人 2026-10-25 确认功能人工 Gate PASS，UAT-06 五项 PASS，并确认 A+B-lite 停止扩建自动交接、保留现有校验和证据目录。这不是 v1.0 发布，不是合并 main，也不是生产部署。结项记录：`docs/implementation/bookkeeping-s2-stage-closeout-v0.1.md`，SHA-256 `2e759e59ca4b4c56deba7672a069fb909581f63e47d9304b7f3244d84203184c`。
+- 已审核代码：`bf7074a15a1e7e2b14b34e3d1ffeef3d48e9b35b`。UAT 修复提交 `ab1025973a73d010770da90c519c748d960bb885`。结项文档提交以 `git rev-parse HEAD` 为准。
 - 已批准计划：`docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`，SHA-256 `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5`。本状态不修改该文件。
-- 下一责任人：项目负责人。按 `docs/implementation/s2-t11-uat-guide-2026-10-24.md` 做功能验收和 A+B-lite 去留。组长不代填结论。
+- 下一责任人：项目负责人和 ChatGPT 项目组长。S2 结项事实确认后做简易复盘。复盘前不开始 S3，不清理数据库或本地工作区。
 - S1-T08-OBS-01 / UI-NAV-01 仍在 Backlog。延期依据是 S1 结项时负责人同意暂缓，以及 2026-10-25 接受不再恢复微信原生主页按钮。后续仍是「账本 / 统计 / 我的」。最晚复核节点是完整 v1.0 产品/UI 人工验收前。
 - UAT-03 每笔历史流水的交易后余额仍在 Backlog。延期依据是 2026-10-25 组长安排，不在本轮编码。最晚复核节点是后续相关 Stage 再评估，不由本次 S2 结项代替。
 - 仓库内治理原件仍是下表 v1.6。本机 Downloads 的 v1.7 SHA-256 为 `4fcf410092429fa97aa21baaddc91b027fa0d006cee08af59e46b49bac4c56c1`，§4.8 的既有 `release/v1.0` 非强制 Push 授权继续有效，§4.9 不新增 Git 权限。本入口不表示 ChatGPT Project 已同步。
@@ -49,5 +49,8 @@ S2 计划 Review 原件登记 SHA-256 为 `629dd55f3f891b8ae10faebd87f40a55035f9
 - DB-02 批准记录：`docs/implementation/s2-db-02-approval-2026-10-23.md`。批准范围是 T05 提交的 V16 单表 DDL 原文。该记录不修改上面的正式计划 SHA，也不授权对任何库执行 Flyway。
 - M1 自动门禁通过后必须暂停，向负责人复盘；确认前不得开始 M2。该暂停已在 M2 开始前完成，本行保留为历史规则。
 - T10 证据链：`docs/implementation/s2-t10-gate-evidence-2026-10-24.md`，SHA-256 `9e10841e478534971d532f441ef4a386367a735928b3e12d0d700a0c9300e020`。
-- T11 验收指南：`docs/implementation/s2-t11-uat-guide-2026-10-24.md`，SHA-256 `76728ecaac072168e2eeb5c881e6c1bd2145694d18b10843f5498ee31ff7bb16`。
-- T11 恢复演练记录：`docs/implementation/s2-t11-restore-drill-2026-10-24.md`，SHA-256 `4c652487c90de040f733c8b59e02d9980b9569822f262177e1fcb375d796ba16`。状态 BLOCKED。
+- T11 验收指南：`docs/implementation/s2-t11-uat-guide-2026-10-24.md`，当前 SHA-256 `ba32d5a29dd248d810cce7f0bd10a1a1ed726ea069be6cafb6c785cb6d971f95`。
+- T11 恢复阻断记录：`docs/implementation/s2-t11-restore-drill-2026-10-24.md`，SHA-256 `4c652487c90de040f733c8b59e02d9980b9569822f262177e1fcb375d796ba16`。其后的执行记录是 `docs/implementation/s2-t11-restore-execution-2026-10-24.md`。
+- S2 结项：`docs/implementation/bookkeeping-s2-stage-closeout-v0.1.md`，SHA-256 `2e759e59ca4b4c56deba7672a069fb909581f63e47d9304b7f3244d84203184c`。
+- 转账默认选择补充：`docs/changes/v1.0-s2-uat-02-transfer-account-selection.md`，SHA-256 `a4c44839324e9d2470cc2e9648005d0dceab0110e7742b697163d259685cef7d`。不替换 PRD 或 UI Freeze。
+- 审批索引 v0.5 原件不改。本入口记录上述结项文件的位置和 SHA。
