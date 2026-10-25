@@ -62,9 +62,8 @@ class MigrationIntegrationTest {
                 assertThat(rows.next()).isTrue();
                 legacyAccountId = rows.getLong(1);
             }
-            // V10 nullable category, V11 analysis, V12 multi-account, V13 cross-account order collision,
-            // V14 analysis account scope, V15 account lifecycle, V16 transfers.
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(7);
+            // V10 through V17. V17 is the approved category and tag tree migration.
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
             flyway.validate();
             try (var connection = DriverManager.getConnection(url, username, password);
                  var statement = connection.createStatement()) {
@@ -107,6 +106,31 @@ class MigrationIntegrationTest {
                 try (var rows = statement.executeQuery("SELECT COUNT(*) FROM transfers")) {
                     assertThat(rows.next()).isTrue();
                     assertThat(rows.getLong(1)).isZero();
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_schema = DATABASE() AND table_name = 'tags'
+                          AND column_name IN ('type', 'parent_id')
+                        """)) {
+                    var names = new ArrayList<String>();
+                    while (rows.next()) names.add(rows.getString(1));
+                    assertThat(names).containsExactly("parent_id");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'tags'
+                          AND constraint_name IN ('fk_tags_parent', 'fk_tags_user')
+                        """)) {
+                    var names = new ArrayList<String>();
+                    while (rows.next()) names.add(rows.getString(1));
+                    assertThat(names).contains("fk_tags_parent", "fk_tags_user");
+                }
+                try (var rows = statement.executeQuery("""
+                        SELECT constraint_name FROM information_schema.table_constraints
+                        WHERE table_schema = DATABASE() AND table_name = 'categories'
+                          AND constraint_name = 'uk_categories_user_type_name'
+                        """)) {
+                    assertThat(rows.next()).isTrue();
                 }
                 try (var rows = statement.executeQuery("""
                         SELECT constraint_name FROM information_schema.table_constraints

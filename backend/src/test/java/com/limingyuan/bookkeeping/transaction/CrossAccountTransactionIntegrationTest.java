@@ -173,14 +173,14 @@ class CrossAccountTransactionIntegrationTest {
         var created = create(accountA, body("EXPENSE", "6.00", "保留", expenseCategory, List.of(expenseTag),
                 "2026-09-24T11:00:00+08:00", null));
         long id = created.path("id").asLong();
-        long incomeTag = tag("INCOME", "工资标签");
+        long incomeCategory = categoryId("INCOME", "工资");
 
         mvc.perform(put("/api/v1/accounts/" + accountA + "/transactions/" + id)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(edit(accountB, "6.00", "保留", expenseCategory, List.of(incomeTag),
+                        .content(edit(accountB, "6.00", "保留", incomeCategory, List.of(expenseTag),
                                 "2026-09-24T11:00:00+08:00", null)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("TAG_TYPE_MISMATCH"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("CATEGORY_TYPE_MISMATCH"));
 
         assertThat(jdbc.sql("SELECT account_id FROM transactions WHERE id = :id").param("id", id).query(Long.class).single())
                 .isEqualTo(accountA);

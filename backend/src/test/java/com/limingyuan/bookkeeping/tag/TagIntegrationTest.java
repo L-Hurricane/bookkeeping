@@ -3,7 +3,6 @@ package com.limingyuan.bookkeeping.tag;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
-import com.limingyuan.bookkeeping.tag.domain.TagType;
 import com.limingyuan.bookkeeping.tag.persistence.TagRepository;
 import java.util.*;
 import java.util.concurrent.*;
@@ -71,7 +70,7 @@ class TagIntegrationTest {
         }
     }
 
-    @Test void createsIncomeAndExpenseTagsAndListsOnlyTheRequestedType() throws Exception {
+    @Test void createsTagsWithoutAStoredTypeAndListsThemForEitherRequest() throws Exception {
         var income = create("INCOME", "  工资  ", token);
         var expense = create("EXPENSE", "外卖", token);
         assertThat(income.path("name").asText()).isEqualTo("工资");
@@ -79,16 +78,13 @@ class TagIntegrationTest {
         assertThat(expense.path("type").asText()).isEqualTo("EXPENSE");
         var stored = tags.findById(income.path("id").asLong()).orElseThrow();
         assertThat(stored.getUserId()).isEqualTo(userId);
-        assertThat(stored.getType()).isEqualTo(TagType.INCOME);
         assertThat(stored.getName()).isEqualTo("工资");
         assertThat(stored.getCreatedAtUtc()).isNotNull();
         mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + token).param("type", "INCOME"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.items[0].id").value(income.path("id").asLong()))
-                .andExpect(jsonPath("$.items[0].name").value("工资"));
+                .andExpect(jsonPath("$.items.length()").value(2));
         mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + token).param("type", "EXPENSE"))
-                .andExpect(jsonPath("$.items[0].name").value("外卖"));
+                .andExpect(jsonPath("$.items.length()").value(2));
     }
 
     @Test void sameUserCannotReuseANameAcrossTypesAndCollation() throws Exception {
@@ -110,7 +106,9 @@ class TagIntegrationTest {
         var theirs = create("INCOME", "外卖", other.token());
         mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + other.token())
                         .param("type", "EXPENSE").param("userId", Long.toString(userId)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(theirs.path("id").asLong()));
         mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + other.token()).param("type", "INCOME"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(theirs.path("id").asLong()));
@@ -152,7 +150,7 @@ class TagIntegrationTest {
         mvc.perform(post("/api/v1/tags").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"type\":\"EXPENSE\",\"name\":\"外卖\"}"))
                 .andExpect(status().isUnauthorized());
-        assertThat(tags.findAllByUserIdAndTypeOrderById(userId, TagType.EXPENSE)).isEmpty();
+        assertThat(tags.findAllByUserIdOrderById(userId)).isEmpty();
     }
 
     private JsonNode create(String type, String name, String bearer) throws Exception {

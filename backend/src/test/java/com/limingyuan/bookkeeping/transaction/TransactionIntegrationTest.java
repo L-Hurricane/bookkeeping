@@ -98,7 +98,6 @@ class TransactionIntegrationTest {
         expect(400, body("EXPENSE", "0.00", null, expenseCategory, List.of(), "2026-09-24T12:00:00+08:00", null), token, "VALIDATION_FAILED");
         expect(409, body("EXPENSE", "1", null, incomeCategory, List.of(), "2026-09-24T12:00:00+08:00", null), token, "CATEGORY_TYPE_MISMATCH");
         expect(409, body("EXPENSE", "1", null, groupCategory, List.of(), "2026-09-24T12:00:00+08:00", null), token, "CATEGORY_NOT_BOOKABLE");
-        expect(409, body("EXPENSE", "1", null, expenseCategory, List.of(incomeTag), "2026-09-24T12:00:00+08:00", null), token, "TAG_TYPE_MISMATCH");
         var other = newUser("other");
         long foreignTag = tag("EXPENSE", "别人的", other.token());
         long foreignAccount = initialize(other.token());
@@ -185,9 +184,9 @@ class TransactionIntegrationTest {
         assertThat(after).startsWith(before);
         assertThat(after.split(" ")[2]).isGreaterThan(after.split(" ")[1]);
         mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content(edit("1", "x", expenseCategory, List.of(incomeTag),
+                        .contentType(MediaType.APPLICATION_JSON)                        .content(edit("1", "x", incomeCategory, List.of(otherExpenseTag),
                                 "2027-01-02T00:00:00+08:00", null)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("TAG_TYPE_MISMATCH"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("CATEGORY_TYPE_MISMATCH"));
         mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"type\":\"INCOME\",\"amount\":\"1\",\"categoryId\":" + expenseCategory
                                 + ",\"businessTime\":\"2027-01-02T00:00:00+08:00\"}"))
@@ -209,7 +208,6 @@ class TransactionIntegrationTest {
         assertThat(accountOrder()).isZero();
         expect(409, body("EXPENSE", "1", null, incomeCategory, List.of(), "2026-09-24T12:00:00+08:00", null), token, "CATEGORY_TYPE_MISMATCH");
         expect(409, body("EXPENSE", "1", null, groupCategory, List.of(), "2026-09-24T12:00:00+08:00", null), token, "CATEGORY_NOT_BOOKABLE");
-        expect(409, body("EXPENSE", "1", null, expenseCategory, List.of(incomeTag), "2026-09-24T12:00:00+08:00", null), token, "TAG_TYPE_MISMATCH");
         assertThat(accountOrder()).isZero();
         assertThat(jdbc.sql("SELECT COUNT(*) FROM transactions WHERE account_id = :id").param("id", accountId).query(Long.class).single()).isZero();
     }

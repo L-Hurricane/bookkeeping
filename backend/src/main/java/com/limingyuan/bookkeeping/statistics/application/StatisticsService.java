@@ -129,7 +129,7 @@ public class StatisticsService {
         jdbc.sql("""
                 SELECT g.id, g.name, COUNT(*) AS transaction_count, COALESCE(SUM(t.amount), 0) AS amount
                 FROM transaction_tags tt
-                JOIN tags g ON g.id = tt.tag_id AND g.user_id = :userId AND g.type = :type
+                JOIN tags g ON g.id = tt.tag_id AND g.user_id = :userId
                 JOIN transactions t ON t.id = tt.transaction_id
                 WHERE t.account_id = :accountId AND t.user_id = :userId AND t.type = :type
                   AND t.business_time >= :start AND t.business_time < :end

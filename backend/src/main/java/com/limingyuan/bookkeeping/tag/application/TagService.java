@@ -42,7 +42,7 @@ public class TagService {
     @Transactional(readOnly = true)
     public List<TagView> list(String requestedType) {
         TagType type = type(requestedType);
-        return tags.findAllByUserIdAndTypeOrderById(context.userId(), type).stream().map(this::view).toList();
+        return tags.findAllByUserIdOrderById(context.userId()).stream().map(tag -> view(tag, type)).toList();
     }
 
     public TagView create(String requestedType, String rawName) {
@@ -53,7 +53,7 @@ public class TagService {
             return transaction.execute(status -> {
                 if (tags.existsByUserIdAndName(userId, name)) throw conflict();
                 var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-                return view(tags.saveAndFlush(new TagEntity(userId, type, name, now)));
+                return view(tags.saveAndFlush(new TagEntity(userId, name, now)), type);
             });
         } catch (DataIntegrityViolationException ex) {
             if (tags.existsByUserIdAndName(userId, name)) throw conflict();
@@ -81,8 +81,8 @@ public class TagService {
         return new ApiFailure(409, "TAG_NAME_CONFLICT", "标签名称已存在");
     }
 
-    private TagView view(TagEntity tag) {
-        return new TagView(tag.getId(), tag.getName(), tag.getType());
+    private TagView view(TagEntity tag, TagType type) {
+        return new TagView(tag.getId(), tag.getName(), type);
     }
 
     public record OwnedTag(long id, String name) { }
@@ -95,10 +95,6 @@ public class TagService {
         }
         var found = tags.findAllByUserIdAndIdIn(context.userId(), tagIds);
         if (found.size() != tagIds.size()) throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在");
-        var expected = TagType.valueOf(transactionType);
-        if (found.stream().anyMatch(tag -> tag.getType() != expected)) {
-            throw new ApiFailure(409, "TAG_TYPE_MISMATCH", "标签类型与交易类型不一致");
-        }
         var byId = found.stream().collect(Collectors.toMap(TagEntity::getId, Function.identity()));
         return tagIds.stream().map(id -> new OwnedTag(id, byId.get(id).getName())).toList();
     }

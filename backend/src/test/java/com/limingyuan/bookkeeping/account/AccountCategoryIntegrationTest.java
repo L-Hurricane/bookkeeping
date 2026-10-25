@@ -191,7 +191,7 @@ class AccountCategoryIntegrationTest {
         var expense = categoryList("EXPENSE", token);
         assertThat(names(expense)).containsExactly("餐饮", "交通", "购物", "居住", "娱乐", "医疗", "其他支出");
         assertThat(names(expense.get(0).path("children"))).containsExactly("早餐", "午餐", "晚餐", "其他");
-        assertThat(names(expense.get(1).path("children"))).containsExactly("公共交通", "打车", "其他");
+        assertThat(names(expense.get(1).path("children"))).containsExactly("公共交通", "打车", "其他交通");
         for (var root : expense) {
             assertThat(root.path("type").asText()).isEqualTo("EXPENSE");
             assertThat(root.path("bookable").asBoolean()).isEqualTo(root.path("children").isEmpty());
@@ -206,7 +206,7 @@ class AccountCategoryIntegrationTest {
         }
     }
 
-    @Test void categoryPreparationIsIdempotentAndRepairsMissingFixedRows() {
+    @Test void categoryPreparationLeavesAnExistingSetUntouched() {
         var original = categories.findAllByUserIdOrderById(userId);
         categoryBootstrap.prepare(userId);
         assertThat(categories.findAllByUserIdOrderById(userId)).extracting(CategoryEntity::getId)
@@ -214,10 +214,10 @@ class AccountCategoryIntegrationTest {
         var missing = original.stream().filter(c -> c.getName().equals("早餐")).findFirst().orElseThrow();
         categories.deleteById(missing.getId());
         categoryBootstrap.prepare(userId);
-        var restored = categories.findAllByUserIdOrderById(userId);
-        assertThat(restored).hasSize(18);
-        assertThat(restored).extracting(CategoryEntity::getId)
-                .containsAll(original.stream().map(CategoryEntity::getId).filter(id -> !id.equals(missing.getId())).toList());
+        var remaining = categories.findAllByUserIdOrderById(userId);
+        assertThat(remaining).hasSize(17);
+        assertThat(remaining).extracting(CategoryEntity::getId).doesNotContain(missing.getId());
+        assertThat(remaining).extracting(CategoryEntity::getName).doesNotContain("早餐");
     }
 
     @Test void startupPreparesExistingPhase1UsersWithoutCreatingAccounts() {
@@ -244,16 +244,17 @@ class AccountCategoryIntegrationTest {
         }
     }
 
-    @Test void categoryDatabaseUniquenessSeparatesRootAndParentScopes() {
+    @Test void categoryDatabaseUniquenessIsGlobalInsideOneType() {
         var owned = categories.findAllByUserIdOrderById(userId);
         var parent = owned.stream().filter(c -> c.getName().equals("餐饮")).findFirst().orElseThrow();
-        assertThatThrownBy(() -> categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "工资", null, LocalDateTime.now())))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        var expenseWage = categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "工资", null, LocalDateTime.now()));
+        assertThat(expenseWage.getId()).isNotNull();
         assertThatThrownBy(() -> categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "早餐", parent.getId(), LocalDateTime.now())))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThat(owned.stream().filter(c -> c.getName().equals("其他")).toList()).hasSize(2);
+        assertThat(owned.stream().filter(c -> c.getName().equals("其他")).toList()).hasSize(1);
+        assertThat(owned.stream().filter(c -> c.getName().equals("其他交通")).toList()).hasSize(1);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM categories WHERE user_id = :id AND parent_id IS NULL AND parent_scope_id = 0")
-                .param("id", userId).query(Long.class).single()).isEqualTo(11);
+                .param("id", userId).query(Long.class).single()).isEqualTo(12);
         assertThat(jdbc.sql("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'categories' AND column_name = 'parent_scope_id'")
                 .query(String.class).single()).isEqualTo("NO");
     }
