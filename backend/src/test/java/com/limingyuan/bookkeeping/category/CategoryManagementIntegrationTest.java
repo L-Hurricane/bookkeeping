@@ -189,6 +189,40 @@ class CategoryManagementIntegrationTest {
                 .isEqualTo(shopping);
     }
 
+    @Test void historicalCategoryAssociationSurvivesRenameMoveAndLeafDeletion() throws Exception {
+        long shopping = categoryId("EXPENSE", "购物");
+        long food = categoryId("EXPENSE", "餐饮");
+        long transactionId = transact(shopping, "8.00");
+        String balance = currentBalance();
+        var renamed = send("/api/v1/categories/" + shopping + "/rename", Map.of("name", "日用品"));
+        assertThat(renamed.path("id").asLong()).isEqualTo(shopping);
+        var moved = send("/api/v1/categories/" + shopping + "/move", Map.of("parentId", food));
+        assertThat(moved.path("id").asLong()).isEqualTo(shopping);
+        assertThat(jdbc.sql("SELECT category_id, amount FROM transactions WHERE id = :id")
+                .param("id", transactionId).query((rs, row) -> rs.getLong("category_id") + ":" + rs.getString("amount")).single())
+                .isEqualTo(shopping + ":8.00");
+        var stats = mvc.perform(get("/api/v1/accounts/" + accountId + "/statistics/categories")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-09").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(stats.getResponse().getContentAsString()).toString()).contains("日用品").contains("8.00");
+        var preview = send("/api/v1/categories/" + shopping + "/deletion-preview", Map.of());
+        assertThat(preview.path("directTransactionCount").asInt()).isEqualTo(1);
+        mvc.perform(post("/api/v1/categories/" + shopping + "/deletion").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("directTransactionCount", 1))))
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.sql("SELECT category_id FROM transactions WHERE id = :id").param("id", transactionId).query(Long.class).optional())
+                .isEmpty();
+        assertThat(jdbc.sql("SELECT amount FROM transactions WHERE id = :id").param("id", transactionId).query(String.class).single())
+                .isEqualTo("8.00");
+        assertThat(currentBalance()).isEqualTo(balance);
+        var after = mvc.perform(get("/api/v1/accounts/" + accountId + "/statistics/categories")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-09").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        String body = json.readTree(after.getResponse().getContentAsString()).toString();
+        assertThat(body).contains("未分类").contains("8.00").doesNotContain("日用品");
+    }
+
     private JsonNode named(JsonNode nodes, String name) {
         for (var node : nodes) if (node.path("name").asText().equals(name)) return node;
         throw new AssertionError(name);
