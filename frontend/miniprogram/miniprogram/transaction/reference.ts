@@ -58,27 +58,38 @@ export interface CategoryRow {
 export function categoryRows(categories: readonly CategoryNode[]): CategoryRow[] {
   const rows: CategoryRow[] = [];
   for (const root of bookableCategoryOptions(categories)) {
-    if (root.children.length > 0) {
-      rows.push({ key: `group-${root.id}`, kind: "group", id: null, label: root.name });
-      for (const child of root.children) {
-        rows.push({ key: `option-${child.id}`, kind: "option", id: child.id, label: child.name });
-      }
-    } else if (root.bookable) {
-      rows.push({ key: `option-${root.id}`, kind: "option", id: root.id, label: root.name });
-    }
+    appendCategoryRows(rows, root);
   }
   return rows;
 }
 
-export function resolveCategoryLabel(categories: readonly CategoryNode[], categoryId: number): string | null {
-  for (const root of categories) {
-    if (root.children.length === 0 && root.bookable && root.id === categoryId) {
-      return root.name;
+function appendCategoryRows(rows: CategoryRow[], node: CategoryNode): void {
+  if (node.children.length > 0) {
+    rows.push({ key: `group-${node.id}`, kind: "group", id: null, label: node.name });
+    for (const child of node.children) {
+      appendCategoryRows(rows, child);
     }
-    for (const child of root.children) {
-      if (child.bookable && child.id === categoryId) {
-        return `${root.name} / ${child.name}`;
-      }
+    return;
+  }
+  if (node.bookable) {
+    rows.push({ key: `option-${node.id}`, kind: "option", id: node.id, label: node.name });
+  }
+}
+
+export function resolveCategoryLabel(categories: readonly CategoryNode[], categoryId: number): string | null {
+  const path = categoryPath(categories, categoryId, []);
+  return path === null ? null : path.join(" / ");
+}
+
+function categoryPath(categories: readonly CategoryNode[], categoryId: number, prefix: readonly string[]): string[] | null {
+  for (const category of categories) {
+    const path = [...prefix, category.name];
+    if (category.children.length === 0 && category.bookable && category.id === categoryId) {
+      return path;
+    }
+    const nested = categoryPath(category.children, categoryId, path);
+    if (nested !== null) {
+      return nested;
     }
   }
   return null;

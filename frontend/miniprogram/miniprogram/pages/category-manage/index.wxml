@@ -1,0 +1,33 @@
+<view class="page" wx:if="{{phase === 'loading'}}">
+  <text class="status">正在读取分类</text>
+</view>
+<view class="page" wx:elif="{{phase === 'error'}}">
+  <text class="error">{{errorMessage}}</text>
+  <button bindtap="reload">重新加载</button>
+</view>
+<view class="page" wx:else>
+  <text class="hint">{{rule}}</text>
+  <view class="types">
+    <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
+    <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
+  </view>
+  <view class="row {{selectedId === item.id ? 'selected' : ''}}" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onSelect" style="padding-left: {{item.depth * 24}}rpx;">
+    <text>{{item.name}}</text>
+    <text class="meta" wx:if="{{item.hasChildren}}">有下级</text>
+    <text class="meta" wx:else>可记账</text>
+  </view>
+  <text class="label">名称</text>
+  <input class="field" type="text" maxlength="100" value="{{name}}" disabled="{{submitting}}" bindinput="onName" />
+  <text class="label">上级</text>
+  <picker mode="selector" range="{{parentLabels}}" value="{{parentIndex}}" disabled="{{submitting}}" bindchange="onParent">
+    <view class="field">{{parentLabels[parentIndex]}}</view>
+  </picker>
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  <text class="confirm" wx:if="{{confirm}}">{{confirm}}</text>
+  <view class="actions">
+    <button disabled="{{submitting}}" bindtap="onCreate">新增</button>
+    <button disabled="{{submitting}}" bindtap="onRename">改名</button>
+    <button disabled="{{submitting}}" bindtap="onMove">调整上级</button>
+    <button class="danger" disabled="{{submitting}}" bindtap="onDelete">{{confirm ? '确认删除' : '删除'}}</button>
+  </view>
+</view>

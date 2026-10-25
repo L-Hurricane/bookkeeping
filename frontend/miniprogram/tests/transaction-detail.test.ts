@@ -243,7 +243,7 @@ describe("edit reference failure", () => {
     assert.equal(built.value.categoryId, 203);
     assert.deepEqual(built.value.tagIds, [301, 302]);
     const ready = editCategoryText(
-      [{ id: 20, name: "餐饮", type: "EXPENSE", bookable: false, children: [{ id: 203, name: "午餐", type: "EXPENSE", bookable: true }] }],
+      [{ id: 20, name: "餐饮", type: "EXPENSE", bookable: false, children: [{ id: 203, name: "午餐", type: "EXPENSE", bookable: true, children: [] }] }],
       203,
       transaction.category,
     );

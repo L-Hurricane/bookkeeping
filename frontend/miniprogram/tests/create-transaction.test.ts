@@ -76,8 +76,8 @@ describe("category and tag responses", () => {
           type: "EXPENSE",
           bookable: false,
           children: [
-            { id: 202, name: "早餐", type: "EXPENSE", bookable: true },
-            { id: 204, name: "分组", type: "EXPENSE", bookable: false },
+            { id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] },
+            { id: 204, name: "分组", type: "EXPENSE", bookable: false, children: [] },
           ],
         },
       ],
@@ -98,7 +98,7 @@ describe("category and tag responses", () => {
         children: [{ id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] }],
       }],
     });
-    assert.deepEqual(emptyChild?.[0]?.children[0], { id: 202, name: "早餐", type: "EXPENSE", bookable: true });
+    assert.deepEqual(emptyChild?.[0]?.children[0], { id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] });
     assert.equal(parseCategoryList({
       items: [{
         id: 1,
@@ -108,7 +108,7 @@ describe("category and tag responses", () => {
         children: [{ id: 2, name: "子", type: "EXPENSE", bookable: true, children: {} }],
       }],
     }), null);
-    assert.equal(parseCategoryList({
+    const third = parseCategoryList({
       items: [{
         id: 1,
         name: "三级",
@@ -118,8 +118,30 @@ describe("category and tag responses", () => {
           id: 2,
           name: "子",
           type: "EXPENSE",
-          bookable: true,
-          children: [{ id: 999, name: "三级", type: "EXPENSE", bookable: true }],
+          bookable: false,
+          children: [{ id: 999, name: "末级", type: "EXPENSE", bookable: true, children: [] }],
+        }],
+      }],
+    });
+    assert.equal(third?.[0]?.children[0]?.children[0]?.name, "末级");
+    assert.equal(parseCategoryList({
+      items: [{
+        id: 1,
+        name: "四级",
+        type: "EXPENSE",
+        bookable: false,
+        children: [{
+          id: 2,
+          name: "子",
+          type: "EXPENSE",
+          bookable: false,
+          children: [{
+            id: 3,
+            name: "孙",
+            type: "EXPENSE",
+            bookable: false,
+            children: [{ id: 4, name: "过深", type: "EXPENSE", bookable: true }],
+          }],
         }],
       }],
     }), null);
@@ -136,7 +158,7 @@ describe("category and tag responses", () => {
       ],
     });
     assert.equal(official?.[0]?.children.length, 1);
-    assert.deepEqual(official?.[0]?.children[0], { id: 371, name: "公共交通", type: "EXPENSE", bookable: true });
+    assert.deepEqual(official?.[0]?.children[0], { id: 371, name: "公共交通", type: "EXPENSE", bookable: true, children: [] });
     assert.deepEqual(official?.[1]?.children, []);
     assert.equal(parseCategoryList({ items: [{ id: 1, name: "坏", type: "EXPENSE", bookable: "yes", children: [] }] }), null);
     assert.equal(parseCategoryList({ items: [{ id: 1, name: "坏", type: "FOOD", bookable: true, children: [] }] }), null);

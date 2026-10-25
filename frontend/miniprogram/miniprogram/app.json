@@ -8,6 +8,7 @@
     "pages/account-home/index",
     "pages/account-create/index",
     "pages/account-settings/index",
+    "pages/category-manage/index",
     "pages/account-permanent-deletion/index",
     "pages/transaction-create/index",
     "pages/transaction-detail/index",

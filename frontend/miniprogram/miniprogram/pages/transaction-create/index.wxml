@@ -21,6 +21,7 @@
   <text class="label">名称</text>
   <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
   <text class="label">分类</text>
+  <text class="hint">只能选择当前末级分类，一级到三级都可以。</text>
   <view wx:if="{{categoryPhase === 'loading'}}"><text class="hint">正在读取分类</text></view>
   <view wx:elif="{{categoryPhase === 'error'}}">
     <text class="error">分类加载失败</text>
@@ -29,6 +30,7 @@
   </view>
   <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
   <text class="label">标签</text>
+  <text class="hint">收入和支出共用标签。可以同时选择上级和下级，互不影响。</text>
   <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
   <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
     <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
