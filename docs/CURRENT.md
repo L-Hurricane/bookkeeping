@@ -9,11 +9,12 @@
 ## 当前执行状态
 
 - S2-T10 / M2-AUTO-GATE：**PASS**。组长 2026-10-24 裁断。未解决 P0/P1/P2 为 0。残留 P3 是模拟完整性异常下的事务回滚，没有直接触发 InnoDB `RESTRICT`，非阻断，未标成已修复。
-- S2-T11 / M2-HUMAN-GATE：**BLOCKED**。2026-10-24 恢复演练因当前账号无权连接 `bk_s1t03_6928fd20_migration` 而停止。开发库仍是 Flyway 11，没有迁移，也没有启动应用。人工 UAT 尚未开始。不代表 UAT PASS，也不代表 S2 CLOSED。
+- S2-T11 / M2-HUMAN-GATE：**未结项**。负责人 2026-10-25 只确认 UAT-06 五项检查 PASS。归档、转账、永久删除、金额颜色和 A+B-lite 去留仍没有负责人总评。独立前端测试 219 项通过，定向复核 P0/P1/P2/P3 为 0。这不代表整项人工 PASS，也不代表 S2 CLOSED。记录：`docs/implementation/s2-t11-closeout-candidate-2026-10-25.md`。
 - 已审核代码：`bf7074a15a1e7e2b14b34e3d1ffeef3d48e9b35b`。本状态记录提交在其后，完整 HEAD 以 `git rev-parse HEAD` 为准。
 - 已批准计划：`docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`，SHA-256 `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5`。本状态不修改该文件。
 - 下一责任人：项目负责人。按 `docs/implementation/s2-t11-uat-guide-2026-10-24.md` 做功能验收和 A+B-lite 去留。组长不代填结论。
-- S1-T08-OBS-01 仍按 `docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md` 留在 Backlog，最晚完整 v1.0 产品/UI 人工验收前修复。
+- S1-T08-OBS-01 / UI-NAV-01 仍在 Backlog。延期依据是 S1 结项时负责人同意暂缓，以及 2026-10-25 接受不再恢复微信原生主页按钮。后续仍是「账本 / 统计 / 我的」。最晚复核节点是完整 v1.0 产品/UI 人工验收前。
+- UAT-03 每笔历史流水的交易后余额仍在 Backlog。延期依据是 2026-10-25 组长安排，不在本轮编码。最晚复核节点是后续相关 Stage 再评估，不由本次 S2 结项代替。
 - 仓库内治理原件仍是下表 v1.6。本机 Downloads 的 v1.7 SHA-256 为 `4fcf410092429fa97aa21baaddc91b027fa0d006cee08af59e46b49bac4c56c1`，§4.8 的既有 `release/v1.0` 非强制 Push 授权继续有效，§4.9 不新增 Git 权限。本入口不表示 ChatGPT Project 已同步。
 
 ## 读取顺序

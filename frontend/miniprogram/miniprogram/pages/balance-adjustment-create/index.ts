@@ -1,4 +1,6 @@
+import { ARCHIVED_WRITE_MESSAGE } from "../../account/archive-copy";
 import { createLoadGuard } from "../../account/load-guard";
+import { adjustmentBalanceSource } from "../../balance-adjustment/balance-source";
 import { parseAdjustmentCreateContext, type AdjustmentCreateContext } from "../../balance-adjustment/navigation";
 import { FUTURE_ADJUSTMENT_HINT, previewAdjustment, ZERO_ADJUSTMENT_MESSAGE } from "../../balance-adjustment/preview";
 import {
@@ -34,7 +36,7 @@ import {
 } from "../../transaction/business-time";
 import { createIdempotencyKey, readRandomBytes } from "../../transaction/idempotency";
 
-type Screen = "invalid" | "loading" | "error" | "ready";
+type Screen = "invalid" | "loading" | "error" | "blocked" | "ready";
 
 Page({
   loadGuard: createLoadGuard(),
@@ -51,6 +53,7 @@ Page({
 
   data: {
     screen: "loading" as Screen,
+    blockedMessage: "",
     currentBalanceLabel: "",
     target: "",
     targetError: "",
@@ -102,16 +105,21 @@ Page({
     this.screen = "loading";
     this.setData({ screen: "loading" });
     try {
-      const accounts = await accountApi.listAccounts();
+      const account = await accountApi.loadAccount(context.accountId);
       if (!this.loadGuard.pageAlive || generation !== this.balanceGeneration) {
         return;
       }
-      const account = accounts.length === 1 ? accounts[0] : undefined;
-      if (account === undefined || account.id !== context.accountId) {
+      const source = adjustmentBalanceSource(account, context.accountId);
+      if (source.status === "archived") {
+        this.screen = "blocked";
+        this.setData({ screen: "blocked", blockedMessage: ARCHIVED_WRITE_MESSAGE });
+        return;
+      }
+      if (source.status !== "ready") {
         this.showBalanceError();
         return;
       }
-      this.save = editingAdjustment(account.currentBalance);
+      this.save = editingAdjustment(source.currentBalance);
       this.screen = "ready";
       this.publish();
     } catch (error) {

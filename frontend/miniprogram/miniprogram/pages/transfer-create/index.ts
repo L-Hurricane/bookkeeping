@@ -1,7 +1,8 @@
-import { defaultSelectableAccountId, findAccount, type Account } from "../../account/account";
+import { findAccount, type Account } from "../../account/account";
 import { createLoadGuard } from "../../account/load-guard";
 import { ApiError } from "../../http/client";
 import { accountApi, transferApi } from "../../services/runtime";
+import { initialTransferAccountIds } from "../../transfer/defaults";
 import { parseTransferCreateContext, type TransferCreateContext } from "../../transfer/navigation";
 import { positiveTransferAmount } from "../../transfer/money";
 import {
@@ -119,12 +120,9 @@ Page({
         return;
       }
       this.accounts = accounts;
-      this.fromAccountId = defaultSelectableAccountId(accounts, context.sourceAccountId) ?? context.sourceAccountId;
-      const toDefault = defaultSelectableAccountId(
-        accounts.filter((account) => account.id !== this.fromAccountId),
-        null,
-      );
-      this.toAccountId = toDefault ?? 0;
+      const selected = initialTransferAccountIds(accounts, context.sourceAccountId);
+      this.fromAccountId = selected.fromAccountId;
+      this.toAccountId = selected.toAccountId;
       this.screen = "ready";
       this.publish();
     } catch (error) {

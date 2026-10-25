@@ -1,7 +1,7 @@
 import { ARCHIVE_CONFIRM, RESTORE_CONFIRM } from "../../account/archive-copy";
 import { accountKindLabel, type Account } from "../../account/account";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
-import { accountPermanentDeletionPath, parseAccountSettingsQuery } from "../../account/navigation";
+import { accountListAfterArchivePath, accountPermanentDeletionPath, parseAccountSettingsQuery } from "../../account/navigation";
 import { ApiError } from "../../http/client";
 import { AccountResponseError } from "../../services/account";
 import { isUnauthorized } from "../../services/ledger";
@@ -144,8 +144,22 @@ Page({
         ? await accountApi.archiveAccount(this.accountId)
         : await accountApi.restoreAccount(this.accountId);
       this.account = account;
+      if (archiving) {
+        if (account.lifecycle !== "ARCHIVED") {
+          this.setData({ submitting: false, errorMessage: "归档失败，请稍后重试" });
+          return;
+        }
+        this.setData({ submitting: false, name: account.name, lifecycle: account.lifecycle, errorMessage: "" });
+        wx.reLaunch({
+          url: accountListAfterArchivePath(this.accountId),
+          fail: () => {
+            this.setData({ errorMessage: "已归档，但返回账户列表失败，请稍后重试" });
+          },
+        });
+        return;
+      }
       this.setData({ submitting: false, name: account.name, lifecycle: account.lifecycle, errorMessage: "" });
-      wx.showToast({ title: archiving ? "已归档" : "已恢复", icon: "success" });
+      wx.showToast({ title: "已恢复", icon: "success" });
     } catch (error) {
       if (isUnauthorized(error)) {
         return;

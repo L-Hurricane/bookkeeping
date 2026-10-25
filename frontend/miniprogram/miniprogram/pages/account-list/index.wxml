@@ -10,6 +10,8 @@
       <button class="link" disabled="{{loggingOut}}" bindtap="onOpenArchive">归档账户</button>
     </view>
     <text class="toolbar-hint">正常账户总览。归档账户不在此列表，可从归档账户查看历史并恢复。</text>
+    <text class="error" wx:if="{{refreshError}}">{{refreshError}}</text>
+    <button wx:if="{{refreshError}}" bindtap="onRetry">重新加载</button>
     <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">正常账户列表是空的。归档账户仍保留余额和历史。</text>
     <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
       <view class="card-main">

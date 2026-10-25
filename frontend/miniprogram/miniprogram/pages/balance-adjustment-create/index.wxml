@@ -10,6 +10,10 @@
   <button bindtap="onRetryBalance">重新加载</button>
   <button bindtap="onBack">返回</button>
 </view>
+<view class="page" wx:elif="{{screen === 'blocked'}}">
+  <text class="error">{{blockedMessage}}</text>
+  <button bindtap="onBack">返回</button>
+</view>
 <view class="page" wx:elif="{{screen === 'ready'}}">
   <text class="label">当前余额</text>
   <text class="balance">{{currentBalanceLabel}}</text>

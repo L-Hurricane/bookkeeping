@@ -7,10 +7,20 @@ import {
 } from "../../account/account";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
-import { accountArchivePath, accountCreatePath, accountHomePath } from "../../account/navigation";
+import {
+  accountArchivePath,
+  accountCreatePath,
+  accountHomePath,
+  accountListReloadMode,
+  archiveArrivalFeedback,
+  parseAccountListNotice,
+} from "../../account/navigation";
 import { logoutFailureView } from "../../account/logout-view";
+import { routeBootstrap } from "../../navigation/startup";
 import { isUnauthorized } from "../../services/ledger";
 import { accountApi, authApi, authNavigation } from "../../services/runtime";
+import { restoreSession } from "../../session/session";
+import { wechatStorage } from "../../storage/wechat-storage";
 
 interface AccountRow {
   readonly id: number;
@@ -23,17 +33,32 @@ interface AccountRow {
 
 Page({
   loadGuard: createLoadGuard(),
+  leaveToLogin: false,
+  archiveNoticeAccountId: null as number | null,
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
     rows: [] as AccountRow[],
     hasArchived: false,
     errorMessage: "",
+    refreshError: "",
     loggingOut: false,
     logoutErrorMessage: "",
   },
 
+  onLoad(query: Record<string, string | undefined>) {
+    const notice = parseAccountListNotice(query);
+    this.archiveNoticeAccountId = notice === null ? null : notice.accountId;
+    if (routeBootstrap(restoreSession(wechatStorage, new Date()) !== null) === "login") {
+      this.leaveToLogin = true;
+      authNavigation.enterLogin();
+    }
+  },
+
   onShow() {
+    if (this.leaveToLogin) {
+      return;
+    }
     void this.loadAccounts();
   },
 
@@ -46,7 +71,12 @@ Page({
     if (generation === null) {
       return;
     }
-    this.setData({ phase: "loading", errorMessage: "", logoutErrorMessage: "" });
+    const blocking = accountListReloadMode(this.data.phase) === "blocking";
+    if (blocking) {
+      this.setData({ phase: "loading", errorMessage: "", refreshError: "", logoutErrorMessage: "" });
+    } else {
+      this.setData({ refreshError: "", logoutErrorMessage: "" });
+    }
     try {
       const items = await accountApi.listAccounts();
       if (!canApplyLoadResult(this.loadGuard, generation)) {
@@ -62,7 +92,7 @@ Page({
         return;
       }
       if (route.destination === "error") {
-        this.setData({ phase: "error", errorMessage: route.message });
+        this.failLoad(blocking, route.message);
         return;
       }
       this.setData({
@@ -70,13 +100,36 @@ Page({
         rows: route.accounts.map(toRow),
         hasArchived: archived.length > 0,
         errorMessage: "",
+        refreshError: "",
       });
+      this.acknowledgeArchive(route.accounts);
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
         return;
       }
-      this.setData({ phase: "error", errorMessage: "账户读取失败，请稍后重试" });
+      this.failLoad(blocking, "账户读取失败，请稍后重试");
     }
+  },
+
+  failLoad(blocking: boolean, message: string) {
+    if (blocking) {
+      this.setData({ phase: "error", errorMessage: message, refreshError: "" });
+      return;
+    }
+    this.setData({ refreshError: message });
+  },
+
+  acknowledgeArchive(accounts: readonly Account[]) {
+    const accountId = this.archiveNoticeAccountId;
+    if (accountId === null) {
+      return;
+    }
+    if (archiveArrivalFeedback(accounts, accountId) !== "success") {
+      this.setData({ refreshError: "账户状态未更新，请稍后重试" });
+      return;
+    }
+    this.archiveNoticeAccountId = null;
+    wx.showToast({ title: "账户已归档", icon: "success" });
   },
 
   onRetry() {

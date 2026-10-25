@@ -4,6 +4,42 @@ export function accountListPath(): string {
   return "/pages/account-list/index";
 }
 
+/** After a successful archive, replace the stack so the archived account page cannot be reopened from Back. */
+export function accountListAfterArchivePath(accountId: number): string {
+  return `/pages/account-list/index?notice=archived&accountId=${accountId}`;
+}
+
+export function parseAccountListNotice(
+  query: Record<string, string | undefined>,
+): { readonly accountId: number } | null {
+  if (query.notice !== "archived") {
+    return null;
+  }
+  const accountId = parseAccountIdQuery(query.accountId);
+  if (accountId === null) {
+    return null;
+  }
+  return { accountId };
+}
+
+/** Success is shown only when the refreshed active list no longer contains the archived account. */
+export function archiveArrivalFeedback(
+  accounts: readonly { readonly id: number }[],
+  accountId: number,
+): "success" | "withhold" {
+  for (const account of accounts) {
+    if (account.id === accountId) {
+      return "withhold";
+    }
+  }
+  return "success";
+}
+
+/** A visible list stays on screen while a later visit refreshes it. The first visit still blocks. */
+export function accountListReloadMode(phase: "loading" | "ready" | "error"): "blocking" | "background" {
+  return phase === "ready" ? "background" : "blocking";
+}
+
 export function accountCreatePath(): string {
   return "/pages/account-create/index";
 }
