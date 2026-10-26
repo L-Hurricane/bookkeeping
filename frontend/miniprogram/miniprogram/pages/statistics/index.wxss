@@ -4,11 +4,14 @@
   box-sizing: border-box;
 }
 
+.choices,
 .month,
 .types {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16rpx;
 }
 
 .types {
@@ -85,6 +88,39 @@
 
 .row.depth-1 {
   padding-left: 32rpx;
+}
+
+.row.depth-2 {
+  padding-left: 64rpx;
+}
+
+.choice {
+  color: #666666;
+  font-size: 28rpx;
+}
+
+.choice.selected {
+  color: #111111;
+  font-weight: 600;
+}
+
+.range {
+  display: block;
+  margin-top: 16rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
 }
 
 .amount {

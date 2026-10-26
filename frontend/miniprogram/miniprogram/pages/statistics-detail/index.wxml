@@ -6,13 +6,14 @@
     <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
   </block>
   <block wx:elif="{{phase === 'ready'}}">
+    <button wx:if="{{directAvailable}}" bindtap="onToggleTagMode">{{directLabel}}</button>
     <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
-    <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenTransaction">
+    <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" data-account-id="{{item.accountId}}" data-created="{{item.accountCreatedTime}}" data-month="{{item.originMonth}}" bindtap="onOpenTransaction">
       <view class="row-main">
         <text class="row-title">{{item.title}}</text>
         <text class="row-detail">{{item.timeLabel}}</text>
       </view>
-      <text class="amount">{{item.amountLabel}}</text>
+      <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
     </view>
   </block>
 </view>

@@ -37,6 +37,18 @@
   font-size: 30rpx;
 }
 
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
+}
+
 .error {
   color: #b42318;
 }

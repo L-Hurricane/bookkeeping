@@ -1,212 +1,278 @@
-import { formatMoneyLabel } from "../../ledger/ledger";
-import { formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
+import { moneyToneClass } from "../../account/money-tone";
 import { ApiError } from "../../http/client";
-import { statisticsApi } from "../../services/runtime";
-import { StatisticsResponseError } from "../../services/statistics";
+import { formatMoneyLabel } from "../../ledger/ledger";
 import { monthlyAnalysisPagePath } from "../../analysis/navigation";
-import { statisticsDetailPath } from "../../statistics/drilldown";
-import { parseStatisticsContext, type StatisticsPageContext } from "../../statistics/navigation";
+import { accountApi, ledgerStatisticsApi } from "../../services/runtime";
+import { LedgerStatisticsResponseError } from "../../services/ledger-statistics";
 import {
-  STATISTICS_CONTRACT_ERROR,
-  STATISTICS_EMPTY,
-  STATISTICS_LOAD_ERROR,
-  STATISTICS_OVERLAP_NOTE,
-  categoryRows,
-  failStatistics,
-  openStatistics,
-  requestStatistics,
-  settleStatistics,
-  statisticsIsEmpty,
-  tagRows,
-  type StatisticsRow,
-  type StatisticsScreen,
-} from "../../statistics/screen";
-import type { StatisticsType } from "../../statistics/contract";
-import type { StatisticsDrill } from "../../statistics/drilldown";
+  statisticsDetailPagePath,
+  type LedgerAccountScope,
+  type LedgerDrill,
+  type LedgerFlowType,
+  type LedgerPreset,
+  type LedgerQuery,
+  type LedgerReport,
+} from "../../statistics/ledger-contract";
+import { flowRows, type LedgerAmountRow } from "../../statistics/ledger-view";
+
+const LOAD_ERROR = "统计暂时没有读取成功";
+const CONTRACT_ERROR = "统计响应无法识别";
+
+type ModuleName = "NET" | LedgerFlowType;
+
+interface PickerAccount {
+  readonly id: number;
+  readonly name: string;
+  readonly archived: boolean;
+  readonly checked: boolean;
+}
 
 Page({
-  context: null as StatisticsPageContext | null,
-  screen: openStatistics("2000-01", "EXPENSE"),
+  preset: "MONTH" as LedgerPreset,
+  scope: "ACTIVE" as LedgerAccountScope,
+  checkedIds: [] as number[],
+  customFrom: "",
+  customTo: "",
+  generation: 0,
   pageAlive: true,
+  aiAccountId: null as number | null,
+  report: null as LedgerReport | null,
+  module: "NET" as ModuleName,
+  picker: [] as PickerAccount[],
+  selectedTagIds: [] as number[],
 
   data: {
-    invalid: false,
-    phase: "loading" as StatisticsScreen["phase"],
-    monthLabel: "",
-    type: "EXPENSE" as StatisticsType,
-    incomeLabel: "",
-    expenseLabel: "",
-    surplusLabel: "",
-    countLabel: "",
-    empty: false,
-    emptyMessage: STATISTICS_EMPTY,
-    categories: [] as StatisticsViewRow[],
-    tags: [] as StatisticsViewRow[],
-    categoryEmpty: false,
-    tagEmpty: false,
-    overlapNote: "",
+    phase: "loading" as "loading" | "ready" | "error" | "choose",
     errorMessage: "",
+    preset: "MONTH" as LedgerPreset,
+    scope: "ACTIVE" as LedgerAccountScope,
+    module: "NET" as ModuleName,
+    rangeLabel: "",
+    picker: [] as PickerAccount[],
+    openingLabel: "",
+    closingLabel: "",
+    changeLabel: "",
+    openingTone: "",
+    closingTone: "",
+    changeTone: "",
+    points: [] as Array<{ date: string; amountLabel: string; tone: string }>,
+    netLabel: "",
+    netTone: "",
+    categories: [] as LedgerAmountRow[],
+    tags: [] as LedgerAmountRow[],
+    emptyFlow: false,
+    selectedTagCount: 0,
+    showAnalysis: false,
+    customFrom: "",
+    customTo: "",
   },
 
   onLoad(query: Record<string, string | undefined>) {
-    const context = parseStatisticsContext(query);
-    if (context === null) {
-      this.setData({ invalid: true, phase: "error", errorMessage: "页面参数不正确" });
-      return;
-    }
-    this.context = context;
-    this.screen = openStatistics(context.month, "EXPENSE");
-  },
-
-  onShow() {
-    if (this.context === null) {
-      return;
-    }
-    void this.load(this.screen.month, this.screen.type);
+    const accountId = Number(query.accountId);
+    this.aiAccountId = Number.isSafeInteger(accountId) && accountId > 0 ? accountId : null;
+    void this.prepare();
   },
 
   onUnload() {
     this.pageAlive = false;
   },
 
-  onPreviousMonth() {
-    if (this.context === null) {
-      return;
+  async prepare() {
+    try {
+      const [active, archived] = await Promise.all([
+        accountApi.listAccounts("ACTIVE"),
+        accountApi.listAccounts("ARCHIVED"),
+      ]);
+      if (!this.pageAlive) return;
+      this.picker = [
+        ...active.map((account) => ({ id: account.id, name: account.name, archived: false, checked: false })),
+        ...archived.map((account) => ({ id: account.id, name: account.name, archived: true, checked: false })),
+      ];
+    } catch (error) {
+      if (!this.pageAlive || error instanceof ApiError && error.status === 401) return;
+      this.picker = [];
     }
-    void this.load(previousMonth(this.screen.month), this.screen.type);
+    await this.load();
   },
 
-  onNextMonth() {
-    if (this.context === null) {
-      return;
+  onSelectPreset(event: WechatMiniprogram.BaseEvent) {
+    const preset = event.currentTarget.dataset["preset"];
+    if (preset !== "MONTH" && preset !== "QUARTER" && preset !== "YEAR" && preset !== "CUSTOM") return;
+    if (preset === "CUSTOM" && (this.customFrom.length === 0 || this.customTo.length === 0)) {
+      if (this.report === null) return;
+      this.customFrom = this.report.from;
+      this.customTo = this.report.to;
     }
-    void this.load(nextMonth(this.screen.month), this.screen.type);
+    this.preset = preset;
+    void this.load();
   },
 
-  onSelectType(event: WechatMiniprogram.BaseEvent) {
-    const type = event.currentTarget.dataset["type"];
-    if (this.context === null || (type !== "INCOME" && type !== "EXPENSE") || type === this.screen.type) {
-      return;
-    }
-    void this.load(this.screen.month, type);
+  onCustomFrom(event: WechatMiniprogram.PickerChange) {
+    this.customFrom = String(event.detail.value);
+    this.preset = "CUSTOM";
+    void this.load();
+  },
+
+  onCustomTo(event: WechatMiniprogram.PickerChange) {
+    this.customTo = String(event.detail.value);
+    this.preset = "CUSTOM";
+    void this.load();
+  },
+
+  onSelectScope(event: WechatMiniprogram.BaseEvent) {
+    const scope = event.currentTarget.dataset["scope"];
+    if (scope !== "ACTIVE" && scope !== "ALL" && scope !== "SELECTED") return;
+    this.scope = scope;
+    void this.load();
+  },
+
+  onToggleAccount(event: WechatMiniprogram.BaseEvent) {
+    const id = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(id)) return;
+    this.checkedIds = this.checkedIds.includes(id) ? this.checkedIds.filter((item) => item !== id) : [...this.checkedIds, id];
+    this.picker = this.picker.map((account) => ({ ...account, checked: this.checkedIds.includes(account.id) }));
+    void this.load();
+  },
+
+  onSelectModule(event: WechatMiniprogram.BaseEvent) {
+    const moduleName = event.currentTarget.dataset["module"];
+    if (moduleName !== "NET" && moduleName !== "EXPENSE" && moduleName !== "INCOME") return;
+    this.module = moduleName;
+    this.publish();
   },
 
   onRetry() {
-    if (this.context === null) {
-      return;
-    }
-    void this.load(this.screen.month, this.screen.type);
+    void this.load();
   },
 
   onOpenAnalysis() {
-    const context = this.context;
-    if (context === null) {
-      return;
-    }
-    wx.navigateTo({ url: monthlyAnalysisPagePath(context.accountId, this.screen.month) });
+    const accountId = this.aiAccountId;
+    if (accountId === null || this.report === null) return;
+    wx.navigateTo({ url: monthlyAnalysisPagePath(accountId, this.report.from.slice(0, 7)) });
+  },
+
+  onToggleTag(event: WechatMiniprogram.BaseEvent) {
+    const id = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    this.selectedTagIds = this.selectedTagIds.includes(id)
+      ? this.selectedTagIds.filter((item) => item !== id)
+      : [...this.selectedTagIds, id];
+    this.publish();
+  },
+
+  onOpenSelectedTags() {
+    const query = this.currentQuery();
+    if (query === null || this.selectedTagIds.length === 0 || (this.module !== "INCOME" && this.module !== "EXPENSE")) return;
+    wx.navigateTo({
+      url: statisticsDetailPagePath({
+        query,
+        type: this.module,
+        drill: { kind: "tags", tagIds: this.selectedTagIds, title: "所选标签" },
+      }),
+    });
   },
 
   onOpenRow(event: WechatMiniprogram.BaseEvent) {
-    const context = this.context;
+    const report = this.report;
+    const query = this.currentQuery();
     const drill = drillFromDataset(event.currentTarget.dataset);
-    if (context === null || drill === null || this.screen.phase !== "ready") {
-      return;
-    }
+    if (report === null || query === null || drill === null || (this.module !== "INCOME" && this.module !== "EXPENSE")) return;
     wx.navigateTo({
-      url: statisticsDetailPath(context.accountId, this.screen.month, this.screen.type, context.accountCreatedTime, drill),
+      url: statisticsDetailPagePath({ query, type: this.module, drill }),
     });
   },
 
-  async load(month: string, type: StatisticsType) {
-    const context = this.context;
-    if (context === null) {
+  async load() {
+    const query = this.currentQuery();
+    const requested = ++this.generation;
+    if (query === null) {
+      this.report = null;
+      const message = this.scope === "SELECTED" && this.checkedIds.length === 0 ? "请选择账户" : "请选择日期";
+      this.setData({ ...this.chrome(), phase: "choose", errorMessage: message, rangeLabel: "" });
       return;
     }
-    const requested = requestStatistics(this.screen, month, type);
-    this.screen = requested.screen;
-    this.publish();
+    this.setData({ ...this.chrome(), phase: "loading", errorMessage: "" });
     try {
-      const bundle = await statisticsApi.load(context.accountId, month, type);
-      this.screen = settleStatistics(this.screen, requested.generation, bundle, this.pageAlive);
-    } catch (error) {
-      if (!this.pageAlive || error instanceof ApiError && error.status === 401) {
-        return;
+      const report = await ledgerStatisticsApi.load(query);
+      if (!this.pageAlive || requested !== this.generation) return;
+      this.report = report;
+      if (this.customFrom.length === 0) {
+        this.customFrom = report.from;
+        this.customTo = report.to;
       }
-      const message = error instanceof StatisticsResponseError ? STATISTICS_CONTRACT_ERROR : STATISTICS_LOAD_ERROR;
-      this.screen = failStatistics(this.screen, requested.generation, message, this.pageAlive);
+      this.publish();
+    } catch (error) {
+      if (!this.pageAlive || requested !== this.generation || error instanceof ApiError && error.status === 401) return;
+      this.report = null;
+      const message = error instanceof LedgerStatisticsResponseError ? CONTRACT_ERROR : LOAD_ERROR;
+      this.setData({ ...this.chrome(), phase: "error", errorMessage: message });
     }
-    this.publish();
   },
 
   publish() {
-    const bundle = this.screen.bundle;
-    const empty = bundle !== null && statisticsIsEmpty(bundle);
-    const categories = bundle === null || empty ? [] : categoryRows(bundle.categories.items).map(viewRow);
-    const tags = bundle === null || empty ? [] : tagRows(bundle.tags.items).map(viewRow);
+    const report = this.report;
+    if (report === null) return;
+    const net = report.netWorth;
+    const flow = this.module === "INCOME" ? report.income : report.expense;
+    const categories = this.module === "NET" ? [] : flowRows(flow, "category");
+    const tags = this.module === "NET" ? [] : flowRows(flow, "tag").map((row) => ({
+      ...row,
+      selected: row.drillKind === "tag" && this.selectedTagIds.includes(row.drillId),
+    }));
     this.setData({
-      invalid: false,
-      phase: this.screen.phase,
-      monthLabel: formatMonthLabel(this.screen.month),
-      type: this.screen.type,
-      incomeLabel: bundle === null ? "" : formatMoneyLabel(bundle.monthly.netIncome),
-      expenseLabel: bundle === null ? "" : formatMoneyLabel(bundle.monthly.netExpense),
-      surplusLabel: bundle === null ? "" : formatMoneyLabel(bundle.monthly.surplus),
-      countLabel: bundle === null ? "" : `${bundle.monthly.transactionCount} 笔`,
-      empty,
+      ...this.chrome(),
+      phase: "ready",
+      errorMessage: "",
+      rangeLabel: `${report.from} 至 ${report.to}`,
+      openingLabel: formatMoneyLabel(net.opening),
+      closingLabel: formatMoneyLabel(net.closing),
+      changeLabel: formatMoneyLabel(net.change),
+      openingTone: moneyToneClass(net.opening),
+      closingTone: moneyToneClass(net.closing),
+      changeTone: moneyToneClass(net.change),
+      points: net.points.map((point) => ({
+        date: point.date,
+        amountLabel: formatMoneyLabel(point.amount),
+        tone: moneyToneClass(point.amount),
+      })),
+      netLabel: this.module === "NET" ? "" : formatMoneyLabel(flow.net),
+      netTone: this.module === "NET" ? "" : moneyToneClass(flow.net),
       categories,
       tags,
-      categoryEmpty: bundle !== null && !empty && categories.length === 0,
-      tagEmpty: bundle !== null && !empty && tags.length === 0,
-      overlapNote: bundle !== null && !empty ? STATISTICS_OVERLAP_NOTE : "",
-      errorMessage: this.screen.error,
+      emptyFlow: this.module !== "NET" && flow.net === "0.00" && categories.length === 0,
+      selectedTagCount: this.selectedTagIds.length,
+      showAnalysis: this.aiAccountId !== null,
+      customFrom: this.customFrom,
+      customTo: this.customTo,
     });
+  },
+
+  chrome() {
+    return { preset: this.preset, scope: this.scope, module: this.module, picker: this.scope === "SELECTED" ? this.picker : [] };
+  },
+
+  currentQuery(): LedgerQuery | null {
+    if (this.scope === "SELECTED" && this.checkedIds.length === 0) return null;
+    if (this.preset === "CUSTOM" && (this.customFrom.length === 0 || this.customTo.length === 0)) return null;
+    return {
+      preset: this.preset,
+      from: this.preset === "CUSTOM" ? this.customFrom : undefined,
+      to: this.preset === "CUSTOM" ? this.customTo : undefined,
+      accountScope: this.scope,
+      accountIds: this.scope === "SELECTED" ? this.checkedIds : undefined,
+    };
   },
 });
 
-interface StatisticsViewRow {
-  readonly key: string;
-  readonly title: string;
-  readonly countLabel: string;
-  readonly amountLabel: string;
-  readonly depth: 0 | 1;
-  readonly drillKind: StatisticsDrill["kind"] | "";
-  readonly drillId: number;
-}
-
-function viewRow(row: StatisticsRow): StatisticsViewRow {
-  const drill = row.drill;
-  return {
-    key: row.key,
-    title: row.title,
-    countLabel: row.countLabel,
-    amountLabel: row.amountLabel,
-    depth: row.depth,
-    drillKind: drill === null ? "" : drill.kind,
-    drillId: drill?.kind === "category" ? drill.categoryId : drill?.kind === "tag" ? drill.tagId : 0,
-  };
-}
-
-function drillFromDataset(dataset: Record<string, unknown>): StatisticsDrill | null {
+function drillFromDataset(dataset: Record<string, unknown>): LedgerDrill | null {
   const title = dataset["title"];
   const kind = dataset["drill"];
-  if (typeof title !== "string" || title.length === 0) {
-    return null;
-  }
-  if (kind === "uncategorized") {
-    return { kind: "uncategorized", title };
-  }
-  if (kind === "untagged") {
-    return { kind: "untagged", title };
-  }
+  if (typeof title !== "string" || title.length === 0) return null;
+  if (kind === "uncategorized") return { kind: "uncategorized", title };
+  if (kind === "untagged") return { kind: "untagged", title };
   const id = Number(dataset["id"]);
-  if (!Number.isSafeInteger(id) || id <= 0) {
-    return null;
-  }
-  if (kind === "category") {
-    return { kind: "category", categoryId: id, title };
-  }
-  if (kind === "tag") {
-    return { kind: "tag", tagId: id, title };
-  }
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  if (kind === "category") return { kind: "category", categoryId: id, title };
+  if (kind === "tag") return { kind: "tag", tagId: id, title, tagMode: "TREE" };
   return null;
 }
