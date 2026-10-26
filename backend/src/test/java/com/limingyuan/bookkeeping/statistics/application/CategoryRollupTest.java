@@ -16,19 +16,29 @@ class CategoryRollupTest {
                 new CategoryRollup.Node(3, 2L, "豆浆"),
                 new CategoryRollup.Node(4, null, "交通"));
         List<CategoryRollup.Fact> facts = List.of(
-                new CategoryRollup.Fact(3L, new BigDecimal("-400.00")),
-                new CategoryRollup.Fact(4L, new BigDecimal("-300.00")),
-                new CategoryRollup.Fact(null, new BigDecimal("-300.00")));
+                new CategoryRollup.Fact(3L, new BigDecimal("400.00")),
+                new CategoryRollup.Fact(4L, new BigDecimal("300.00")),
+                new CategoryRollup.Fact(null, new BigDecimal("300.00")));
         CategoryRollup.Tree tree = CategoryRollup.rollup(nodes, facts);
-        assertEquals(new BigDecimal("-1000.00"), tree.net());
+        assertEquals(new BigDecimal("1000.00"), tree.net());
         assertEquals(1, tree.roots().size() == 2 ? tree.roots().get(0).totals().transactionCount() : -1);
         CategoryRollup.NodeView food = tree.roots().get(0);
         assertEquals("餐饮", food.name());
-        assertEquals(new BigDecimal("-400.00"), food.totals().amount());
+        assertEquals(new BigDecimal("400.00"), food.totals().amount());
         assertEquals("豆浆", food.children().get(0).children().get(0).name());
-        assertEquals(new BigDecimal("-300.00"), tree.uncategorized().amount());
-        assertEquals("-40.00", StatisticsShare.of(food.totals().amount(), tree.net()));
-        assertEquals("-100.00", shareSum(tree));
+        assertEquals(new BigDecimal("300.00"), tree.uncategorized().amount());
+        assertEquals("40.00", StatisticsShare.of(food.totals().amount(), tree.net()));
+        assertEquals("100.00", shareSum(tree));
+    }
+
+    @Test
+    void negativeNetSumsToMinusOneHundred() {
+        CategoryRollup.Tree tree = CategoryRollup.rollup(List.of(new CategoryRollup.Node(1, null, "餐饮")), List.of(
+                new CategoryRollup.Fact(1L, new BigDecimal("-60.00")),
+                new CategoryRollup.Fact(null, new BigDecimal("-40.00"))));
+        assertEquals(new BigDecimal("-100.00"), tree.net());
+        assertEquals("-60.00", StatisticsShare.of(tree.roots().get(0).totals().amount(), tree.net()));
+        assertEquals("-40.00", StatisticsShare.of(tree.uncategorized().amount(), tree.net()));
     }
 
     @Test

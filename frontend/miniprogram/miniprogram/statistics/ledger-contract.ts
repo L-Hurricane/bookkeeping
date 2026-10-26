@@ -251,7 +251,8 @@ function parseFlow(value: unknown): LedgerFlow | null {
 }
 
 function parseCategory(value: unknown): LedgerCategoryNode | null {
-  if (!isRecord(value) || !isPositive(value.id) || typeof value.name !== "string" || !isCount(value.transactionCount) || !isMoney(value.amount) || !isShare(value.share) || !Array.isArray(value.children)) {
+  const share = readShare(isRecord(value) ? value.share : undefined);
+  if (!isRecord(value) || !isPositive(value.id) || typeof value.name !== "string" || !isCount(value.transactionCount) || !isMoney(value.amount) || share === undefined || !Array.isArray(value.children)) {
     return null;
   }
   const children: LedgerCategoryNode[] = [];
@@ -260,11 +261,12 @@ function parseCategory(value: unknown): LedgerCategoryNode | null {
     if (parsed === null) return null;
     children.push(parsed);
   }
-  return { id: value.id, name: value.name, transactionCount: value.transactionCount, amount: value.amount, share: value.share, children };
+  return { id: value.id, name: value.name, transactionCount: value.transactionCount, amount: value.amount, share, children };
 }
 
 function parseTag(value: unknown): LedgerTagNode | null {
-  if (!isRecord(value) || !isPositive(value.id) || typeof value.name !== "string" || !isCount(value.transactionCount) || !isMoney(value.amount) || !isShare(value.share) || !Array.isArray(value.children)) {
+  const share = readShare(isRecord(value) ? value.share : undefined);
+  if (!isRecord(value) || !isPositive(value.id) || typeof value.name !== "string" || !isCount(value.transactionCount) || !isMoney(value.amount) || share === undefined || !Array.isArray(value.children)) {
     return null;
   }
   const children: LedgerTagNode[] = [];
@@ -273,26 +275,27 @@ function parseTag(value: unknown): LedgerTagNode | null {
     if (parsed === null) return null;
     children.push(parsed);
   }
-  return { id: value.id, name: value.name, transactionCount: value.transactionCount, amount: value.amount, share: value.share, children };
+  return { id: value.id, name: value.name, transactionCount: value.transactionCount, amount: value.amount, share, children };
 }
 
 function parseSlice(value: unknown): LedgerSlice | null | undefined {
-  if (value === null) return null;
-  if (!isRecord(value) || !isCount(value.transactionCount) || !isMoney(value.amount) || !isShare(value.share)) return undefined;
-  return { transactionCount: value.transactionCount, amount: value.amount, share: value.share };
+  if (value === undefined || value === null) return null;
+  const share = readShare(isRecord(value) ? value.share : undefined);
+  if (!isRecord(value) || !isCount(value.transactionCount) || !isMoney(value.amount) || share === undefined) return undefined;
+  return { transactionCount: value.transactionCount, amount: value.amount, share };
 }
 
 function parseTransaction(value: unknown): LedgerTransaction | null {
   if (!isRecord(value) || !isPositive(value.id) || !isPositive(value.accountId) || !isTime(value.accountCreatedTime)) return null;
   if ((value.type !== "INCOME" && value.type !== "EXPENSE") || !isMoney(value.amount) || !isTime(value.businessTime)) return null;
-  if (value.displayName !== null && typeof value.displayName !== "string") return null;
+  if (value.displayName !== undefined && value.displayName !== null && typeof value.displayName !== "string") return null;
   return {
     id: value.id,
     accountId: value.accountId,
     accountCreatedTime: value.accountCreatedTime,
     type: value.type,
     amount: value.amount,
-    displayName: value.displayName,
+    displayName: typeof value.displayName === "string" ? value.displayName : null,
     businessTime: value.businessTime,
   };
 }
@@ -346,6 +349,7 @@ function isTime(value: unknown): value is string {
   return typeof value === "string" && TIME.test(value);
 }
 
-function isShare(value: unknown): value is string | null {
-  return value === null || (typeof value === "string" && SHARE.test(value));
+function readShare(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  return typeof value === "string" && SHARE.test(value) ? value : undefined;
 }

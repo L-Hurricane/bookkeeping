@@ -6,6 +6,7 @@ import { createLedgerStatisticsApi } from "../miniprogram/services/ledger-statis
 import {
   parseLedgerDetailContext,
   parseLedgerReport,
+  parseLedgerTransactions,
   statisticsDetailPagePath,
   statisticsReportPath,
   type LedgerReport,
@@ -64,6 +65,33 @@ describe("ledger statistics", () => {
       drill: { kind: "tags", tagIds: [9, 4], title: "所选标签" },
     });
     assert.match(selected, /tagIds=9,4/);
+  });
+
+  it("accepts a payload that omits null shares, empty slices, and an unnamed transaction", () => {
+    const body = report();
+    const wire = {
+      ...body,
+      expense: {
+        net: "0.00",
+        categories: [{ id: 1, name: "餐饮", transactionCount: 2, amount: "0.00", children: [] }],
+        tags: [],
+      },
+    };
+    const parsed = parseLedgerReport(wire);
+    assert.equal(parsed?.expense.categories[0]?.share, null);
+    assert.equal(parsed?.expense.uncategorized, null);
+    assert.equal(parsed?.expense.untagged, null);
+    const list = {
+      items: [{
+        id: 7,
+        accountId: 3,
+        accountCreatedTime: "2026-08-01T00:00:00+08:00",
+        type: "EXPENSE",
+        amount: "400.00",
+        businessTime: "2026-10-02T12:00:00+08:00",
+      }],
+    };
+    assert.equal(parseLedgerTransactions(list)?.items[0]?.displayName, null);
   });
 
   it("rejects a report that puts a number in a money field", () => {

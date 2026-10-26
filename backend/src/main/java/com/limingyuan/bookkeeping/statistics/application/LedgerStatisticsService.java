@@ -317,8 +317,9 @@ public class LedgerStatisticsService {
         return Money.format(value.setScale(2, RoundingMode.UNNECESSARY));
     }
 
+    /** The stored amount is already signed. Expense rows stay positive unless the transaction itself is negative. */
     private static BigDecimal signed(Row row) {
-        return "INCOME".equals(row.type()) ? row.amount() : row.amount().negate();
+        return row.amount();
     }
 
     private static List<AccountRef> refs(List<AccountRow> accounts) {
