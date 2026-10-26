@@ -8,11 +8,11 @@
 
 ## 当前执行状态
 
-- S4：**APPROVED**（2026-10-26）。T06 独立 Gate **PASS**。报告 `docs/implementation/bookkeeping-s4-t06-gate-v0.1.md`。Testing 首轮 FAIL 后，定向修复 `608aca427b53dacd263750fe73081e4c00c68836` 复验通过。Supervisor PASS。P0/P1/P2 = 0，P3 = 1（`S4-UI-COPY-01`）。T07 人工验收曾因账本首页没有可见统计入口被阻断。修复提交 `133d3cbcf6b6236be293dac1de2c13a930481145` 在账本页工具栏增加「统计」，进入现有统计页，不实施 UI-NAV-01。该入口 P1 的定向 Testing 与 Supervisor 复验均为 PASS。随后人工验收发现统计明细标题仍是百分号编码。修复提交 `980c150c5737227d00578d199d90c816f4e24fc3` 在进入页面前解码一次。分类「早餐」、标签、未分类、无标签和含特殊字符的名称与查询参数一致。该标题 P1 的定向 Testing 与 Supervisor 复验均为 PASS。这一项可以恢复验收。T07 尚未整体通过，本记录不代替负责人验收。正式计划 `docs/implementation/bookkeeping-v1.0-stage-s4-st-plan-v0.1-approved.md`，SHA-256 `5d014e59de7d5a9a03165720b57abeeeaa1360230d1b424446da210684f20256`。Review 原件 `docs/implementation/history/bookkeeping-v1.0-stage-s4-st-plan-taskplan-review-v0.1.md`，SHA-256 `25a9876df494f7c5e7c7a2c6947183ff43b7a2c1a977e6a0e01a216398d49c0c`。批准记录 `docs/implementation/bookkeeping-s4-stage-plan-approval-record-v0.1.md`，SHA-256 `c816212020bf9cb17d0f23824dcb4aad04a4ae88478899bfc96b45d62e9172f7`。范围是 ST-01～ST-10。
+- S4：**CLOSED**（2026-10-26）。结项记录 `docs/implementation/bookkeeping-s4-stage-closeout-v0.1.md`，SHA-256 `6c0beab70aaed1c114619b99d78538e98c6d9b5bcb75eb02ee04f9c518ddc3a7`。遗留 `docs/implementation/v1.0-s4-closeout-backlog-v0.1.md`，SHA-256 `0bc77fb244e1a3c9a03d0026a05f67e38cf9b2a249ff07d5b76a7c52fd6aaeb9`。T06 独立 Gate **PASS**。报告 `docs/implementation/bookkeeping-s4-t06-gate-v0.1.md`。Testing 首轮 FAIL 后，定向修复 `608aca427b53dacd263750fe73081e4c00c68836` 复验通过。Supervisor PASS。T07 负责人确认五项人工 UAT 全部 PASS，并确认明细中文标题修复完成。入口 P1 `133d3cbcf6b6236be293dac1de2c13a930481145` 与标题 P1 `980c150c5737227d00578d199d90c816f4e24fc3` 均已关闭。P0/P1 = 0，P3 = 1（`S4-UI-COPY-01`）。这不是 v1.0 发布，不是合并 main，也不是生产部署。正式计划 `docs/implementation/bookkeeping-v1.0-stage-s4-st-plan-v0.1-approved.md`，SHA-256 `5d014e59de7d5a9a03165720b57abeeeaa1360230d1b424446da210684f20256`。Review 原件 `docs/implementation/history/bookkeeping-v1.0-stage-s4-st-plan-taskplan-review-v0.1.md`，SHA-256 `25a9876df494f7c5e7c7a2c6947183ff43b7a2c1a977e6a0e01a216398d49c0c`。批准记录 `docs/implementation/bookkeeping-s4-stage-plan-approval-record-v0.1.md`，SHA-256 `c816212020bf9cb17d0f23824dcb4aad04a4ae88478899bfc96b45d62e9172f7`。范围是 ST-01～ST-10。
 - S4-T06 证据：复验时后端统计单元测试 12 项通过，小程序测试 228 项通过，typecheck 与 lint 通过。没有运行会启动 Spring 的后端测试，也没有把 V18 迁入 `bookkeeping` 或 `bookkeeping_test`。真实 MySQL 上的历史净值、转账两侧时间、余额调整、信用账户、归档与跨用户隔离，以及微信真机，仍未执行。
 - S4 明细标题证据：小程序测试 230 项通过，typecheck 与 lint 通过。没有运行后端测试，也没有改动 UAT 数据。
 - 数据库设计 Review v0.3：**APPROVED** 用于隔离演练。`docs/architecture/bookkeeping-v1.0-database-design-review-v0.3.md`，SHA-256 `7844121057e2d14504c9ca21baf82d8b83fff8a9638b2bb7cd56e8c5525b47ae`。V18 文件 `backend/src/main/resources/db/migration/V18__analysis_report_scope_and_period.sql`，SHA-256 `9ddb179ef52bcc8518e6b3b620b259c812205262fd264988e0e15f95f4151005`。演练记录 `docs/implementation/v1.0-db-v18-drill-2026-10-26.md`。演练只发生在 `bookkeeping_migration_test`。S4 不把 V18 迁入 `bookkeeping` 或 `bookkeeping_test`。
-- 本地 Git：分支 `uat/v1.0-s2`，比 `origin/release/v1.0` 超前且尚未推送。远程 `origin/release/v1.0` 仍是 S3 结项 `8012a9ef262d2504c1da46f1bea6ddd25af55ac9`。`origin/main` 仍是 `a393734ad147a5dbe11a83cebfd3381f408db7b2`。Draft PR #2 仍是 Open / Draft，head 为该结项提交，没有检查报告。V18 没有进入 `bookkeeping` 或 `bookkeeping_test`。
+- 本地 Git：分支 `uat/v1.0-s2`。S4 结项文档提交前 HEAD `c0008bb8f7090d7a3cf0ef71cdb21d92f6de12c1`。结项提交以提交后的 HEAD 为准。写入本条时，本地缓存的 `origin/release/v1.0` 仍是 S3 结项 `8012a9ef262d2504c1da46f1bea6ddd25af55ac9`，`origin/main` 仍是 `a393734ad147a5dbe11a83cebfd3381f408db7b2`。Draft PR #2 当时仍是 Open / Draft，head 为该 S3 提交，没有检查报告。结项提交后按治理 v1.8 §4.8.3 对既有 `release/v1.0` 做非强制推送；实际同步结果另记，本条不把尚未完成的推送写成已经完成。V18 没有进入 `bookkeeping` 或 `bookkeeping_test`。
 - S2-T10 / M2-AUTO-GATE：**PASS**。组长 2026-10-24 裁断。未解决 P0/P1/P2 为 0。残留 P3 是模拟完整性异常下的事务回滚，没有直接触发 InnoDB `RESTRICT`，非阻断，未标成已修复。
 - S2-T11 / M2-HUMAN-GATE：**CLOSED**。结项提交 `62f1910372b6960bf3630d7cb26ff33e01089ecd`。负责人 2026-10-25 确认功能人工 Gate PASS，UAT-06 五项 PASS，并确认 A+B-lite 停止扩建自动交接、保留现有校验和证据目录。这不是 v1.0 发布，不是合并 main，也不是生产部署。结项记录：`docs/implementation/bookkeeping-s2-stage-closeout-v0.1.md`，SHA-256 `2e759e59ca4b4c56deba7672a069fb909581f63e47d9304b7f3244d84203184c`。
 - Git 交付（S2 结项当时）：`origin/release/v1.0` 曾快进到 `62f1910372b6960bf3630d7cb26ff33e01089ecd`。其后 S3 结项提交已快进到 `8012a9ef262d2504c1da46f1bea6ddd25af55ac9`，见本段开头的本地 Git 条。Draft PR #2 仍未合并。
@@ -38,7 +38,7 @@
 5. `docs/product/bookkeeping-v1.0-product-baseline-v1.0.md`
 6. `docs/product/bookkeeping-v1.0-ui-freeze-v1.0.md`
 7. `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md`
-8. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6 只登记 DB-CT-01。增量索引 v0.7 只登记 S3 结项依据，不覆盖 v0.5 或 v0.6
+8. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6 只登记 DB-CT-01。增量索引 v0.7 只登记 S3 结项依据。增量索引 v0.8 只登记 S4 结项依据，不覆盖 v0.5、v0.6 或 v0.7
 9. 已在仓库中的 S1 计划与结项：`docs/implementation/bookkeeping-v1.0-stage-s1-plan-v0.5-approved.md`、`docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md`
 
 ## 现行文件
@@ -48,7 +48,8 @@
 | `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md` | 治理 v1.6 | `364a2dc1c22ea9d3dce7ed209d77fdc36ed90fe759417acdedca10d19c9e59d1` | Approved / 仓库内原件。现行正式版是仓库外 v1.8，见读取顺序 |
 | `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md` | 审批索引 v0.5 | `b3a950a8223b14d5656e9907ef8c2e95da5539dabad4ee69ef9203c278a8c8f2` | Approved / 原件不改 |
 | `docs/governance/bookkeeping-2026-10-25-approval-index-v0.6.md` | 审批索引 v0.6 | `8294176cd2b25fdf7e6316f476035a48df961838ce7fa23858a9857e2dfd3ac2` | 增量索引，只登记 DB-CT-01。原字节不改 |
-| `docs/governance/bookkeeping-2026-10-25-approval-index-v0.7.md` | 审批索引 v0.7 | `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54` | 现行增量索引，只登记 S3 结项依据 |
+| `docs/governance/bookkeeping-2026-10-25-approval-index-v0.7.md` | 审批索引 v0.7 | `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54` | 增量索引，只登记 S3 结项依据。原字节不改 |
+| `docs/governance/bookkeeping-2026-10-26-approval-index-v0.8.md` | 审批索引 v0.8 | `a06b91c45b2de870d6f9eb95a2197faaf5220d55285546a8bb4abdefefe9040a` | 现行增量索引，只登记 S4 结项依据 |
 | `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md` | S2 Plan Approved v0.1 | `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5` | Approved / 当前执行计划 |
 | `docs/implementation/bookkeeping-s2-two-milestones-scope-v0.1-approved.md` | S2 范围 Approved v0.1 | `b2c4d2abf452d87ab34b1930fe4679d2b8036c8ce8849b9cd4b0b1b0cfc664a7` | Approved / 范围与 Gate |
 | `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md` | 状态 v0.8 | `65c839c278979f68fa82ea3a6fbe6c04dee0bc8625a4edf0011f5cca7aebbac4` | 现行滚动状态，不是新授权 |
@@ -70,5 +71,6 @@ S2 计划 Review 原件登记 SHA-256 为 `629dd55f3f891b8ae10faebd87f40a55035f9
 - S2 后质量与发布候选 Backlog：`docs/implementation/v1.0-post-s2-quality-acceptance-backlog-v0.1.md`，SHA-256 `71bf3667ff6d1a929dc0f414c693b6cce5bb3be0ab239faa2a969b2244cce4a4`。Deferred，未批准实施。
 - S3 计划与 DB-CT-01 草案见上方执行状态。治理 v1.7 仍不入库；本批核对的仓库外原件 SHA-256 仍是 `4fcf410092429fa97aa21baaddc91b027fa0d006cee08af59e46b49bac4c56c1`。
 - 转账默认选择补充：`docs/changes/v1.0-s2-uat-02-transfer-account-selection.md`，SHA-256 `a4c44839324e9d2470cc2e9648005d0dceab0110e7742b697163d259685cef7d`。不替换 PRD 或 UI Freeze。
-- 审批索引 v0.5、v0.6 原件不改。S3 结项依据记在增量索引 v0.7，SHA-256 `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54`。
+- 审批索引 v0.5、v0.6、v0.7 原件不改。S3 结项依据记在增量索引 v0.7，SHA-256 `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54`。S4 结项依据记在增量索引 v0.8，SHA-256 `a06b91c45b2de870d6f9eb95a2197faaf5220d55285546a8bb4abdefefe9040a`。
 - S3 结项：`docs/implementation/bookkeeping-s3-stage-closeout-v0.1.md`，SHA-256 `a994388ea67e8d04b21bdfa6d5b2228790a50ec4937ed670de27f831ce793203`。功能修复头在结项文档提交前是 `d929b77556b3d949a5fcbbffd431c5c1643109f9`。
+- S4 结项：`docs/implementation/bookkeeping-s4-stage-closeout-v0.1.md`，SHA-256 `6c0beab70aaed1c114619b99d78538e98c6d9b5bcb75eb02ee04f9c518ddc3a7`。标题修复头在结项文档提交前是 `980c150c5737227d00578d199d90c816f4e24fc3`。
