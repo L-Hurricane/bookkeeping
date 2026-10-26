@@ -8,38 +8,42 @@
 
 ## 当前执行状态
 
+- S4：**APPROVED**（2026-10-26），当前执行 T00～T05。正式计划 `docs/implementation/bookkeeping-v1.0-stage-s4-st-plan-v0.1-approved.md`，SHA-256 `5d014e59de7d5a9a03165720b57abeeeaa1360230d1b424446da210684f20256`。Review 原件 `docs/implementation/history/bookkeeping-v1.0-stage-s4-st-plan-taskplan-review-v0.1.md`，SHA-256 `25a9876df494f7c5e7c7a2c6947183ff43b7a2c1a977e6a0e01a216398d49c0c`。批准记录 `docs/implementation/bookkeeping-s4-stage-plan-approval-record-v0.1.md`，SHA-256 `c816212020bf9cb17d0f23824dcb4aad04a4ae88478899bfc96b45d62e9172f7`。范围是 ST-01～ST-10。T06 独立 Testing/Supervisor 和 T07 人工验收尚未开始。
+- 数据库设计 Review v0.3：**APPROVED** 用于隔离演练。`docs/architecture/bookkeeping-v1.0-database-design-review-v0.3.md`，SHA-256 `7844121057e2d14504c9ca21baf82d8b83fff8a9638b2bb7cd56e8c5525b47ae`。V18 文件 `backend/src/main/resources/db/migration/V18__analysis_report_scope_and_period.sql`，SHA-256 `9ddb179ef52bcc8518e6b3b620b259c812205262fd264988e0e15f95f4151005`。演练记录 `docs/implementation/v1.0-db-v18-drill-2026-10-26.md`。演练只发生在 `bookkeeping_migration_test`。S4 不把 V18 迁入 `bookkeeping` 或 `bookkeeping_test`。
+- 本地 Git：分支 `uat/v1.0-s2`。S3 结项提交 `8012a9ef262d2504c1da46f1bea6ddd25af55ac9` 已与 `origin/release/v1.0` 相同。`origin/main` 仍是 `a393734ad147a5dbe11a83cebfd3381f408db7b2`。Draft PR #2 仍是 Open / Draft，head 为该结项提交，没有检查报告。V18 与 S4 计划在本入口更新时尚未推送。
 - S2-T10 / M2-AUTO-GATE：**PASS**。组长 2026-10-24 裁断。未解决 P0/P1/P2 为 0。残留 P3 是模拟完整性异常下的事务回滚，没有直接触发 InnoDB `RESTRICT`，非阻断，未标成已修复。
 - S2-T11 / M2-HUMAN-GATE：**CLOSED**。结项提交 `62f1910372b6960bf3630d7cb26ff33e01089ecd`。负责人 2026-10-25 确认功能人工 Gate PASS，UAT-06 五项 PASS，并确认 A+B-lite 停止扩建自动交接、保留现有校验和证据目录。这不是 v1.0 发布，不是合并 main，也不是生产部署。结项记录：`docs/implementation/bookkeeping-s2-stage-closeout-v0.1.md`，SHA-256 `2e759e59ca4b4c56deba7672a069fb909581f63e47d9304b7f3244d84203184c`。
-- Git 交付：`origin/release/v1.0` 已快进到 `62f1910372b6960bf3630d7cb26ff33e01089ecd`。Draft PR #2 仍是 Open / Draft，`release/v1.0` → `main`，未合并。`main` 仍是 `a393734ad147a5dbe11a83cebfd3381f408db7b2`。其后的本地文档归档未 Push。
+- Git 交付（S2 结项当时）：`origin/release/v1.0` 曾快进到 `62f1910372b6960bf3630d7cb26ff33e01089ecd`。其后 S3 结项提交已快进到 `8012a9ef262d2504c1da46f1bea6ddd25af55ac9`，见本段开头的本地 Git 条。Draft PR #2 仍未合并。
 - 已批准 S2 计划：`docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`，SHA-256 `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5`。本状态不修改该文件。
 - S3 初版完整计划：**APPROVED**（2026-10-25）。`docs/implementation/bookkeeping-v1.0-stage-s3-plan-v0.1-approved.md`，SHA-256 `c871888bfa1ee09996e005adcdbe94afb568837699a425631c02a8dc396a79ef`。Review 原件 `docs/implementation/history/bookkeeping-v1.0-stage-s3-plan-taskplan-review-v0.1.md`，SHA-256 `6ef022619da77202502a5b636ec9be24cd785ee47c75b0946d79cbfd79229b06`。批准记录 `docs/implementation/bookkeeping-v1.0-stage-s3-plan-v0.1-approval-record.md`，SHA-256 `3b4e92b615ac2f3254a46769bc43e7bb585725f965f79a733c412203854ba05d`。
 - 当前任务 S3-T00：设计原件已归档。草案 `docs/implementation/s3-t00-db-ct-01-schema-draft-2026-10-25.md` 保持原字节，SHA-256 `752e2febcc0b79dc4dd82229c73a2f6219e00571f7807f27d3b4dbdfc4342a03`。草案正文里的“尚未批准”是获批原件原文，不改写。
 - DB-CT-01：**APPROVED**（2026-10-25）。负责人原话“批准方案A”。批准记录 `docs/implementation/s3-db-ct-01-approval-2026-10-25.md`，SHA-256 `cbef969c52d6c5cd3a79d8e76472a28e79428fef5899044be9c018b63c63ccc0`。范围是草案九条 V17 SQL、支出「交通」下「其他」改为「其他交通」并保留分类 ID，以及仅 `bookkeeping_migration_test` 的备份、恢复验证、九条只读预检和 V17 演练。日常开发库 `bookkeeping` 不执行这批手工 V17。演练记录 `docs/implementation/s3-db-ct-01-drill-2026-10-25.md`。
 - S3：**CLOSED**（2026-10-25）。结项记录 `docs/implementation/bookkeeping-s3-stage-closeout-v0.1.md`，SHA-256 `a994388ea67e8d04b21bdfa6d5b2228790a50ec4937ed670de27f831ce793203`。T06 复验 Testing 与 Supervisor 均为 PASS，P0/P1=0。修复提交 `d929b77556b3d949a5fcbbffd431c5c1643109f9`。T07 负责人原话“功能没问题”，是基本功能验收，不是计划五项场景的逐条 PASS。这不是 v1.0 发布，不是合并 main，也不是远端同步。
 - S3 遗留：`docs/implementation/v1.0-s3-closeout-backlog-v0.1.md`，SHA-256 `99738f9c192e1a515f1d4e9a5a2c3038f3a1947183e9e054add5b1ac029c84ba`。`S3-UI-ENTRY-01` 是 P2，最晚 v1.0 完整 UI 验收前处理。UI-NAV-01 继续延期。入口、导航、颜色和普通 UI 交互本轮不改。
-- 数据库评审准备：`docs/implementation/s3-t08-db-review-prep-2026-10-25.md`，SHA-256 `304d23c650682e7551c352a275b0c288f7f8a99e32e4b0bad97bf1aeda551c3f`。只读事实，不批准新的 DDL，不开始下一业务 Stage 编码。2026-10-25 20:33:21 日常库 `bookkeeping` 的 Flyway 历史已记到 17；T06 复验结束时它仍是 16。本结项没有执行这条迁移。`bookkeeping_migration_test` 当前无表。
+- 数据库评审准备：`docs/implementation/s3-t08-db-review-prep-2026-10-25.md`，SHA-256 `304d23c650682e7551c352a275b0c288f7f8a99e32e4b0bad97bf1aeda551c3f`。只读事实，不批准新的 DDL，不开始下一业务 Stage 编码。2026-10-25 20:33:21 日常库 `bookkeeping` 的 Flyway 历史已记到 17；T06 复验结束时它仍是 16。本结项没有执行这条迁移。结项当时 `bookkeeping_migration_test` 无表。2026-10-26 的 V18 演练只在该隔离库执行，结束后 Flyway 版本为 18；本 Stage 未再连接它。
 - 质量与发布候选 Backlog：`docs/implementation/v1.0-post-s2-quality-acceptance-backlog-v0.1.md`，SHA-256 `71bf3667ff6d1a929dc0f414c693b6cce5bb3be0ab239faa2a969b2244cce4a4`。状态 Deferred，未批准实施。QA-ENV-01、QA-DATA-01、QA-DATA-02、QA-E2E-01、QA-MULTI-01、QA-COMPAT-01、QA-READY-01、REL-01、OPS-01 全部 Deferred。优先完成 v1.0 剩余业务功能；功能完整后再综合评估。当前不开展质量验收环境、多端自动化、发布稳定性、监控告警等非功能建设。发布稳定性与生产监控在首次正式对外发布前核定。
 - S1-T08-OBS-01 / UI-NAV-01 仍在 Backlog。延期依据是 S1 结项时负责人同意暂缓，以及 2026-10-25 接受不再恢复微信原生主页按钮。后续仍是「账本 / 统计 / 我的」。最晚复核节点是完整 v1.0 产品/UI 人工验收前。
 - UAT-03 每笔历史流水的交易后余额仍在 Backlog。延期依据是 2026-10-25 组长安排，不在本轮编码。最晚复核节点是后续相关 Stage 再评估，不由本次 S2 结项代替。
 - WS-01～WS-07 仍在既有《S2 结项后工作区收敛与自动清理待办》，Deferred。不因 S2 CLOSED 启动目录扫描、清理或治理修订。
-- 仓库内治理原件仍是下表 v1.6。本机 Downloads 的 v1.7 SHA-256 为 `4fcf410092429fa97aa21baaddc91b027fa0d006cee08af59e46b49bac4c56c1`，§4.8 的既有 `release/v1.0` 非强制 Push 授权继续有效，§4.9 不新增 Git 权限。负责人已上传 ChatGPT Project 唯一现行状态 v1.1。本仓库入口不替换该 Project 文件。
+- 仓库内治理原件仍是下表 v1.6。本机 Downloads 的 v1.7 SHA-256 为 `4fcf410092429fa97aa21baaddc91b027fa0d006cee08af59e46b49bac4c56c1`，§4.8 的既有 `release/v1.0` 非强制 Push 授权继续有效，§4.9 不新增 Git 权限。现行正式治理是仓库外 v1.8，SHA-256 `a8fb22ac207e06be3341826be5690d91b7c7f6d74e81937b26e5a2cb0bd987b0`。负责人已上传 ChatGPT Project 唯一现行状态 v1.1。本仓库入口不替换该 Project 文件。
 
 ## 读取顺序
 
-1. `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md`
-2. `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`
-3. `docs/implementation/bookkeeping-s2-two-milestones-scope-v0.1-approved.md`
-4. `docs/product/bookkeeping-v1.0-product-baseline-v1.0.md`
-5. `docs/product/bookkeeping-v1.0-ui-freeze-v1.0.md`
-6. `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md`
-7. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6 只登记 DB-CT-01。增量索引 v0.7 只登记 S3 结项依据，不覆盖 v0.5 或 v0.6
-8. 已在仓库中的 S1 计划与结项：`docs/implementation/bookkeeping-v1.0-stage-s1-plan-v0.5-approved.md`、`docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md`
+1. `docs/implementation/bookkeeping-v1.0-stage-s4-st-plan-v0.1-approved.md`
+2. `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md`（仓库内原件。现行正式治理是仓库外 v1.8，SHA-256 `a8fb22ac207e06be3341826be5690d91b7c7f6d74e81937b26e5a2cb0bd987b0`）
+3. `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`
+4. `docs/implementation/bookkeeping-s2-two-milestones-scope-v0.1-approved.md`
+5. `docs/product/bookkeeping-v1.0-product-baseline-v1.0.md`
+6. `docs/product/bookkeeping-v1.0-ui-freeze-v1.0.md`
+7. `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md`
+8. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6 只登记 DB-CT-01。增量索引 v0.7 只登记 S3 结项依据，不覆盖 v0.5 或 v0.6
+9. 已在仓库中的 S1 计划与结项：`docs/implementation/bookkeeping-v1.0-stage-s1-plan-v0.5-approved.md`、`docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md`
 
 ## 现行文件
 
 | 路径 | 版本 | SHA-256 | 状态 |
 |---|---|---|---|
-| `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md` | 治理 v1.6 | `364a2dc1c22ea9d3dce7ed209d77fdc36ed90fe759417acdedca10d19c9e59d1` | Approved / 仓库内原件。现行正式版是仓库外 v1.7，见上方执行状态 |
+| `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md` | 治理 v1.6 | `364a2dc1c22ea9d3dce7ed209d77fdc36ed90fe759417acdedca10d19c9e59d1` | Approved / 仓库内原件。现行正式版是仓库外 v1.8，见读取顺序 |
 | `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md` | 审批索引 v0.5 | `b3a950a8223b14d5656e9907ef8c2e95da5539dabad4ee69ef9203c278a8c8f2` | Approved / 原件不改 |
 | `docs/governance/bookkeeping-2026-10-25-approval-index-v0.6.md` | 审批索引 v0.6 | `8294176cd2b25fdf7e6316f476035a48df961838ce7fa23858a9857e2dfd3ac2` | 增量索引，只登记 DB-CT-01。原字节不改 |
 | `docs/governance/bookkeeping-2026-10-25-approval-index-v0.7.md` | 审批索引 v0.7 | `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54` | 现行增量索引，只登记 S3 结项依据 |
