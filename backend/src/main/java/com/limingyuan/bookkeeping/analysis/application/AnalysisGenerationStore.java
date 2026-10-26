@@ -22,4 +22,16 @@ public interface AnalysisGenerationStore {
     SuccessSettlement completeSuccess(GenerationPermit permit, MonthlyAnalysisReport report, AnalysisProvenance provenance);
 
     FailureSettlement completeFailure(GenerationPermit permit);
+
+    Optional<AnalysisSnapshot> findSuccessfulLedger(long userId, String periodKind, String period, String contextFingerprint);
+
+    Optional<AnalysisSnapshot> findLatestLedger(long userId, String periodKind, String period);
+
+    Optional<GenerationStatus> findLedgerCoordination(long userId, String periodKind, String period, String contextFingerprint);
+
+    LedgerPermitAcquisition acquireLedger(long userId, String periodKind, String period, String contextFingerprint);
+
+    SuccessSettlement completeLedgerSuccess(LedgerGenerationPermit permit, MonthlyAnalysisReport report, AnalysisProvenance provenance);
+
+    FailureSettlement completeLedgerFailure(LedgerGenerationPermit permit);
 }

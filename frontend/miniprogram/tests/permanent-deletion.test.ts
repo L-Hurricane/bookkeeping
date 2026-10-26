@@ -22,6 +22,7 @@ const previewBody = {
   transferCount: 1,
   analysisSnapshotCount: 1,
   analysisGenerationCount: 2,
+  ledgerReportCount: 1,
   affectedAccounts: [
     {
       accountId: 1002,

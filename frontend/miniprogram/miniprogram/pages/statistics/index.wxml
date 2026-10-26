@@ -25,6 +25,7 @@
   </view>
   <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
   <button wx:if="{{showAnalysis}}" class="analysis-entry" bindtap="onOpenAnalysis">AI 分析本月</button>
+  <button wx:else class="analysis-entry" bindtap="onOpenLedgerAnalysis">AI 分析</button>
   <view class="choices">
     <text class="choice {{module === 'NET' ? 'selected' : ''}}" data-module="NET" bindtap="onSelectModule">净资产</text>
     <text class="choice {{module === 'EXPENSE' ? 'selected' : ''}}" data-module="EXPENSE" bindtap="onSelectModule">支出</text>

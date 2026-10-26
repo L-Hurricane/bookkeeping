@@ -176,6 +176,42 @@ public class JpaAccountPermanentDeletionStore implements AccountPermanentDeletio
     }
 
     @Override
+    public List<Long> findLedgerAnalysisSnapshotIds(long userId) {
+        requireUser(userId);
+        return analysis.ledgerSnapshotIds();
+    }
+
+    @Override
+    public List<Long> findLedgerAnalysisGenerationIds(long userId) {
+        requireUser(userId);
+        return analysis.ledgerGenerationIds();
+    }
+
+    @Override
+    public List<Long> lockLedgerAnalysisSnapshotIds(long userId) {
+        requireUser(userId);
+        return analysis.lockLedgerSnapshotIds();
+    }
+
+    @Override
+    public List<Long> lockLedgerAnalysisGenerationIds(long userId) {
+        requireUser(userId);
+        return analysis.lockLedgerGenerationIds();
+    }
+
+    @Override
+    public void deleteLedgerAnalysisGenerations(long userId, List<Long> ids) {
+        requireUser(userId);
+        analysis.deleteLedgerGenerations(ids);
+    }
+
+    @Override
+    public void deleteLedgerAnalysisSnapshots(long userId, List<Long> ids) {
+        requireUser(userId);
+        analysis.deleteLedgerSnapshots(ids);
+    }
+
+    @Override
     public void deleteTransactionTags(List<Long> transactionIds) {
         for (long transactionId : transactionIds) {
             transactionTags.deleteByTransactionId(transactionId);

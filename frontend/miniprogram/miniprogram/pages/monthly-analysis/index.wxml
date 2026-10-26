@@ -3,6 +3,11 @@
     <text class="error">{{errorMessage}}</text>
   </block>
   <block wx:else>
+    <view wx:if="{{ledgerMode}}" class="month">
+      <text class="month-step" data-kind="MONTH" bindtap="onSelectLedgerKind">自然月</text>
+      <text class="month-step" data-kind="YEAR" bindtap="onSelectLedgerKind">自然年</text>
+    </view>
+    <text wx:if="{{quotaNotice}}" class="notice">{{quotaNotice}}</text>
     <view class="month">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>
       <text class="month-label">{{monthLabel}}</text>

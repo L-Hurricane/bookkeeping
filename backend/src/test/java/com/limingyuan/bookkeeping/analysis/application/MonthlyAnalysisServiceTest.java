@@ -341,6 +341,12 @@ class MonthlyAnalysisServiceTest {
             throw new AssertionError("success");
         }
         @Override public FailureSettlement completeFailure(GenerationPermit permit) { throw new AssertionError("failure"); }
+        @Override public Optional<AnalysisSnapshot> findSuccessfulLedger(long userId, String periodKind, String period, String contextFingerprint) { return Optional.empty(); }
+        @Override public Optional<AnalysisSnapshot> findLatestLedger(long userId, String periodKind, String period) { return Optional.empty(); }
+        @Override public Optional<GenerationStatus> findLedgerCoordination(long userId, String periodKind, String period, String contextFingerprint) { return Optional.empty(); }
+        @Override public LedgerPermitAcquisition acquireLedger(long userId, String periodKind, String period, String contextFingerprint) { throw new AssertionError("ledger"); }
+        @Override public SuccessSettlement completeLedgerSuccess(LedgerGenerationPermit permit, MonthlyAnalysisReport report, AnalysisProvenance provenance) { throw new AssertionError("ledger"); }
+        @Override public FailureSettlement completeLedgerFailure(LedgerGenerationPermit permit) { throw new AssertionError("ledger"); }
     }
 
     private static final class OutcomeStore implements AnalysisGenerationStore {
@@ -375,6 +381,12 @@ class MonthlyAnalysisServiceTest {
             successes++;
             throw new AssertionError("success snapshot");
         }
+        @Override public Optional<AnalysisSnapshot> findSuccessfulLedger(long userId, String periodKind, String period, String contextFingerprint) { return Optional.empty(); }
+        @Override public Optional<AnalysisSnapshot> findLatestLedger(long userId, String periodKind, String period) { return Optional.empty(); }
+        @Override public Optional<GenerationStatus> findLedgerCoordination(long userId, String periodKind, String period, String contextFingerprint) { return Optional.empty(); }
+        @Override public LedgerPermitAcquisition acquireLedger(long userId, String periodKind, String period, String contextFingerprint) { throw new AssertionError("ledger"); }
+        @Override public SuccessSettlement completeLedgerSuccess(LedgerGenerationPermit permit, MonthlyAnalysisReport report, AnalysisProvenance provenance) { throw new AssertionError("ledger"); }
+        @Override public FailureSettlement completeLedgerFailure(LedgerGenerationPermit permit) { throw new AssertionError("ledger"); }
         @Override public FailureSettlement completeFailure(GenerationPermit permit) {
             failures++;
             return new FailureSettlement.Applied();

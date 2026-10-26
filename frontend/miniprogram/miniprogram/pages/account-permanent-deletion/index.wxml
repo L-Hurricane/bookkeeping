@@ -21,6 +21,7 @@
   <text class="count-row">余额调整：{{adjustmentCount}} 笔</text>
   <text class="count-row">关联转账：{{transferCount}} 笔</text>
   <text class="count-row">AI 历史报告：{{analysisSnapshotCount}} 条</text>
+  <text class="count-row">全账本 AI 月报和年报：{{ledgerReportCount}} 条，删除后不再可读</text>
   <text class="count-row">AI 生成记录：{{analysisGenerationCount}} 条</text>
   <text class="section-title">其他账户余额影响</text>
   <text class="hint" wx:if="{{showNoCounterpart}}">{{noCounterpartHint}}</text>

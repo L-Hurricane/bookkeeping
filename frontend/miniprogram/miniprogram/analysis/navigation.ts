@@ -9,6 +9,10 @@ export function monthlyAnalysisPagePath(accountId: number, month: string): strin
   return `/pages/monthly-analysis/index?accountId=${accountId}&month=${encodeURIComponent(month)}`;
 }
 
+export function ledgerAnalysisPagePath(periodKind: "MONTH" | "YEAR", period: string): string {
+  return `/pages/monthly-analysis/index?scope=ledger&periodKind=${periodKind}&period=${encodeURIComponent(period)}`;
+}
+
 export function parseAnalysisContext(query: Record<string, string | undefined>): AnalysisPageContext | null {
   const accountId = parsePositiveId(query.accountId);
   const month = query.month;

@@ -371,6 +371,24 @@ class AccountPermanentDeletionTest {
         assertThat(store.findAccount(20L, 1L)).isPresent();
     }
 
+    @Test
+    void permanentDeletionRemovesLedgerReportsAndLeavesLegacyRows() {
+        var store = new InMemoryDeletionStore(1L);
+        store.putAccount(archived(20L, 1L, "归档", AccountLifecycle.ARCHIVED));
+        store.ledgerSnapshotIds.add(9L);
+        store.ledgerGenerationIds.add(8L);
+        store.legacySnapshotIds.add(7L);
+        store.addSnapshot(null, 1L, 7L);
+        var service = service(store, 1L);
+        var preview = service.preview(20L);
+        assertThat(preview.ledgerReportCount()).isEqualTo(1);
+        service.execute(20L, preview.previewToken());
+        assertThat(store.ledgerSnapshotIds).isEmpty();
+        assertThat(store.ledgerGenerationIds).isEmpty();
+        assertThat(store.legacySnapshotIds).containsExactly(7L);
+        assertThat(store.snapshotExists(7L)).isTrue();
+    }
+
     private static AccountPermanentDeletionService service(InMemoryDeletionStore store, long userId) {
         return new AccountPermanentDeletionService(store, new RecordingLocks(store), userContext(userId),
                 directTransactions());
@@ -446,6 +464,9 @@ class AccountPermanentDeletionTest {
         final List<Long> deletedTransferIds = new ArrayList<>();
         final List<Long> deletedTransactionIds = new ArrayList<>();
         final List<Long> deletedAdjustmentIds = new ArrayList<>();
+        final List<Long> ledgerSnapshotIds = new ArrayList<>();
+        final List<Long> ledgerGenerationIds = new ArrayList<>();
+        final List<Long> legacySnapshotIds = new ArrayList<>();
         boolean integrityViolationOnAccountDelete;
         private boolean repeatableReadArmed;
         private Runnable commitAfterFirstPlainRead;
@@ -637,6 +658,30 @@ class AccountPermanentDeletionTest {
         }
 
         @Override
+        public List<Long> findLedgerAnalysisSnapshotIds(long userId) {
+            return userId == ownerUserId ? List.copyOf(ledgerSnapshotIds) : List.of();
+        }
+
+        public List<Long> findLedgerAnalysisGenerationIds(long userId) {
+            return userId == ownerUserId ? List.copyOf(ledgerGenerationIds) : List.of();
+        }
+
+        public List<Long> lockLedgerAnalysisSnapshotIds(long userId) {
+            return findLedgerAnalysisSnapshotIds(userId);
+        }
+
+        public List<Long> lockLedgerAnalysisGenerationIds(long userId) {
+            return findLedgerAnalysisGenerationIds(userId);
+        }
+
+        public void deleteLedgerAnalysisGenerations(long userId, List<Long> ids) {
+            if (userId == ownerUserId) ledgerGenerationIds.removeAll(ids);
+        }
+
+        public void deleteLedgerAnalysisSnapshots(long userId, List<Long> ids) {
+            if (userId == ownerUserId) ledgerSnapshotIds.removeAll(ids);
+        }
+
         public void deleteAnalysisSnapshots(long accountId, long userId, List<Long> ids) {
             recordStep("analysis_snapshots");
             snapshots.entrySet().removeIf(entry -> ids.contains(entry.getKey())

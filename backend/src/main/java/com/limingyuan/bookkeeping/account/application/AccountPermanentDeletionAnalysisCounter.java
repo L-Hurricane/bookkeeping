@@ -12,6 +12,16 @@ public class AccountPermanentDeletionAnalysisCounter {
      * {@code account_id IS NULL} must be written out. {@code account_id = :accountId} is UNKNOWN
      * for those rows, so {@code NOT (user_id = :userId AND account_id = :accountId)} skips them.
      */
+    public static final String DELETE_LEDGER_GENERATIONS_SQL = """
+            DELETE FROM analysis_generations
+            WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL AND id IN (:ids)
+            """;
+
+    public static final String DELETE_LEDGER_SNAPSHOTS_SQL = """
+            DELETE FROM analysis_snapshots
+            WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL AND id IN (:ids)
+            """;
+
     public static final String INBOUND_REFERENCE_SQL = """
             SELECT COUNT(*)
             FROM analysis_snapshots s
@@ -159,6 +169,54 @@ public class AccountPermanentDeletionAnalysisCounter {
                 DELETE FROM analysis_generations
                 WHERE user_id = :userId AND account_id = :accountId AND id IN (:ids)
                 """).param("userId", userId).param("accountId", accountId).param("ids", ids).update();
+    }
+
+    public List<Long> ledgerSnapshotIds() {
+        long userId = context.userId();
+        return jdbc.sql("""
+                SELECT id FROM analysis_snapshots
+                WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                ORDER BY id
+                """).param("userId", userId).query(Long.class).list();
+    }
+
+    public List<Long> ledgerGenerationIds() {
+        long userId = context.userId();
+        return jdbc.sql("""
+                SELECT id FROM analysis_generations
+                WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                ORDER BY id
+                """).param("userId", userId).query(Long.class).list();
+    }
+
+    public List<Long> lockLedgerSnapshotIds() {
+        long userId = context.userId();
+        return jdbc.sql("""
+                SELECT id FROM analysis_snapshots
+                WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                ORDER BY id
+                FOR UPDATE
+                """).param("userId", userId).query(Long.class).list();
+    }
+
+    public List<Long> lockLedgerGenerationIds() {
+        long userId = context.userId();
+        return jdbc.sql("""
+                SELECT id FROM analysis_generations
+                WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                ORDER BY id
+                FOR UPDATE
+                """).param("userId", userId).query(Long.class).list();
+    }
+
+    public void deleteLedgerGenerations(List<Long> ids) {
+        if (ids.isEmpty()) return;
+        jdbc.sql(DELETE_LEDGER_GENERATIONS_SQL).param("userId", context.userId()).param("ids", ids).update();
+    }
+
+    public void deleteLedgerSnapshots(List<Long> ids) {
+        if (ids.isEmpty()) return;
+        jdbc.sql(DELETE_LEDGER_SNAPSHOTS_SQL).param("userId", context.userId()).param("ids", ids).update();
     }
 
     public void deleteSnapshotsByIds(long accountId, List<Long> ids) {

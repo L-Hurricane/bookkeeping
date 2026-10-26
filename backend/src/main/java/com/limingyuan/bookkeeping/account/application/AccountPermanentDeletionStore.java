@@ -41,6 +41,18 @@ public interface AccountPermanentDeletionStore {
 
     void deleteAnalysisSnapshots(long accountId, long userId, List<Long> ids);
 
+    List<Long> findLedgerAnalysisSnapshotIds(long userId);
+
+    List<Long> findLedgerAnalysisGenerationIds(long userId);
+
+    List<Long> lockLedgerAnalysisSnapshotIds(long userId);
+
+    List<Long> lockLedgerAnalysisGenerationIds(long userId);
+
+    void deleteLedgerAnalysisGenerations(long userId, List<Long> ids);
+
+    void deleteLedgerAnalysisSnapshots(long userId, List<Long> ids);
+
     void deleteTransactionTags(List<Long> transactionIds);
 
     void deleteTransactions(long accountId, long userId, List<Long> ids);

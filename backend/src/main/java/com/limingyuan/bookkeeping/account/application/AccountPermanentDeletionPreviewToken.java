@@ -10,7 +10,7 @@ import java.util.Map;
 
 /** Opaque preview token derived from the deletion basis at preview time. */
 public final class AccountPermanentDeletionPreviewToken {
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
 
     private AccountPermanentDeletionPreviewToken() { }
 
@@ -22,6 +22,8 @@ public final class AccountPermanentDeletionPreviewToken {
             List<Long> adjustmentIds,
             List<Long> analysisSnapshotIds,
             List<Long> analysisGenerationIds,
+            List<Long> ledgerSnapshotIds,
+            List<Long> ledgerGenerationIds,
             List<TransferBasis> transfers,
             Map<Long, BigDecimal> counterpartBalanceBefore) { }
 
@@ -45,6 +47,8 @@ public final class AccountPermanentDeletionPreviewToken {
         writeLongs(out, basis.adjustmentIds());
         writeLongs(out, basis.analysisSnapshotIds());
         writeLongs(out, basis.analysisGenerationIds());
+        writeLongs(out, basis.ledgerSnapshotIds());
+        writeLongs(out, basis.ledgerGenerationIds());
         CanonicalEncoding.writeInt(out, basis.transfers().size());
         for (var transfer : basis.transfers()) {
             writeLong(out, transfer.id());

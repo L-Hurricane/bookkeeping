@@ -24,6 +24,12 @@ final class LocalMockMonthlyAnalysisGenerator implements MonthlyAnalysisGenerato
     @Override
     public MonthlyAnalysisGeneration generate(MonthlyAnalysisModelInput input, String systemPrompt) {
         if (input == null) throw new IllegalArgumentException("model input is required");
+        return generateJson(input.json(), systemPrompt);
+    }
+
+    @Override
+    public MonthlyAnalysisGeneration generateJson(String userJson, String systemPrompt) {
+        if (userJson == null || userJson.isBlank()) throw new IllegalArgumentException("model input is required");
         if (systemPrompt == null || systemPrompt.isBlank()) throw new IllegalArgumentException("system prompt is required");
         if (fail) throw new AnalysisGenerationFailed(Kind.PROVIDER_ERROR, null);
         String content = content();

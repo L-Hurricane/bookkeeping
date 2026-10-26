@@ -35,7 +35,8 @@ public class AccountPermanentDeletionService {
             String change) { }
 
     public record PreviewView(int transactionCount, int adjustmentCount, int transferCount, int analysisSnapshotCount,
-            int analysisGenerationCount, List<AffectedAccountView> affectedAccounts, String previewToken) { }
+            int analysisGenerationCount, int ledgerReportCount, List<AffectedAccountView> affectedAccounts,
+            String previewToken) { }
 
     public PreviewView preview(long accountId) {
         long userId = context.userId();
@@ -53,6 +54,7 @@ public class AccountPermanentDeletionService {
                 snapshot.transfers().size(),
                 snapshot.analysisSnapshotIds().size(),
                 snapshot.analysisGenerationIds().size(),
+                snapshot.ledgerSnapshotIds().size(),
                 AccountPermanentDeletionImpacts.views(impacts),
                 AccountPermanentDeletionPreviewToken.issue(snapshot.basis()));
     }
@@ -111,6 +113,8 @@ public class AccountPermanentDeletionService {
     private void deleteAll(AccountEntity account, DeletionSnapshot snapshot) {
         long accountId = account.getId();
         long userId = context.userId();
+        store.deleteLedgerAnalysisGenerations(userId, snapshot.ledgerGenerationIds());
+        store.deleteLedgerAnalysisSnapshots(userId, snapshot.ledgerSnapshotIds());
         store.deleteAnalysisGenerations(accountId, userId, snapshot.analysisGenerationIds());
         store.deleteAnalysisSnapshots(accountId, userId, snapshot.analysisSnapshotIds());
         store.deleteTransactionTags(snapshot.transactionIds());
@@ -135,6 +139,12 @@ public class AccountPermanentDeletionService {
         List<Long> analysisGenerationIds = locking
                 ? store.lockAnalysisGenerationIds(accountId, userId)
                 : store.findAnalysisGenerationIds(accountId, userId);
+        List<Long> ledgerSnapshotIds = locking
+                ? store.lockLedgerAnalysisSnapshotIds(userId)
+                : store.findLedgerAnalysisSnapshotIds(userId);
+        List<Long> ledgerGenerationIds = locking
+                ? store.lockLedgerAnalysisGenerationIds(userId)
+                : store.findLedgerAnalysisGenerationIds(userId);
         List<TransferBasis> transferRows = locking
                 ? store.lockTransfersTouchingAccount(accountId, userId)
                 : store.findTransfersTouchingAccount(accountId, userId);
@@ -148,9 +158,9 @@ public class AccountPermanentDeletionService {
                     .getName());
         }
         var basis = new Basis(accountId, transactionIds, adjustmentIds, analysisSnapshotIds, analysisGenerationIds,
-                transferRows, balanceBefore);
+                ledgerSnapshotIds, ledgerGenerationIds, transferRows, balanceBefore);
         return new DeletionSnapshot(transactionIds, adjustmentIds, analysisSnapshotIds, analysisGenerationIds,
-                transferRows, balanceBefore, names, basis);
+                ledgerSnapshotIds, ledgerGenerationIds, transferRows, balanceBefore, names, basis);
     }
 
     private void requireArchived(AccountEntity account) {
@@ -180,6 +190,8 @@ public class AccountPermanentDeletionService {
             List<Long> adjustmentIds,
             List<Long> analysisSnapshotIds,
             List<Long> analysisGenerationIds,
+            List<Long> ledgerSnapshotIds,
+            List<Long> ledgerGenerationIds,
             List<TransferBasis> transfers,
             Map<Long, java.math.BigDecimal> counterpartBalanceBefore,
             Map<Long, String> accountNames,

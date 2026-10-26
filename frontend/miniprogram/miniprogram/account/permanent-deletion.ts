@@ -16,6 +16,7 @@ export interface PermanentDeletionPreview {
   readonly transferCount: number;
   readonly analysisSnapshotCount: number;
   readonly analysisGenerationCount: number;
+  readonly ledgerReportCount: number;
   readonly affectedAccounts: readonly PermanentDeletionAffectedAccount[];
   readonly previewToken: string;
 }
@@ -41,7 +42,7 @@ export type PermanentDeletionExecuteOutcome =
   | "other";
 
 export const PERMANENT_DELETION_IRREVERSIBLE_HINT =
-  "永久删除后不可恢复。该账户及其普通交易、余额调整、关联转账，以及本账户的 AI 历史报告与生成记录将一并删除。";
+  "永久删除后不可恢复。该账户及其普通交易、余额调整、关联转账，以及本账户的 AI 历史报告与生成记录将一并删除。已保存的全账本 AI 月报和年报也不再可读，已使用的分析次数不退回。";
 export const PERMANENT_DELETION_NO_COUNTERPART_HINT = "没有其他账户会因本次删除而改变余额。";
 export const ANALYSIS_REFERENCE_CONFLICT_MESSAGE =
   "分析记录存在跨账户或跨用户引用，本次未删除任何数据";
@@ -109,6 +110,7 @@ export function parsePermanentDeletionPreview(value: unknown): PermanentDeletion
   const transferCount = parseNonNegativeInt(value.transferCount);
   const analysisSnapshotCount = parseNonNegativeInt(value.analysisSnapshotCount);
   const analysisGenerationCount = parseNonNegativeInt(value.analysisGenerationCount);
+  const ledgerReportCount = parseNonNegativeInt(value.ledgerReportCount);
   const previewToken = value.previewToken;
   const affectedRaw = value.affectedAccounts;
   if (
@@ -116,7 +118,8 @@ export function parsePermanentDeletionPreview(value: unknown): PermanentDeletion
     adjustmentCount === null ||
     transferCount === null ||
     analysisSnapshotCount === null ||
-    analysisGenerationCount === null
+    analysisGenerationCount === null ||
+    ledgerReportCount === null
   ) {
     return null;
   }
@@ -140,6 +143,7 @@ export function parsePermanentDeletionPreview(value: unknown): PermanentDeletion
     transferCount,
     analysisSnapshotCount,
     analysisGenerationCount,
+    ledgerReportCount,
     affectedAccounts,
     previewToken: previewToken as string,
   };

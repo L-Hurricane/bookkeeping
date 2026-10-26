@@ -29,6 +29,8 @@ final class InMemoryAnalysisGenerationStore implements AnalysisGenerationStore {
     private final Map<Scope, Generation> generations = new HashMap<>();
     private final Map<QuotaKey, int[]> quotas = new HashMap<>();
     private final List<AnalysisSnapshot> retainedLegacy = new ArrayList<>();
+    private final List<AnalysisSnapshot> ledgerSnapshots = new ArrayList<>();
+    private final Map<LedgerScope, Generation> ledgerGenerations = new HashMap<>();
 
     InMemoryAnalysisGenerationStore(Clock clock) {
         this.clock = clock;
@@ -131,6 +133,90 @@ final class InMemoryAnalysisGenerationStore implements AnalysisGenerationStore {
         return new FailureSettlement.Applied();
     }
 
+    @Override
+    public synchronized Optional<AnalysisSnapshot> findSuccessfulLedger(long userId, String periodKind, String period,
+            String contextFingerprint) {
+        return ledgerSnapshots.stream()
+                .filter(s -> s.userId() == userId && s.accountId() == 0 && s.yearMonth().equals(period)
+                        && s.contextFingerprint().equals(contextFingerprint))
+                .min(Comparator.comparingLong(AnalysisSnapshot::id));
+    }
+
+    @Override
+    public synchronized Optional<AnalysisSnapshot> findLatestLedger(long userId, String periodKind, String period) {
+        return ledgerSnapshots.stream()
+                .filter(s -> s.userId() == userId && s.accountId() == 0 && s.yearMonth().equals(period))
+                .max(Comparator.comparingLong(AnalysisSnapshot::id));
+    }
+
+    @Override
+    public synchronized Optional<GenerationStatus> findLedgerCoordination(long userId, String periodKind, String period,
+            String contextFingerprint) {
+        Generation generation = ledgerGenerations.get(new LedgerScope(userId, periodKind, period, contextFingerprint));
+        return generation == null ? Optional.empty() : Optional.of(generation.status());
+    }
+
+    @Override
+    public synchronized LedgerPermitAcquisition acquireLedger(long userId, String periodKind, String period,
+            String contextFingerprint) {
+        var existing = findSuccessfulLedger(userId, periodKind, period, contextFingerprint);
+        if (existing.isPresent()) return new LedgerPermitAcquisition.Reused(existing.get());
+        Instant now = clock.instant();
+        LocalDate permitDate = LocalDate.ofInstant(now, PERMIT_ZONE);
+        LedgerScope scope = new LedgerScope(userId, periodKind, period, contextFingerprint);
+        Generation current = ledgerGenerations.get(scope);
+        if (current == null) {
+            if (!reserve(userId, permitDate)) return new LedgerPermitAcquisition.QuotaExceeded();
+            Generation created = new Generation(generationIds.getAndIncrement(), userId, 0L, period, contextFingerprint,
+                    GenerationState.IN_PROGRESS, 1L, permitDate, now.plus(LEASE), true, null);
+            ledgerGenerations.put(scope, created);
+            return new LedgerPermitAcquisition.Granted(created.ledgerPermit(periodKind));
+        }
+        if (current.state == GenerationState.IN_PROGRESS && current.leaseExpiresAt.isAfter(now)) {
+            return new LedgerPermitAcquisition.Busy(current.leaseExpiresAt);
+        }
+        if (current.quotaReserved) release(userId, current.permitDate);
+        if (!reserve(userId, permitDate)) return new LedgerPermitAcquisition.QuotaExceeded();
+        current.state = GenerationState.IN_PROGRESS;
+        current.fencingToken++;
+        current.permitDate = permitDate;
+        current.leaseExpiresAt = now.plus(LEASE);
+        current.quotaReserved = true;
+        return new LedgerPermitAcquisition.Granted(current.ledgerPermit(periodKind));
+    }
+
+    @Override
+    public synchronized SuccessSettlement completeLedgerSuccess(LedgerGenerationPermit permit, MonthlyAnalysisReport report,
+            AnalysisProvenance provenance) {
+        Generation current = ledgerGenerations.get(new LedgerScope(permit.userId(), permit.periodKind(), permit.period(),
+                permit.contextFingerprint()));
+        if (current == null || current.id != permit.generationId() || current.fencingToken != permit.fencingToken()
+                || !current.quotaReserved) {
+            return new SuccessSettlement.StalePermit();
+        }
+        var snapshot = new AnalysisSnapshot(snapshotIds.getAndIncrement(), permit.userId(), 0L, permit.period(),
+                permit.contextFingerprint(), report, provenance, permit.permitDate(), clock.instant());
+        ledgerSnapshots.add(snapshot);
+        consume(permit.userId(), current.permitDate);
+        current.state = GenerationState.SUCCEEDED;
+        current.quotaReserved = false;
+        current.snapshotId = snapshot.id();
+        current.fencingToken++;
+        return new SuccessSettlement.Applied(snapshot);
+    }
+
+    @Override
+    public synchronized FailureSettlement completeLedgerFailure(LedgerGenerationPermit permit) {
+        Generation current = ledgerGenerations.get(new LedgerScope(permit.userId(), permit.periodKind(), permit.period(),
+                permit.contextFingerprint()));
+        if (current == null || current.id != permit.generationId()) return new FailureSettlement.StalePermit();
+        release(permit.userId(), current.permitDate);
+        current.state = GenerationState.FAILED;
+        current.quotaReserved = false;
+        current.fencingToken++;
+        return new FailureSettlement.Applied();
+    }
+
     private boolean reserve(long userId, LocalDate permitDate) {
         int[] counts = quotas.computeIfAbsent(new QuotaKey(userId, permitDate), key -> new int[] {0, 0});
         if (counts[0] + counts[1] >= DAILY_SUCCESS_LIMIT) return false;
@@ -161,6 +247,8 @@ final class InMemoryAnalysisGenerationStore implements AnalysisGenerationStore {
     }
 
     private record Scope(long userId, long accountId, String yearMonth, String fingerprint) { }
+
+    private record LedgerScope(long userId, String periodKind, String period, String fingerprint) { }
 
     private record QuotaKey(long userId, LocalDate permitDate) { }
 
@@ -196,6 +284,11 @@ final class InMemoryAnalysisGenerationStore implements AnalysisGenerationStore {
         private GenerationPermit permit() {
             return new GenerationPermit(id, fencingToken, userId, accountId, yearMonth, contextFingerprint, permitDate,
                     leaseExpiresAt);
+        }
+
+        private LedgerGenerationPermit ledgerPermit(String periodKind) {
+            return new LedgerGenerationPermit(id, fencingToken, userId, periodKind, yearMonth, contextFingerprint,
+                    permitDate, leaseExpiresAt);
         }
 
         private GenerationStatus status() {

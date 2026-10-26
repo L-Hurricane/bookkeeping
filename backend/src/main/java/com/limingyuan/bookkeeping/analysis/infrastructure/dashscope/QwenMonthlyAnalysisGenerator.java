@@ -67,6 +67,13 @@ final class QwenMonthlyAnalysisGenerator implements MonthlyAnalysisGenerator {
 
     @Override
     public MonthlyAnalysisGeneration generate(MonthlyAnalysisModelInput input, String systemPrompt) {
+        if (input == null) throw new IllegalArgumentException("model input is required");
+        return generateJson(input.json(), systemPrompt);
+    }
+
+    @Override
+    public MonthlyAnalysisGeneration generateJson(String userJson, String systemPrompt) {
+        if (userJson == null || userJson.isBlank()) throw new IllegalArgumentException("model input is required");
         if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) {
             log.warn("monthly analysis provider is not configured");
             throw new AnalysisGenerationFailed(Kind.PROVIDER_ERROR, null);
@@ -79,7 +86,7 @@ final class QwenMonthlyAnalysisGenerator implements MonthlyAnalysisGenerator {
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody(input, systemPrompt), StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody(userJson, systemPrompt), StandardCharsets.UTF_8))
                 .build();
         long started = System.nanoTime();
         HttpResponse<String> response;
@@ -96,7 +103,7 @@ final class QwenMonthlyAnalysisGenerator implements MonthlyAnalysisGenerator {
         return readSuccess(response, elapsed(started));
     }
 
-    private String requestBody(MonthlyAnalysisModelInput input, String systemPrompt) {
+    private String requestBody(String userJson, String systemPrompt) {
         ObjectNode request = JSON.createObjectNode();
         request.put("model", model);
         request.put("enable_thinking", false);
@@ -104,7 +111,7 @@ final class QwenMonthlyAnalysisGenerator implements MonthlyAnalysisGenerator {
         request.put("max_completion_tokens", maxCompletionTokens);
         var messages = request.putArray("messages");
         messages.addObject().put("role", "system").put("content", systemPrompt);
-        messages.addObject().put("role", "user").put("content", input.json());
+        messages.addObject().put("role", "user").put("content", userJson);
         ObjectNode format = request.putObject("response_format");
         format.put("type", "json_schema");
         ObjectNode jsonSchema = format.putObject("json_schema");

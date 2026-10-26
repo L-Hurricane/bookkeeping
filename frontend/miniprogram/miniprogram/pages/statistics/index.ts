@@ -1,7 +1,8 @@
 import { moneyToneClass } from "../../account/money-tone";
 import { ApiError } from "../../http/client";
 import { formatMoneyLabel } from "../../ledger/ledger";
-import { monthlyAnalysisPagePath } from "../../analysis/navigation";
+import { currentBeijingMonth } from "../../ledger/month";
+import { ledgerAnalysisPagePath, monthlyAnalysisPagePath } from "../../analysis/navigation";
 import { accountApi, ledgerStatisticsApi } from "../../services/runtime";
 import { LedgerStatisticsResponseError } from "../../services/ledger-statistics";
 import {
@@ -149,6 +150,10 @@ Page({
     const accountId = this.aiAccountId;
     if (accountId === null || this.report === null) return;
     wx.navigateTo({ url: monthlyAnalysisPagePath(accountId, this.report.from.slice(0, 7)) });
+  },
+
+  onOpenLedgerAnalysis() {
+    wx.navigateTo({ url: ledgerAnalysisPagePath("MONTH", currentBeijingMonth(new Date())) });
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
