@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
 import { saveSession } from "../miniprogram/session/session";
@@ -11,10 +12,20 @@ import {
   statisticsReportPath,
   type LedgerReport,
 } from "../miniprogram/statistics/ledger-contract";
+import { ledgerStatisticsEntryPath } from "../miniprogram/statistics/drilldown";
 import { flowRows } from "../miniprogram/statistics/ledger-view";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 
 describe("ledger statistics", () => {
+  it("shows a statistics entry on the ledger home and returns by the existing page stack", () => {
+    const page = readFileSync(new URL("../miniprogram/pages/account-list/index.wxml", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../miniprogram/pages/account-list/index.ts", import.meta.url), "utf8");
+    assert.match(page, /bindtap="onOpenStatistics">统计<\/button>/);
+    assert.match(source, /wx\.navigateTo\(\{ url: ledgerStatisticsEntryPath\(\) \}\)/);
+    assert.equal(ledgerStatisticsEntryPath(), "/pages/statistics/index");
+    assert.equal(page.includes("tabBar"), false);
+  });
+
   it("requests the Beijing preset and selected accounts without using a JavaScript amount", async () => {
     const requests: string[] = [];
     const api = createLedgerStatisticsApi(client((request) => {
