@@ -10,6 +10,7 @@ import {
   parseLedgerTransactions,
   statisticsDetailPagePath,
   statisticsReportPath,
+  type LedgerDrill,
   type LedgerReport,
 } from "../miniprogram/statistics/ledger-contract";
 import { ledgerStatisticsEntryPath } from "../miniprogram/statistics/drilldown";
@@ -67,7 +68,10 @@ describe("ledger statistics", () => {
     const query = Object.fromEntries(path.split("?")[1]?.split("&").map((part) => part.split("=")) ?? []);
     const context = parseLedgerDetailContext(query);
     assert.equal(context?.drill.kind, "tag");
-    if (context?.drill.kind === "tag") assert.equal(context.drill.tagMode, "TREE");
+    if (context?.drill.kind === "tag") {
+      assert.equal(context.drill.tagMode, "TREE");
+      assert.equal(context.drill.title, "旅行");
+    }
     assert.equal(statisticsReportPath({ preset: "CUSTOM", from: "2026-01-01", to: "2026-01-31", accountScope: "ALL" }),
       "/api/v1/statistics?preset=CUSTOM&accountScope=ALL&from=2026-01-01&to=2026-01-31");
     const selected = statisticsDetailPagePath({
@@ -76,6 +80,22 @@ describe("ledger statistics", () => {
       drill: { kind: "tags", tagIds: [9, 4], title: "所选标签" },
     });
     assert.match(selected, /tagIds=9,4/);
+  });
+
+  it("decodes Chinese and special detail titles once", () => {
+    assert.equal(detailTitle({ kind: "category", categoryId: 2, title: "早餐" }), "早餐");
+    assert.equal(detailTitle({ kind: "uncategorized", title: "未分类" }), "未分类");
+    assert.equal(detailTitle({ kind: "untagged", title: "无标签" }), "无标签");
+    assert.equal(detailTitle({ kind: "tag", tagId: 9, title: "A & 100% + 空格", tagMode: "TREE" }), "A & 100% + 空格");
+    const broken = rawDetailQuery(statisticsDetailPagePath({
+      query: { preset: "MONTH", accountScope: "ACTIVE" },
+      type: "EXPENSE",
+      drill: { kind: "category", categoryId: 2, title: "早餐" },
+    }));
+    broken.title = "%E5%A4";
+    assert.equal(parseLedgerDetailContext(broken), null);
+    broken.title = "%";
+    assert.equal(parseLedgerDetailContext(broken), null);
   });
 
   it("accepts a payload that omits null shares, empty slices, and an unnamed transaction", () => {
@@ -111,6 +131,23 @@ describe("ledger statistics", () => {
     assert.equal(parseLedgerReport(invalid), null);
   });
 });
+
+function detailTitle(drill: LedgerDrill): string | undefined {
+  return parseLedgerDetailContext(rawDetailQuery(statisticsDetailPagePath({
+    query: { preset: "MONTH", accountScope: "ACTIVE" },
+    type: "EXPENSE",
+    drill,
+  })))?.drill.title;
+}
+
+function rawDetailQuery(path: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const part of path.slice(path.indexOf("?") + 1).split("&")) {
+    const separator = part.indexOf("=");
+    parsed[part.slice(0, separator)] = part.slice(separator + 1);
+  }
+  return parsed;
+}
 
 function report(): LedgerReport {
   return {

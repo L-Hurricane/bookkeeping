@@ -75,7 +75,7 @@ function parseDrill(query: Record<string, string | undefined>): StatisticsDrill 
   return null;
 }
 
-function decodeQueryTitle(value: string | undefined): string | null {
+export function decodeQueryTitle(value: string | undefined): string | null {
   if (value === undefined || value.length === 0) {
     return null;
   }

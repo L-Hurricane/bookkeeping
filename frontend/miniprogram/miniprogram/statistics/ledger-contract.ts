@@ -1,3 +1,5 @@
+import { decodeQueryTitle } from "./navigation";
+
 const MONEY = /^-?[0-9]+\.[0-9]{2}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
@@ -162,8 +164,8 @@ function parseQuery(query: Record<string, string | undefined>): LedgerQuery | nu
 }
 
 function parseDrill(query: Record<string, string | undefined>): LedgerDrill | null {
-  const title = query.title;
-  if (title === undefined || title.length === 0) return null;
+  const title = decodeQueryTitle(query.title);
+  if (title === null) return null;
   if (query.uncategorized === "true") return { kind: "uncategorized", title };
   if (query.untagged === "true") return { kind: "untagged", title };
   if (query.tagIds !== undefined && query.tagId !== undefined) return null;
