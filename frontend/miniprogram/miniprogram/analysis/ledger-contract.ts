@@ -34,7 +34,7 @@ export function parseLedgerAnalysis(value: unknown, periodKind: "MONTH" | "YEAR"
   if (!isCount(value.incomeCount) || !isCount(value.expenseCount)) return null;
   if (typeof value.priorPeriod !== "string" || !isMoney(value.priorChange)) return null;
   if (!isMoney(value.priorIncomeNet) || !isMoney(value.priorExpenseNet)) return null;
-  const snapshot = value.snapshot === null ? null : parseSnapshot(value.snapshot);
+  const snapshot = value.snapshot === null || value.snapshot === undefined ? null : parseSnapshot(value.snapshot);
   const generation = value.generation === null || value.generation === undefined ? null : parseGeneration(value.generation);
   if (snapshot === undefined || generation === undefined) return null;
   return {
