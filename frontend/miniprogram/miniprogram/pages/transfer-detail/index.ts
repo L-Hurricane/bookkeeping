@@ -1,4 +1,4 @@
-import { findAccount, type Account } from "../../account/account";
+import { accountPickerCards, findAccount, type Account, type AccountPickerCard } from "../../account/account";
 import { createLoadGuard } from "../../account/load-guard";
 import { ApiError } from "../../http/client";
 import { accountApi, transferApi } from "../../services/runtime";
@@ -69,7 +69,9 @@ Page({
     archiveHint: "",
     fromAccountText: "",
     toAccountText: "",
-    accountRows: [] as { id: number; label: string }[],
+    accountRows: [] as AccountPickerCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
     fromSelectorOpen: false,
     toSelectorOpen: false,
     amount: "",
@@ -179,7 +181,12 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ fromSelectorOpen: true });
+    this.setData({ fromSelectorOpen: true, toSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.fromAccountId, "") });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    const selected = this.data.fromSelectorOpen ? this.fromAccountId : this.toAccountId;
+    this.setData({ accountQuery: event.detail.value, ...accountPickerCards(this.accounts, selected, event.detail.value) });
   },
 
   onCloseFromAccounts() {
@@ -203,7 +210,7 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ toSelectorOpen: true });
+    this.setData({ toSelectorOpen: true, fromSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.toAccountId, "") });
   },
 
   onCloseToAccounts() {
@@ -481,10 +488,6 @@ Page({
       archiveHint: transferArchiveHint(this.readOnly),
       fromAccountText: fromText,
       toAccountText: toText,
-      accountRows: this.accounts.map((account) => ({
-        id: account.id,
-        label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
-      })),
       amount: this.amount,
       amountError:
         !this.readOnly && this.amount.trim().length > 0 && positiveTransferAmount(this.amount) === null

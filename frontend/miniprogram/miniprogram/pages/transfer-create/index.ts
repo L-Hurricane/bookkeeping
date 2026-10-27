@@ -1,4 +1,4 @@
-import { findAccount, type Account } from "../../account/account";
+import { accountPickerCards, findAccount, type Account, type AccountPickerCard } from "../../account/account";
 import { createLoadGuard } from "../../account/load-guard";
 import { ApiError } from "../../http/client";
 import { accountApi, transferApi } from "../../services/runtime";
@@ -60,7 +60,9 @@ Page({
     screen: "loading" as Screen,
     fromAccountText: "请选择账户",
     toAccountText: "请选择账户",
-    accountRows: [] as { id: number; label: string }[],
+    accountRows: [] as AccountPickerCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
     fromSelectorOpen: false,
     toSelectorOpen: false,
     amount: "",
@@ -140,7 +142,12 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ fromSelectorOpen: true });
+    this.setData({ fromSelectorOpen: true, toSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.fromAccountId, "") });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    const selected = this.data.fromSelectorOpen ? this.fromAccountId : this.toAccountId;
+    this.setData({ accountQuery: event.detail.value, ...accountPickerCards(this.accounts, selected, event.detail.value) });
   },
 
   onCloseFromAccounts() {
@@ -165,7 +172,7 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ toSelectorOpen: true });
+    this.setData({ toSelectorOpen: true, fromSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.toAccountId, "") });
   },
 
   onCloseToAccounts() {
@@ -453,10 +460,6 @@ Page({
       screen: "ready",
       fromAccountText: accountLabel(from, "请选择转出账户"),
       toAccountText: accountLabel(to, "请选择转入账户"),
-      accountRows: this.accounts.map((account) => ({
-        id: account.id,
-        label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
-      })),
       amount: this.amount,
       amountError,
       fromTimeText: businessTimeDisplay(this.times.fromBusinessTime) ?? "",

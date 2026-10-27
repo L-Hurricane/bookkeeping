@@ -83,7 +83,7 @@
       <text class="error">分类加载失败</text>
       <button bindtap="onRetryCategories">重新加载</button>
     </block>
-    <view wx:if="{{categoryPhase === 'ready'}}" class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
+    <view wx:elif="{{categoryPhase === 'ready'}}" class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
     <text wx:else>{{categoryText}}</text>
     <text class="label">标签</text>
     <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>

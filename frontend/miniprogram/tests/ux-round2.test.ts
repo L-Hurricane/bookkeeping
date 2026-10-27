@@ -22,13 +22,14 @@ describe("s6 ux round 2", () => {
 
   it("groups one month by business day and keeps a root movable under a sibling", () => {
     const groups = groupByTimeLabel([
-      { timeLabel: "10-27 12:00" },
-      { timeLabel: "10-27 08:00" },
-      { timeLabel: "10-26 09:00" },
-    ], "2026-10");
-    assert.equal(groups[0]?.label, "10月27日 周二");
+      { dayKey: "2026-10-27" },
+      { dayKey: "2026-10-27" },
+      { dayKey: "2024-10-27" },
+    ]);
+    assert.equal(groups[0]?.label, "2026年10月27日 周二");
     assert.equal(groups[0]?.count, 2);
-    assert.equal(groups[1]?.count, 1);
+    assert.equal(groups[1]?.key, "2024-10-27");
+    assert.equal(groups[1]?.label, "2024年10月27日 周日");
     const choices = parentChoices([
       { id: 1, name: "餐饮", children: [{ id: 2, name: "早餐", children: [] }] },
       { id: 3, name: "交通", children: [] },

@@ -1,3 +1,5 @@
+import { moneyToneClass } from "./money-tone";
+
 export type AccountKind = "NORMAL" | "CREDIT";
 export type AccountLifecycle = "ACTIVE" | "ARCHIVED";
 
@@ -73,6 +75,31 @@ export function routeActiveAccounts(active: readonly Account[], archived: readon
     return { destination: "init" };
   }
   return { destination: "list", accounts: active };
+}
+
+export interface AccountPickerCard {
+  readonly id: number;
+  readonly name: string;
+  readonly kindLabel: string;
+  readonly balanceLabel: string;
+  readonly balanceTone: string;
+  readonly selected: boolean;
+}
+
+export function accountPickerCards(accounts: readonly Account[], selectedId: number, query: string): {
+  readonly accountRows: AccountPickerCard[];
+  readonly accountSheetHeight: number;
+} {
+  const needle = query.trim();
+  const accountRows = accounts.filter((account) => needle.length === 0 || account.name.includes(needle)).map((account) => ({
+    id: account.id,
+    name: account.name,
+    kindLabel: accountKindLabel(account.kind),
+    balanceLabel: formatCurrentBalance(account),
+    balanceTone: moneyToneClass(account.currentBalance),
+    selected: account.id === selectedId,
+  }));
+  return { accountRows, accountSheetHeight: Math.min(Math.max(accountRows.length, 1) * 128, 640) };
 }
 
 export function formatCurrentBalance(account: Account): string {

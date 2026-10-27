@@ -1,6 +1,6 @@
 import type { LoadGuard } from "../account/load-guard";
 import { moneyToneClass } from "../account/money-tone";
-import { formatBusinessTime, formatMoneyLabel, ledgerRows, type LedgerEntry, type LedgerRow } from "../ledger/ledger";
+import { businessDayKey, formatBusinessTime, formatMoneyLabel, ledgerRows, type LedgerEntry, type LedgerRow } from "../ledger/ledger";
 import type { ListShow } from "../navigation/scroll-restore";
 import { isBusinessTimeAllowed, validateBusinessTime } from "./business-time";
 
@@ -209,6 +209,7 @@ export function searchLedgerRows(items: readonly TransactionSearchItem[]): Ledge
       amountLabel: formatMoneyLabel(item.amount),
       amountToneClass: moneyToneClass(item.amount),
       timeLabel: formatBusinessTime(item.businessTime),
+      dayKey: businessDayKey(item.businessTime),
     };
   });
 }

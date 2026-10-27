@@ -69,6 +69,7 @@ export interface LedgerRow {
   readonly amountLabel: string;
   readonly amountToneClass: string;
   readonly timeLabel: string;
+  readonly dayKey: string;
 }
 
 export function parseLedger(value: unknown): Ledger | null {
@@ -110,6 +111,14 @@ export function formatBusinessTime(value: string): string {
   return `${match[2]}-${match[3]} ${match[4]}:${match[5]}`;
 }
 
+export function businessDayKey(value: string): string {
+  const match = BUSINESS_TIME_PATTERN.exec(value);
+  if (match === null) {
+    return "";
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 export function formatMoneyLabel(amount: string): string {
   return `¥${amount}`;
 }
@@ -127,6 +136,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         amountLabel: formatMoneyLabel(item.amount),
         amountToneClass: moneyToneClass(item.amount),
         timeLabel: formatBusinessTime(item.businessTime),
+        dayKey: businessDayKey(item.businessTime),
       };
     }
     if (item.kind === "BALANCE_ADJUSTMENT") {
@@ -140,6 +150,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         amountLabel: formatMoneyLabel(item.amount),
         amountToneClass: moneyToneClass(item.amount),
         timeLabel: formatBusinessTime(item.businessTime),
+        dayKey: businessDayKey(item.businessTime),
       };
     }
     const tags = item.tags.map((tag) => tag.name).join(" ");
@@ -154,6 +165,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
       amountLabel: formatMoneyLabel(item.amount),
       amountToneClass: moneyToneClass(item.amount),
       timeLabel: formatBusinessTime(item.businessTime),
+      dayKey: businessDayKey(item.businessTime),
     };
   });
 }

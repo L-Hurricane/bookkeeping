@@ -267,7 +267,7 @@ Page({
         highlightKey: locate === null ? this.highlight.key : locate.key,
       });
       if (locate === null) {
-        this.setData(withDayGroups(ledgerView, month), () => {
+        this.setData(withDayGroups(ledgerView), () => {
           if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
             return;
           }
@@ -278,7 +278,7 @@ Page({
       this.highlight = startHighlight(this.highlight, locate.key);
       this.locateGeneration = nextLocateGeneration(this.locateGeneration);
       const captured = this.locateGeneration;
-      this.setData(withDayGroups(ledgerView, month), () => {
+      this.setData(withDayGroups(ledgerView), () => {
         if (!canRunLocate(this.loadGuard.pageAlive, captured, this.locateGeneration)) {
           return;
         }
@@ -599,7 +599,7 @@ Page({
       this.setData({
         searchLoading: false,
         rows,
-        groups: groupByTimeLabel(rows, this.selectedMonth),
+        groups: groupByTimeLabel(rows),
         searchEmpty: rows.length === 0,
         empty: false,
         searchErrorMessage: "",
@@ -743,9 +743,9 @@ Page({
   },
 });
 
-function withDayGroups(view: ReturnType<typeof buildLedgerLoadSetDataPatch>, month: string) {
+function withDayGroups(view: ReturnType<typeof buildLedgerLoadSetDataPatch>) {
   if (!("rows" in view)) return view;
-  return { ...view, groups: groupByTimeLabel(view.rows, month) };
+  return { ...view, groups: groupByTimeLabel(view.rows) };
 }
 
 function readScrollMeasurement(result: unknown): { top: number; height: number; viewportHeight: number; scrollTop: number } | null {

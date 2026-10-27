@@ -7,14 +7,12 @@ export interface DayGroup<T> {
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-export function groupByTimeLabel<T extends { readonly timeLabel: string }>(
+export function groupByTimeLabel<T extends { readonly dayKey: string }>(
   rows: readonly T[],
-  yearMonth: string,
 ): DayGroup<T>[] {
   const groups: Array<{ key: string; label: string; rows: T[] }> = [];
   for (const row of rows) {
-    const day = row.timeLabel.slice(0, 5);
-    const key = `${yearMonth.slice(0, 4)}-${day}`;
+    const key = row.dayKey;
     const current = groups[groups.length - 1];
     if (current !== undefined && current.key === key) {
       current.rows.push(row);
@@ -32,5 +30,5 @@ function dayHeading(key: string): string {
   const month = Number(match[2]);
   const day = Number(match[3]);
   const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? "";
-  return `${month}月${day}日 ${weekday}`;
+  return `${year}年${month}月${day}日 ${weekday}`;
 }

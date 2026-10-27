@@ -44,19 +44,37 @@
   <view class="mask" wx:if="{{fromSelectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseFromAccounts"></view>
     <view class="panel">
-      <scroll-view class="panel-list" scroll-y>
-        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseFromAccount">{{item.label}}</view>
+      <text class="editor-title">选择转出账户</text>
+      <input class="field" type="text" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
+      <scroll-view class="account-list" scroll-y style="height: {{accountSheetHeight}}rpx">
+        <view class="account-option" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseFromAccount">
+          <view class="account-copy">
+            <text class="account-name">{{item.name}}</text>
+            <text class="account-kind">{{item.kindLabel}}</text>
+          </view>
+          <text class="account-balance {{item.balanceTone}}">{{item.balanceLabel}}</text>
+          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
+        </view>
       </scroll-view>
-      <button bindtap="onCloseFromAccounts">关闭</button>
+      <button class="cancel" bindtap="onCloseFromAccounts">取消</button>
     </view>
   </view>
   <view class="mask" wx:if="{{toSelectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseToAccounts"></view>
     <view class="panel">
-      <scroll-view class="panel-list" scroll-y>
-        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseToAccount">{{item.label}}</view>
+      <text class="editor-title">选择转入账户</text>
+      <input class="field" type="text" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
+      <scroll-view class="account-list" scroll-y style="height: {{accountSheetHeight}}rpx">
+        <view class="account-option" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseToAccount">
+          <view class="account-copy">
+            <text class="account-name">{{item.name}}</text>
+            <text class="account-kind">{{item.kindLabel}}</text>
+          </view>
+          <text class="account-balance {{item.balanceTone}}">{{item.balanceLabel}}</text>
+          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
+        </view>
       </scroll-view>
-      <button bindtap="onCloseToAccounts">关闭</button>
+      <button class="cancel" bindtap="onCloseToAccounts">取消</button>
     </view>
   </view>
   <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">
