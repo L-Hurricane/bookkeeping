@@ -8,6 +8,7 @@
 
 ## 当前执行状态
 
+- S6：**APPROVED**（2026-10-27）。T00 已归档原件。T01～T05 按冻结 UI 实施，不开始 T06。正式计划 `docs/implementation/bookkeeping-v1.0-stage-s6-ui-final-plan-v0.3-approved.md`，SHA-256 `8619081f735ed6a73ab2552d5eca6cac8e0299ad6488f83a0a41ddafa68b20d7`。Review `docs/implementation/history/bookkeeping-v1.0-stage-s6-ui-final-plan-taskplan-review-v0.3.md`，SHA-256 `2ca8c1a2c44a55b85f9e4d09900e2bc39bb85a5cde99973a339b7bd47adb116a`，正文 Pending 不回写。批准记录 `docs/implementation/bookkeeping-s6-stage-plan-approval-record-v0.3.md`，SHA-256 `172cbc2d5548db848e70029eb819f2c4794275ff99c5ce7cb81e496d14d9c98f`。落实映射 `docs/implementation/s6-t01-frozen-ui-map-v0.1.md`，SHA-256 `ef81c891161988ee7a05757d6a1c609df7f735012e513557bebd5e300371d335`。不实施 MoneyWiz 式报表、不取消旧单账户 AI、不做 `UAT-03`。未 Push。
 - S5：**S5 CLOSED — HUMAN UAT DEFERRED TO v1.0 FINAL GATE**（2026-10-27）。这不是 S5 人工 UAT PASS，不是 v1.0 发布，不是合并 main，也不是生产部署。结项记录 `docs/implementation/bookkeeping-s5-stage-closeout-v0.1.md`，SHA-256 `503ac13f2fea7300f5b811c49a04ef0851c245364c6d5e97526f2927f5c2e7c7`。遗留 `docs/implementation/v1.0-s5-closeout-backlog-v0.1.md`，SHA-256 `12f4f722daae40e18c8e900b750199ea4f9869b2641cd8ecaba5f2ecfe111c1e`。现行计划 `docs/implementation/bookkeeping-v1.0-stage-s5-ai-plan-v0.2-approved.md`，SHA-256 `c7add0aefce153441ce4d22c0907ec549b362eaedafd713df37cfe33a816f081`。修订 Review `docs/implementation/history/bookkeeping-v1.0-s5-human-gate-adjustment-review-v0.2.md`，SHA-256 `6b31c3cd371ecf66b9a13599aa98149806a3d275cfeba27353519aaa68b4c870`，正文 Pending 不回写。批准记录 `docs/implementation/bookkeeping-s5-stage-plan-amendment-approval-record-v0.2.md`，SHA-256 `7f403b8906311e92aa0cdcac4a30bbfc36fba26605f41ac94bcb8273f6e22914`。初版计划原字节保留，SHA-256 `1958595f6ff480273fb460d3e70245167f8aff6adf7d19cd7332ef1708ecf964`。T06 Testing PASS、Supervisor PASS，P0/P1 = 0。受审产品代码 `d3d785633bc5f6e06673692a2c4d64e17d748017`。Gate 记录 `docs/implementation/bookkeeping-s5-t06-gate-v0.1.md`，SHA-256 `7ebb394c4c7d3018a4f9b5855d8d418767be200e8a2a392bc665b90a7cc3269c`。方案 B 不变。不把 V18 迁入 `bookkeeping` 或 `bookkeeping_test`。
 - `S5-UAT-DEFER-01`：延期验收，不是缺陷。真实模型、微信真机和全账本 AI 使用体验留到 v1.0 最终统一人工 Gate。该 Gate 的计划尚未批准。
 - `S5T06-D1`：P3。空期间生成错误 `EMPTY_PERIOD` 在前端显示通用失败句。不阻断结项。
@@ -36,7 +37,7 @@
 
 ## 读取顺序
 
-1. `docs/implementation/bookkeeping-v1.0-stage-s5-ai-plan-v0.2-approved.md`（v0.1 原件保留，SHA-256 `1958595f6ff480273fb460d3e70245167f8aff6adf7d19cd7332ef1708ecf964`）
+1. `docs/implementation/bookkeeping-v1.0-stage-s6-ui-final-plan-v0.3-approved.md`（S5 v0.2 原件保留）
 2. `docs/implementation/bookkeeping-v1.0-stage-s4-st-plan-v0.1-approved.md`
 3. `docs/governance/bookkeeping-ai-collaboration-governance-v1.6.md`（仓库内原件。现行正式治理是仓库外 v1.8，SHA-256 `a8fb22ac207e06be3341826be5690d91b7c7f6d74e81937b26e5a2cb0bd987b0`）
 4. `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md`
@@ -44,7 +45,7 @@
 6. `docs/product/bookkeeping-v1.0-product-baseline-v1.0.md`
 7. `docs/product/bookkeeping-v1.0-ui-freeze-v1.0.md`
 8. `docs/governance/bookkeeping-current-state-handoff-2026-10-26-v1.5.md`（v1.4 原件保留。v1.5 写于 T08 执行前，正文里的“待结项”不回写）
-9. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6 只登记 DB-CT-01。增量索引 v0.7 只登记 S3 结项依据。增量索引 v0.8 只登记 S4 结项依据。增量索引 v0.9 只登记 S5 初版批准依据。增量索引 v0.10 只登记 S5 结项依据，不覆盖更早索引
+9. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6～v0.10 分别只登记各自事项。增量索引 v0.11 只登记 S6 批准依据，不覆盖更早索引
 10. 已在仓库中的 S1 计划与结项：`docs/implementation/bookkeeping-v1.0-stage-s1-plan-v0.5-approved.md`、`docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md`
 
 ## 现行文件
@@ -57,7 +58,8 @@
 | `docs/governance/bookkeeping-2026-10-25-approval-index-v0.7.md` | 审批索引 v0.7 | `0a9e4c2583f13c970210b54bc256aa6a6e3d3afb97034ff1ae786042edd61c54` | 增量索引，只登记 S3 结项依据。原字节不改 |
 | `docs/governance/bookkeeping-2026-10-26-approval-index-v0.8.md` | 审批索引 v0.8 | `a06b91c45b2de870d6f9eb95a2197faaf5220d55285546a8bb4abdefefe9040a` | 增量索引，只登记 S4 结项依据。原字节不改 |
 | `docs/governance/bookkeeping-2026-10-26-approval-index-v0.9.md` | 审批索引 v0.9 | `070456554da63a79cd17eb04d181bac7c297fe43ca230a5a3f407be64879ffd1` | 增量索引，只登记 S5 初版批准依据。原字节不改 |
-| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.10.md` | 审批索引 v0.10 | `bac9348794d5a690454e1f3acfe286c423cf80f1e4341e930e2f9ae5d0320840` | 现行增量索引，只登记 S5 结项依据 |
+| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.10.md` | 审批索引 v0.10 | `bac9348794d5a690454e1f3acfe286c423cf80f1e4341e930e2f9ae5d0320840` | 增量索引，只登记 S5 结项依据。原字节不改 |
+| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.11.md` | 审批索引 v0.11 | `6319c26bb753af0eaf4e02309e2e90c073c1f16e5ae9901ba577344ac9cdfa9c` | 现行增量索引，只登记 S6 批准依据 |
 | `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md` | S2 Plan Approved v0.1 | `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5` | Approved / 当前执行计划 |
 | `docs/implementation/bookkeeping-s2-two-milestones-scope-v0.1-approved.md` | S2 范围 Approved v0.1 | `b2c4d2abf452d87ab34b1930fe4679d2b8036c8ce8849b9cd4b0b1b0cfc664a7` | Approved / 范围与 Gate |
 | `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md` | 状态 v0.8 | `65c839c278979f68fa82ea3a6fbe6c04dee0bc8625a4edf0011f5cca7aebbac4` | 现行滚动状态，不是新授权 |
