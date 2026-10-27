@@ -37,7 +37,7 @@ import {
   amountFeedback,
   beginBucket,
   categoryLabel,
-  categoryRows,
+  categorySheetView,
   createTagFailureMessage,
   editComposer,
   emptyBucket,
@@ -118,7 +118,9 @@ Page({
     accountSelectorOpen: false,
     accountError: "",
     categoryPhase: "idle" as "idle" | "loading" | "ready" | "error",
-    categoryRows: [] as CategoryRow[],
+    categoryRows: [] as Array<CategoryRow & { selected: boolean }>,
+    uncategorizedSelected: true,
+    categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as "idle" | "loading" | "ready" | "error",
     tagChips: [] as { id: number; name: string; selected: boolean }[],
@@ -795,6 +797,7 @@ Page({
     const type = this.form.type;
     const categories = this.categories[type];
     const tags = this.tags[type];
+    const categorySheet = categorySheetView(categories.items, this.form.categoryId);
     this.setData({
       type,
       amount: this.form.amount,
@@ -802,7 +805,9 @@ Page({
       remark: this.form.remark,
       categoryText: categoryLabel(categories.items, this.form.categoryId),
       categoryPhase: categories.phase,
-      categoryRows: categoryRows(categories.items),
+      categoryRows: categorySheet.rows,
+      uncategorizedSelected: categorySheet.uncategorizedSelected,
+      categorySheetHeight: categorySheet.height,
       tagPhase: tags.phase,
       tagChips: tags.items.map((tag) => ({
         id: tag.id,

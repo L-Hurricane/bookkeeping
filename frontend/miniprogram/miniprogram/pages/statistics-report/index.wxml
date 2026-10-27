@@ -8,30 +8,35 @@
       <text class="choice {{preset === 'ROLLING_MONTH' ? 'selected' : ''}}" data-preset="ROLLING_MONTH" bindtap="onSelectPreset">近1月</text>
       <text class="choice {{preset === 'ROLLING_3_MONTHS' ? 'selected' : ''}}" data-preset="ROLLING_3_MONTHS" bindtap="onSelectPreset">近3月</text>
       <text class="choice {{preset === 'ROLLING_YEAR' ? 'selected' : ''}}" data-preset="ROLLING_YEAR" bindtap="onSelectPreset">近1年</text>
-      <text class="choice {{moreOpen ? 'selected' : ''}}" bindtap="onToggleMore">更多</text>
     </view>
-    <block wx:if="{{moreOpen}}">
-      <text class="panel-title">自定义日期</text>
-      <view class="choices">
-        <picker mode="date" value="{{customFrom}}" bindchange="onCustomFrom">
-          <text class="choice">开始 {{customFrom}}</text>
-        </picker>
-        <picker mode="date" value="{{customTo}}" bindchange="onCustomTo">
-          <text class="choice">结束 {{customTo}}</text>
-        </picker>
+  </view>
+  <view class="panel">
+    <text class="panel-title">日期范围</text>
+    <view class="date-row">
+      <text class="label">开始日期</text>
+      <picker mode="date" value="{{customFrom}}" bindchange="onCustomFrom">
+        <text class="date-value">{{customFrom || '选择'}}</text>
+      </picker>
+    </view>
+    <view class="date-row">
+      <text class="label">结束日期</text>
+      <picker mode="date" value="{{customTo}}" bindchange="onCustomTo">
+        <text class="date-value">{{customTo || '选择'}}</text>
+      </picker>
+    </view>
+  </view>
+  <view class="panel">
+    <text class="panel-title">账户范围</text>
+    <view class="choices">
+      <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">不含归档</text>
+      <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">包含归档</text>
+      <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
+    </view>
+    <view wx:if="{{scope === 'SELECTED'}}">
+      <view class="choice {{item.checked ? 'selected' : ''}}" wx:for="{{picker}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAccount">
+        {{item.name}}{{item.archived ? ' · 已归档' : ''}}
       </view>
-      <text class="panel-title">账户范围</text>
-      <view class="choices">
-        <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">不含归档</text>
-        <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">包含归档</text>
-        <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
-      </view>
-      <view wx:if="{{scope === 'SELECTED'}}">
-        <view class="choice {{item.checked ? 'selected' : ''}}" wx:for="{{picker}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAccount">
-          {{item.name}}{{item.archived ? ' · 已归档' : ''}}
-        </view>
-      </view>
-    </block>
+    </view>
     <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
   </view>
 

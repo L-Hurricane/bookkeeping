@@ -49,6 +49,19 @@
   border-radius: 20rpx;
 }
 
+.date-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.date-value {
+  color: #1f4b73;
+  font-weight: 600;
+}
+
 .panel-title {
   display: block;
   margin-bottom: 16rpx;

@@ -63,6 +63,18 @@ export function categoryRows(categories: readonly CategoryNode[]): CategoryRow[]
   return rows;
 }
 
+export function categorySheetView(categories: readonly CategoryNode[], selectedId: number | null) {
+  const rows = categoryRows(categories).map((row) => ({
+    ...row,
+    selected: row.kind === "option" && row.id === selectedId,
+  }));
+  return {
+    rows,
+    uncategorizedSelected: selectedId === null,
+    height: Math.min(Math.max(rows.length + 1, 1) * 88, 640),
+  };
+}
+
 function appendCategoryRows(rows: CategoryRow[], node: CategoryNode): void {
   if (node.children.length > 0) {
     rows.push({ key: `group-${node.id}`, kind: "group", id: null, label: node.name });

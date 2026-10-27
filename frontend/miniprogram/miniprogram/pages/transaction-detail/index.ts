@@ -2,6 +2,7 @@ import { ARCHIVED_HISTORY_HINT } from "../../account/archive-copy";
 import {
   defaultSelectableAccountId,
   findAccount,
+  formatCurrentBalance,
   type Account,
 } from "../../account/account";
 import { stashLedgerHandoff } from "../../account/ledger-handoff";
@@ -62,7 +63,7 @@ import { parseDetailPageContext, type DetailPageContext } from "../../transactio
 import {
   amountFeedback,
   beginBucket,
-  categoryRows,
+  categorySheetView,
   createTagFailureMessage,
   editComposer,
   emptyBucket,
@@ -77,6 +78,15 @@ import {
 } from "../../transaction/reference";
 import { UNCERTAIN_MESSAGE } from "../../transaction/submission";
 import type { TransactionView } from "../../transaction/transaction";
+
+interface AccountCard {
+  readonly id: number;
+  readonly name: string;
+  readonly kindLabel: string;
+  readonly balanceLabel: string;
+  readonly balanceTone: string;
+  readonly selected: boolean;
+}
 
 type Screen = "invalid" | "loading" | "error" | "missing" | "detail" | "edit" | "delete-uncertain";
 
@@ -117,12 +127,16 @@ Page({
     amountError: "",
     accountText: "选择账户",
     accountPhase: "idle" as "idle" | "loading" | "ready" | "error",
-    accountRows: [] as { id: number; label: string }[],
+    accountRows: [] as AccountCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
     accountSelectorOpen: false,
     accountError: "",
     categoryText: "未分类",
     categoryPhase: "idle" as TypeBucket<CategoryNode>["phase"],
-    categoryRows: [] as CategoryRow[],
+    categoryRows: [] as Array<CategoryRow & { selected: boolean }>,
+    uncategorizedSelected: true,
+    categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as TypeBucket<Tag>["phase"],
     tagChips: [] as { id: number; name: string; selected: boolean }[],
@@ -189,6 +203,9 @@ Page({
       this.readOnly = account.lifecycle === "ARCHIVED";
       this.transaction = transaction;
       this.publishDetail();
+      if (!this.readOnly) {
+        this.onEdit();
+      }
     } catch (error) {
       const failure = classifyDetailError(error);
       if (!this.loadGuard.pageAlive || generation !== this.detailGeneration || failure === "unauthorized") {
@@ -228,7 +245,7 @@ Page({
   },
 
   onDelete() {
-    if (this.readOnly || this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
+    if (this.readOnly || (this.screen !== "detail" && this.screen !== "edit") || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
       return;
     }
     wx.showModal({
@@ -238,7 +255,7 @@ Page({
       cancelText: "取消",
       confirmColor: "#b42318",
       success: (result) => {
-        if (decideDelete(result.confirm) !== "send" || this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete) {
+        if (decideDelete(result.confirm) !== "send" || (this.screen !== "detail" && this.screen !== "edit") || !detailActionAccess(this.deletePhase).delete) {
           return;
         }
         void this.performDelete();
@@ -743,10 +760,7 @@ Page({
       }
       this.setData({
         accountPhase: "ready",
-        accountRows: accounts.map((account) => ({
-          id: account.id,
-          label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
-        })),
+        ...this.accountCards(this.data.accountQuery),
         accountError: selectedId === null && accounts.length > 1 ? "请选择账户" : "",
       });
     } catch (error) {
@@ -765,9 +779,27 @@ Page({
     this.selectedAccountId = account.id;
     this.selectedAccountCreatedTime = account.createdTime;
     this.setData({
-      accountText: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+      accountText: `${account.name}  ${formatCurrentBalance(account)}`,
       accountError: "",
+      ...this.accountCards(this.data.accountQuery),
     });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    this.setData({ accountQuery: event.detail.value, ...this.accountCards(event.detail.value) });
+  },
+
+  accountCards(query: string) {
+    const needle = query.trim();
+    const accountRows = this.accounts.filter((account) => needle.length === 0 || account.name.includes(needle)).map((account) => ({
+      id: account.id,
+      name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
+      balanceLabel: formatCurrentBalance(account),
+      balanceTone: moneyToneClass(account.currentBalance),
+      selected: account.id === this.selectedAccountId,
+    }));
+    return { accountRows, accountSheetHeight: Math.min(Math.max(accountRows.length, 1) * 128, 640) };
   },
 
   onOpenAccounts() {
@@ -882,6 +914,7 @@ Page({
     }
     const editing = this.update.phase === "editing";
     const creatingTag = tagCreateInFlight(this.tagSession);
+    const categorySheet = categorySheetView(this.categories.items, this.form.categoryId);
     this.setData({
       screen: "edit",
       typeLabel: this.form.type === "INCOME" ? "收入" : "支出",
@@ -890,7 +923,9 @@ Page({
       remark: this.form.remark,
       categoryText: editCategoryText(this.categories.items, this.form.categoryId, this.transaction?.category ?? null),
       categoryPhase: this.categories.phase,
-      categoryRows: categoryRows(this.categories.items),
+      categoryRows: categorySheet.rows,
+      uncategorizedSelected: categorySheet.uncategorizedSelected,
+      categorySheetHeight: categorySheet.height,
       tagPhase: this.tags.phase,
       tagChips: this.currentTagChoices().map((tag) => ({
         id: tag.id,

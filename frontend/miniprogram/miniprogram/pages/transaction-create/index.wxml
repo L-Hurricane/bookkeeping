@@ -87,14 +87,21 @@
   <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseCategories"></view>
     <view class="panel">
-      <scroll-view class="panel-list" scroll-y>
-        <view class="choice" bindtap="onChooseCategory" data-id="">未分类</view>
+      <text class="editor-title">选择分类</text>
+      <scroll-view class="account-list" scroll-y style="height: {{categorySheetHeight}}rpx">
+        <view class="account-option" bindtap="onChooseCategory" data-id="">
+          <view class="account-copy"><text class="account-name">未分类</text></view>
+          <text class="account-mark" wx:if="{{uncategorizedSelected}}">✓</text>
+        </view>
         <block wx:for="{{categoryRows}}" wx:key="key">
-          <text class="group" wx:if="{{item.kind === 'group'}}">{{item.label}}</text>
-          <view class="choice child" wx:else data-id="{{item.id}}" bindtap="onChooseCategory">{{item.label}}</view>
+          <text class="sheet-group" wx:if="{{item.kind === 'group'}}">{{item.label}}</text>
+          <view class="account-option" wx:else data-id="{{item.id}}" bindtap="onChooseCategory">
+            <view class="account-copy"><text class="account-name">{{item.label}}</text></view>
+            <text class="account-mark" wx:if="{{item.selected}}">✓</text>
+          </view>
         </block>
       </scroll-view>
-      <button bindtap="onCloseCategories">关闭</button>
+      <button class="cancel" bindtap="onCloseCategories">取消</button>
     </view>
   </view>
   <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">

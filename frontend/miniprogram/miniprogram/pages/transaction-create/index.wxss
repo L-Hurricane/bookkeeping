@@ -204,6 +204,13 @@
 .money-negative { color: #1f7a4c; }
 .money-zero { color: #333333; }
 
+.sheet-group {
+  display: block;
+  margin-top: 16rpx;
+  color: #888888;
+  font-size: 24rpx;
+}
+
 .editor-title {
   display: block;
   font-size: 32rpx;

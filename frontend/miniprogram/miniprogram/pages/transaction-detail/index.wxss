@@ -1,7 +1,39 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx calc(180rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 24rpx calc(180rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+  background: #f3f4f6;
+}
+
+.card {
+  margin-bottom: 20rpx;
+  padding: 8rpx 24rpx 28rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+}
+
+.locked-type,
+.amount {
+  display: block;
+}
+
+.amount-label {
+  display: block;
+  margin-top: 16rpx;
+  color: #666666;
+  font-size: 26rpx;
+}
+
+.amount {
+  font-size: 64rpx;
+  font-weight: 650;
+}
+
+.delete-link {
+  display: block;
+  margin-top: 28rpx;
+  color: #b42318;
+  text-align: center;
 }
 
 .hero {
@@ -151,8 +183,43 @@
   box-sizing: border-box;
 }
 
-.panel-list {
-  height: 56vh;
+.account-list {
+  max-height: 52vh;
+}
+
+.account-option {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.account-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.account-name {
+  font-size: 32rpx;
+}
+
+.account-kind,
+.account-mark,
+.sheet-group {
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.sheet-group {
+  display: block;
+  margin-top: 16rpx;
+}
+
+.account-balance {
+  font-size: 30rpx;
+  font-weight: 600;
 }
 
 .group {
@@ -190,7 +257,7 @@
 }
 
 .save {
-  background: #111111;
+  background: #1f4b73;
   color: #ffffff;
 }
 

@@ -9,6 +9,8 @@ import { entryChooserPath } from "../miniprogram/entry/fab";
 const accountHome = readFileSync(new URL("../miniprogram/pages/account-home/index.wxml", import.meta.url), "utf8");
 const mine = readFileSync(new URL("../miniprogram/pages/mine/index.wxml", import.meta.url), "utf8");
 const report = readFileSync(new URL("../miniprogram/pages/statistics-report/index.wxml", import.meta.url), "utf8");
+const createForm = readFileSync(new URL("../miniprogram/pages/transaction-create/index.wxml", import.meta.url), "utf8");
+const editForm = readFileSync(new URL("../miniprogram/pages/transaction-detail/index.wxml", import.meta.url), "utf8");
 
 describe("s6 ux round 2", () => {
   it("draws the server point order without inventing a flat day", () => {
@@ -41,5 +43,15 @@ describe("s6 ux round 2", () => {
     assert.equal(report.includes("net-line"), true);
     assert.equal(report.includes("trend-bar"), false);
     assert.equal(entryChooserPath("EXPENSE").includes("choose=1"), true);
+  });
+
+  it("uses the same sheet language on create and edit, and keeps the statistics filters visible", () => {
+    assert.equal(createForm.includes("选择分类"), true);
+    assert.equal(editForm.includes("选择分类"), true);
+    assert.equal(editForm.includes("选择资金账户"), true);
+    assert.equal(editForm.includes("可以同时选择上级和下级"), false);
+    assert.equal(report.includes("日期范围"), true);
+    assert.equal(report.includes("账户范围"), true);
+    assert.equal(report.includes("更多"), false);
   });
 });
