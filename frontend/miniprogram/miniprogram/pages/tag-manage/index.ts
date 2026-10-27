@@ -26,6 +26,7 @@ Page({
     composer: false,
     parentSheet: false,
     moveLabels: [] as string[],
+    moveSheetHeight: 88,
   },
 
   onShow() {
@@ -88,6 +89,7 @@ Page({
       selectedId: id,
       parentSheet: true,
       moveLabels: this.moveParents.map((choice) => choice.label),
+      moveSheetHeight: Math.min(Math.max(this.moveParents.length, 1) * 88, 480),
       confirm: "",
       errorMessage: "",
     });

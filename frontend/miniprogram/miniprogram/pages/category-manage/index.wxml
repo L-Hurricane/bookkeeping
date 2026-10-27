@@ -31,9 +31,10 @@
     <view class="backdrop" bindtap="onCloseSheet"></view>
     <view class="sheet">
       <text class="sheet-title">选择新的上级</text>
-      <scroll-view scroll-y class="sheet-list">
+      <scroll-view scroll-y class="sheet-list" style="height: {{moveSheetHeight}}rpx">
         <view class="choice" wx:for="{{moveLabels}}" wx:key="*this" data-index="{{index}}" bindtap="onChooseMove">{{item}}</view>
       </scroll-view>
+      <text class="confirm" wx:if="{{confirm}}">{{confirm}}</text>
       <view class="sheet-actions">
         <text bindtap="onRenamePrompt">改名</text>
         <text class="danger" bindtap="onDelete">{{confirm ? '确认删除' : '删除'}}</text>
