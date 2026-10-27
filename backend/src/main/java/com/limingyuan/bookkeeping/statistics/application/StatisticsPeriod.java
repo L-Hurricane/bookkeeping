@@ -38,21 +38,10 @@ public final class StatisticsPeriod {
         };
     }
 
-    /** Daily samples for a short range, otherwise month ends plus the range end. */
+    /** One Beijing business date per point. The caller already rejects ranges longer than 3660 days. */
     public static List<LocalDate> samples(LocalDate from, LocalDate to) {
-        long days = ChronoUnit.DAYS.between(from, to) + 1;
         List<LocalDate> dates = new ArrayList<>();
-        if (days <= 31) {
-            for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) dates.add(day);
-            return dates;
-        }
-        LocalDate cursor = from.withDayOfMonth(from.lengthOfMonth());
-        while (!cursor.isAfter(to)) {
-            dates.add(cursor);
-            LocalDate next = cursor.plusMonths(1);
-            cursor = next.withDayOfMonth(next.lengthOfMonth());
-        }
-        if (dates.isEmpty() || !dates.get(dates.size() - 1).equals(to)) dates.add(to);
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) dates.add(day);
         return List.copyOf(dates);
     }
 

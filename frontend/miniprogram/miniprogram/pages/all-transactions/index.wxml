@@ -29,15 +29,5 @@
     <text class="error" wx:if="{{errorMessage && rows.length > 0}}">{{errorMessage}}</text>
     <button wx:if="{{hasMore}}" bindtap="onMore">加载更多</button>
   </block>
-  <view class="fab" wx:if="{{fabAccounts.length > 0}}">
-    <view class="fab-accounts" wx:if="{{fabPicking}}">
-      <view class="fab-account" wx:for="{{fabAccounts}}" wx:key="id" data-id="{{item.id}}" bindtap="onPickAccount">{{item.name}}</view>
-    </view>
-    <view class="fab-menu" wx:if="{{fabOpen}}">
-      <text bindtap="onFabExpense">支出</text>
-      <text bindtap="onFabIncome">收入</text>
-      <text bindtap="onFabTransfer">转账</text>
-    </view>
-    <text class="fab-button" bindtap="onToggleFab">记</text>
-  </view>
+  <entry-fab wx:if="{{canEnter}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
 </view>

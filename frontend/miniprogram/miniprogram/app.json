@@ -19,6 +19,7 @@
     "pages/transfer-create/index",
     "pages/transfer-detail/index",
     "pages/statistics/index",
+    "pages/statistics-report/index",
     "pages/statistics-detail/index",
     "pages/monthly-analysis/index",
     "pages/mine/index"

@@ -1,10 +1,12 @@
 import {
   defaultSelectableAccountId,
   findAccount,
+  formatCurrentBalance,
   type Account,
 } from "../../account/account";
 import { stashLedgerHandoff } from "../../account/ledger-handoff";
 import { createLoadGuard } from "../../account/load-guard";
+import { moneyToneClass } from "../../account/money-tone";
 import { accountHomePath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
@@ -110,7 +112,9 @@ Page({
     timeDraftError: "",
     accountPhase: "loading" as "loading" | "ready" | "error",
     accountText: "选择账户",
-    accountRows: [] as { id: number; label: string }[],
+    accountRows: [] as AccountCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
     accountSelectorOpen: false,
     accountError: "",
     categoryPhase: "idle" as "idle" | "loading" | "ready" | "error",
@@ -132,14 +136,15 @@ Page({
   },
 
   onLoad(query: Record<string, string | undefined>) {
-    const context = parseCreatePageContext(query);
-    if (context === null) {
+    const choosing = query.choose === "1";
+    const context = choosing ? null : parseCreatePageContext(query);
+    if (!choosing && context === null) {
       this.setData({ contextInvalid: true });
       return;
     }
-    this.openerAccountId = context.accountId;
-    this.accountId = context.accountId;
-    this.accountCreatedTime = context.accountCreatedTime;
+    this.openerAccountId = context?.accountId ?? 0;
+    this.accountId = context?.accountId ?? 0;
+    this.accountCreatedTime = context?.accountCreatedTime ?? "";
     this.form = createTransactionForm(new Date());
     const initialType = transactionType(query.type);
     if (initialType !== null && initialType !== this.form.type) {
@@ -700,10 +705,7 @@ Page({
         this.setData({
           accountPhase: "ready",
           accountText: accounts.length === 0 ? "暂无可用账户" : "请选择账户",
-          accountRows: accounts.map((account) => ({
-            id: account.id,
-            label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
-          })),
+          ...this.accountCards(this.data.accountQuery),
           accountError: accounts.length === 0 ? "没有可用账户" : "",
         });
         return;
@@ -711,10 +713,7 @@ Page({
       this.applySelectedAccount(selectedId);
       this.setData({
         accountPhase: "ready",
-        accountRows: accounts.map((account) => ({
-          id: account.id,
-          label: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
-        })),
+        ...this.accountCards(this.data.accountQuery),
         accountError: "",
       });
     } catch (error) {
@@ -732,10 +731,31 @@ Page({
     }
     this.accountId = account.id;
     this.accountCreatedTime = account.createdTime;
+    if (this.openerAccountId === 0) {
+      this.openerAccountId = account.id;
+    }
     this.setData({
-      accountText: `${account.name}（${account.kind === "CREDIT" ? "信用" : "普通"}）`,
+      accountText: `${account.name}  ${formatCurrentBalance(account)}`,
       accountError: "",
+      ...this.accountCards(this.data.accountQuery),
     });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    this.setData({ accountQuery: event.detail.value, ...this.accountCards(event.detail.value) });
+  },
+
+  accountCards(query: string) {
+    const needle = query.trim();
+    const accountRows = this.accounts.filter((account) => needle.length === 0 || account.name.includes(needle)).map((account) => ({
+      id: account.id,
+      name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
+      balanceLabel: formatCurrentBalance(account),
+      balanceTone: moneyToneClass(account.currentBalance),
+      selected: account.id === this.accountId,
+    }));
+    return { accountRows, accountSheetHeight: Math.min(Math.max(accountRows.length, 1) * 128, 640) };
   },
 
   onOpenAccounts() {
@@ -804,6 +824,15 @@ Page({
     });
   },
 });
+
+interface AccountCard {
+  readonly id: number;
+  readonly name: string;
+  readonly kindLabel: string;
+  readonly balanceLabel: string;
+  readonly balanceTone: string;
+  readonly selected: boolean;
+}
 
 function applyOwnedSelection(selected: readonly number[], currentType: TransactionType, created: Tag): number[] {
   if (currentType !== created.type || selected.includes(created.id)) {

@@ -48,11 +48,12 @@ class StatisticsPeriodTest {
     }
 
     @Test
-    void samplesAreDailyInsideAMonthAndMonthlyBeyondIt() {
+    void samplesIncludeEveryBusinessDate() {
         assertEquals(31, StatisticsPeriod.samples(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-10-31")).size());
         List<LocalDate> year = StatisticsPeriod.samples(LocalDate.parse("2026-01-15"), LocalDate.parse("2026-12-31"));
-        assertEquals(LocalDate.parse("2026-01-31"), year.get(0));
+        assertEquals(LocalDate.parse("2026-01-15"), year.get(0));
+        assertEquals(LocalDate.parse("2026-01-16"), year.get(1));
         assertEquals(LocalDate.parse("2026-12-31"), year.get(year.size() - 1));
-        assertEquals(12, year.size());
+        assertEquals(351, year.size());
     }
 }

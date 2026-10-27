@@ -45,7 +45,7 @@
 6. `docs/product/bookkeeping-v1.0-product-baseline-v1.0.md`
 7. `docs/product/bookkeeping-v1.0-ui-freeze-v1.0.md`
 8. `docs/governance/bookkeeping-current-state-handoff-2026-10-26-v1.5.md`（v1.4 原件保留。v1.5 写于 T08 执行前，正文里的“待结项”不回写）
-9. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6～v0.10 分别只登记各自事项。增量索引 v0.11 只登记 S6 v0.3 批准依据。增量索引 v0.12 只登记 S6 v0.4 中间同步。增量索引 v0.13 只登记 UI-A 批准依据。增量索引 v0.14 只登记家庭账本隔离库批准依据。增量索引 v0.15 只登记 T08 准备交接。增量索引 v0.16 只登记模型与局域网授权，不覆盖更早索引
+9. `docs/governance/bookkeeping-2026-10-23-approval-index-v0.5.md`（历史索引入口，原字节不改）。增量索引 v0.6～v0.10 分别只登记各自事项。增量索引 v0.11 只登记 S6 v0.3 批准依据。增量索引 v0.12 只登记 S6 v0.4 中间同步。增量索引 v0.13 只登记 UI-A 批准依据。增量索引 v0.14 只登记家庭账本隔离库批准依据。增量索引 v0.15 只登记 T08 准备交接。增量索引 v0.16 只登记模型与局域网授权。增量索引 v0.17 只登记第二轮 UI/UX 批准，不覆盖更早索引
 10. 已在仓库中的 S1 计划与结项：`docs/implementation/bookkeeping-v1.0-stage-s1-plan-v0.5-approved.md`、`docs/implementation/bookkeeping-s1-stage-closeout-v0.1.md`
 
 ## 现行文件
@@ -64,7 +64,8 @@
 | `docs/governance/bookkeeping-2026-10-27-approval-index-v0.13.md` | 审批索引 v0.13 | `3f72033772fa56702819930f7586aa1068b393366f7748ed5451a4d1f439bf76` | 历史增量索引，只登记 UI-A01～A09 批准依据。原字节不改 |
 | `docs/governance/bookkeeping-2026-10-27-approval-index-v0.14.md` | 审批索引 v0.14 | `fe34853c32a972e817cdc76c5179d9a50f56ee5d3fafb01f35f575bca07a071b` | 历史增量索引，只登记家庭账本隔离库批准依据。原字节不改 |
 | `docs/governance/bookkeeping-2026-10-27-approval-index-v0.15.md` | 审批索引 v0.15 | `c2b2394266077e603f000f0d8e6e02814151047c3d162e5a418b9969b4c37b26` | 历史增量索引，只登记 T08 准备交接。原字节不改 |
-| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.16.md` | 审批索引 v0.16 | `fd5eb97c2bf734d5cc7acc52856348a4f8bb6ecad64736fdf82b46d1b7a76b53` | 现行增量索引，只登记模型与局域网授权 |
+| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.16.md` | 审批索引 v0.16 | `fd5eb97c2bf734d5cc7acc52856348a4f8bb6ecad64736fdf82b46d1b7a76b53` | 历史增量索引，只登记模型与局域网授权。原字节不改 |
+| `docs/governance/bookkeeping-2026-10-27-approval-index-v0.17.md` | 审批索引 v0.17 | `685a5e260c2e771c837f9ea70218cbf4f05236d97c6b754b7a6a31ffcdec675c` | 现行增量索引，只登记第二轮 UI/UX 批准 |
 | `docs/implementation/bookkeeping-v1.0-stage-s2-plan-v0.1-approved.md` | S2 Plan Approved v0.1 | `69ff73a1c0f549cccd125d5b89271996076ab8685a4fe70745c91beb26561be5` | Approved / 当前执行计划 |
 | `docs/implementation/bookkeeping-s2-two-milestones-scope-v0.1-approved.md` | S2 范围 Approved v0.1 | `b2c4d2abf452d87ab34b1930fe4679d2b8036c8ce8849b9cd4b0b1b0cfc664a7` | Approved / 范围与 Gate |
 | `docs/governance/bookkeeping-current-state-handoff-2026-10-23-v0.8.md` | 状态 v0.8 | `65c839c278979f68fa82ea3a6fbe6c04dee0bc8625a4edf0011f5cca7aebbac4` | 现行滚动状态，不是新授权 |

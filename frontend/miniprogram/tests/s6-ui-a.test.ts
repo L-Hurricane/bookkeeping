@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { entryPath } from "../miniprogram/entry/fab";
+import { entryChooserPath, entryPath } from "../miniprogram/entry/fab";
 import { ledgerFeedPath, parseLedgerFeed } from "../miniprogram/ledger/feed-contract";
 import { beijingDate, monthLastDate } from "../miniprogram/ledger/month";
 import { pointHeights, ringSegments } from "../miniprogram/statistics/ledger-view";
@@ -9,6 +9,7 @@ import type { LedgerFlow } from "../miniprogram/statistics/ledger-contract";
 
 const home = readFileSync(new URL("../miniprogram/pages/account-list/index.wxml", import.meta.url), "utf8");
 const statistics = readFileSync(new URL("../miniprogram/pages/statistics/index.wxml", import.meta.url), "utf8");
+const report = readFileSync(new URL("../miniprogram/pages/statistics-report/index.wxml", import.meta.url), "utf8");
 const feed = readFileSync(new URL("../miniprogram/pages/all-transactions/index.wxml", import.meta.url), "utf8");
 
 describe("s6 approved ui", () => {
@@ -18,14 +19,17 @@ describe("s6 approved ui", () => {
     assert.equal(feed.includes("{{surplusTone}}"), true);
     assert.equal(home.includes("全部交易"), true);
     assert.equal(home.includes("最近交易"), false);
+    assert.equal(home.includes("退出登录"), false);
   });
 
-  it("keeps rolling windows distinct from the natural month and does not load period rows on the statistics home", () => {
-    assert.equal(statistics.includes("近1月"), true);
-    assert.equal(statistics.includes("近3月"), true);
-    assert.equal(statistics.includes("近1年"), true);
-    assert.equal(statistics.includes("查看期间交易"), true);
-    assert.equal(statistics.includes("包含归档"), true);
+  it("keeps rolling windows on the statistics report and leaves the statistics home as a catalog", () => {
+    assert.equal(statistics.includes("净值趋势"), true);
+    assert.equal(statistics.includes("近1月"), false);
+    assert.equal(report.includes("近1月"), true);
+    assert.equal(report.includes("近3月"), true);
+    assert.equal(report.includes("近1年"), true);
+    assert.equal(report.includes("查看期间交易"), true);
+    assert.equal(report.includes("包含归档"), true);
   });
 
   it("does not show a per-row balance on the cross-account feed", () => {
@@ -38,6 +42,9 @@ describe("s6 approved ui", () => {
     assert.equal(entryPath("EXPENSE", account).includes("type=INCOME"), false);
     assert.equal(entryPath("INCOME", account).includes("type=INCOME"), true);
     assert.equal(entryPath("TRANSFER", account).includes("/pages/transfer-create/"), true);
+    assert.equal(entryChooserPath("EXPENSE"), "/pages/transaction-create/index?choose=1");
+    assert.equal(entryChooserPath("INCOME").includes("type=INCOME"), true);
+    assert.equal(entryChooserPath("TRANSFER"), "/pages/transfer-create/index?choose=1");
   });
 
   it("parses a paged feed and keeps the cursor opaque", () => {

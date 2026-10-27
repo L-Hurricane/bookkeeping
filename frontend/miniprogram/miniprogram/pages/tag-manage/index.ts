@@ -1,13 +1,17 @@
 import { ApiError } from "../../http/client";
-import { deletionConfirm, manageRows, normalizedName, parentChoices, type ParentChoice } from "../../manage/tree";
+import { deletionConfirm, manageRows, normalizedName, parentChoices, type NamedNode, type ParentChoice } from "../../manage/tree";
 import { isUnauthorized } from "../../services/ledger";
 import { tagApi } from "../../services/runtime";
-
-const RULE = "标签不区分收入和支出，名称全局唯一，最多三级。上级和下级都可以单独关联交易。";
 
 Page({
   generation: 0,
   parents: [] as ParentChoice[],
+  nodes: [] as NamedNode[],
+  moveParents: [] as ParentChoice[],
+  dragId: 0,
+  dragStartY: 0,
+  dragY: 0,
+  dragging: false,
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
@@ -19,7 +23,9 @@ Page({
     confirm: "",
     errorMessage: "",
     submitting: false,
-    rule: RULE,
+    composer: false,
+    parentSheet: false,
+    moveLabels: [] as string[],
   },
 
   onShow() {
@@ -38,6 +44,71 @@ Page({
   onSelect(event: WechatMiniprogram.TouchEvent) {
     const id = Number(event.currentTarget.dataset.id);
     this.setData({ selectedId: id, confirm: "", errorMessage: "" });
+  },
+
+  onOpenComposer() { this.setData({ composer: true, errorMessage: "" }); },
+  onHold() { },
+  onCloseSheet() { this.setData({ parentSheet: false }); },
+
+  onHandleStart(event: WechatMiniprogram.TouchEvent) {
+    this.dragId = Number(event.currentTarget.dataset.id);
+    this.dragStartY = event.touches[0]?.clientY ?? 0;
+    this.dragY = this.dragStartY;
+    this.dragging = false;
+  },
+
+  onHandleMove(event: WechatMiniprogram.TouchEvent) {
+    this.dragY = event.touches[0]?.clientY ?? this.dragY;
+    if (Math.abs(this.dragY - this.dragStartY) > 16) this.dragging = true;
+  },
+
+  onHandleEnd() {
+    if (!this.dragging) {
+      this.openParents(this.dragId);
+      return;
+    }
+    wx.createSelectorQuery().in(this).selectAll(".row").boundingClientRect((rects) => {
+      const boxes = Array.isArray(rects) ? rects : [];
+      const hit = boxes.findIndex((box) => this.dragY >= box.top && this.dragY <= box.bottom);
+      const target = this.data.rows[hit];
+      if (target === undefined || target.id === this.dragId) return;
+      const choices = parentChoices(this.nodes, this.dragId);
+      if (!choices.some((choice) => choice.id === target.id)) {
+        this.setData({ selectedId: this.dragId, errorMessage: "不能移动到这个上级" });
+        return;
+      }
+      this.setData({ selectedId: this.dragId, errorMessage: "" });
+      void this.run(() => tagApi.moveTag(this.dragId, "EXPENSE", target.id));
+    }).exec();
+  },
+
+  openParents(id: number) {
+    this.moveParents = parentChoices(this.nodes, id);
+    this.setData({
+      selectedId: id,
+      parentSheet: true,
+      moveLabels: this.moveParents.map((choice) => choice.label),
+      confirm: "",
+      errorMessage: "",
+    });
+  },
+
+  onChooseMove(event: WechatMiniprogram.TouchEvent) {
+    const index = Number(event.currentTarget.dataset.index);
+    const parent = this.moveParents[index];
+    this.setData({ parentSheet: false });
+    if (parent === undefined || this.data.selectedId === 0) return;
+    void this.run(() => tagApi.moveTag(this.data.selectedId, "EXPENSE", parent.id));
+  },
+
+  onRenamePrompt() {
+    const name = normalizedName(this.data.name);
+    if (name === null) {
+      this.setData({ composer: true, parentSheet: false, errorMessage: "请在上方输入新名称" });
+      return;
+    }
+    this.setData({ parentSheet: false });
+    void this.onRename();
   },
 
   async onCreate() {
@@ -105,7 +176,8 @@ Page({
       if (generation !== this.generation) {
         return;
       }
-      this.parents = parentChoices(tags, this.data.selectedId || null);
+      this.nodes = tags;
+      this.parents = parentChoices(tags, null);
       this.setData({
         phase: "ready",
         rows: manageRows(tags),

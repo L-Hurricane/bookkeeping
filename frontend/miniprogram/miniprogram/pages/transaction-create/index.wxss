@@ -1,7 +1,15 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx calc(180rpx + env(safe-area-inset-bottom));
+  padding: 24rpx 24rpx calc(180rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+  background: #f3f4f6;
+}
+
+.group {
+  margin-bottom: 20rpx;
+  padding: 8rpx 24rpx 28rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
 }
 
 .types {
@@ -20,7 +28,7 @@
 }
 
 .type.active {
-  background: #111111;
+  background: #1f4b73;
   color: #ffffff;
 }
 
@@ -85,7 +93,7 @@
 }
 
 .chip.selected {
-  background: #111111;
+  background: #1f4b73;
   color: #ffffff;
 }
 
@@ -112,7 +120,7 @@
 }
 
 .save {
-  background: #111111;
+  background: #1f4b73;
   color: #ffffff;
 }
 
@@ -156,8 +164,45 @@
 }
 
 .panel-list {
-  height: 56vh;
+  max-height: 46vh;
 }
+
+.account-list {
+  max-height: 52vh;
+}
+
+.account-option {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.account-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.account-name {
+  font-size: 32rpx;
+}
+
+.account-kind,
+.account-mark {
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.account-balance {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.money-positive { color: #c23a2b; }
+.money-negative { color: #1f7a4c; }
+.money-zero { color: #333333; }
 
 .editor-title {
   display: block;

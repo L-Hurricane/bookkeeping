@@ -6,28 +6,39 @@
   <button bindtap="reload">重新加载</button>
 </view>
 <view class="page" wx:else>
-  <text class="hint">{{rule}}</text>
   <view class="types">
-    <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
-    <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
+    <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出分类</text>
+    <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入分类</text>
   </view>
-  <view class="row {{selectedId === item.id ? 'selected' : ''}}" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onSelect" style="padding-left: {{item.depth * 24}}rpx;">
-    <text>{{item.name}}</text>
-    <text class="meta" wx:if="{{item.hasChildren}}">有下级</text>
-    <text class="meta" wx:else>可记账</text>
+  <view class="row {{selectedId === item.id ? 'selected' : ''}}" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" style="margin-left: {{(item.depth - 1) * 28}}rpx;">
+    <view class="row-main" data-id="{{item.id}}" bindtap="onSelect">
+      <text class="name">{{item.name}}</text>
+      <text class="meta">{{item.hasChildren ? '有下级' : '可记账'}}</text>
+    </view>
+    <text class="handle" data-id="{{item.id}}" catchtouchstart="onHandleStart" catchtouchmove="onHandleMove" catchtouchend="onHandleEnd">⋮⋮</text>
   </view>
-  <text class="label">名称</text>
-  <input class="field" type="text" maxlength="100" value="{{name}}" disabled="{{submitting}}" bindinput="onName" />
-  <text class="label">上级</text>
-  <picker mode="selector" range="{{parentLabels}}" value="{{parentIndex}}" disabled="{{submitting}}" bindchange="onParent">
-    <view class="field">{{parentLabels[parentIndex]}}</view>
-  </picker>
+  <view class="composer" wx:if="{{composer}}">
+    <input class="field" type="text" maxlength="100" placeholder="分类名称" value="{{name}}" disabled="{{submitting}}" bindinput="onName" />
+    <picker mode="selector" range="{{parentLabels}}" value="{{parentIndex}}" disabled="{{submitting}}" bindchange="onParent">
+      <view class="field">上级 {{parentLabels[parentIndex]}}</view>
+    </picker>
+    <button disabled="{{submitting}}" bindtap="onCreate">创建</button>
+  </view>
+  <view class="add" wx:else bindtap="onOpenComposer">+ 新增分类</view>
   <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
   <text class="confirm" wx:if="{{confirm}}">{{confirm}}</text>
-  <view class="actions">
-    <button disabled="{{submitting}}" bindtap="onCreate">新增</button>
-    <button disabled="{{submitting}}" bindtap="onRename">改名</button>
-    <button disabled="{{submitting}}" bindtap="onMove">调整上级</button>
-    <button class="danger" disabled="{{submitting}}" bindtap="onDelete">{{confirm ? '确认删除' : '删除'}}</button>
+  <view class="mask" wx:if="{{parentSheet}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCloseSheet"></view>
+    <view class="sheet">
+      <text class="sheet-title">选择新的上级</text>
+      <scroll-view scroll-y class="sheet-list">
+        <view class="choice" wx:for="{{moveLabels}}" wx:key="*this" data-index="{{index}}" bindtap="onChooseMove">{{item}}</view>
+      </scroll-view>
+      <view class="sheet-actions">
+        <text bindtap="onRenamePrompt">改名</text>
+        <text class="danger" bindtap="onDelete">{{confirm ? '确认删除' : '删除'}}</text>
+        <text bindtap="onCloseSheet">关闭</text>
+      </view>
+    </view>
   </view>
 </view>

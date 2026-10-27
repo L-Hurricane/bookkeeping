@@ -10,46 +10,38 @@
       <text class="nav-link" bindtap="onBackToList">‹ 账本</text>
       <text class="nav-link" bindtap="onOpenSettings">账户设置</text>
     </view>
-    <view class="header">
+    <view class="asset">
       <text class="name">{{name}}</text>
       <text class="kind">{{kindLabel}}</text>
       <text class="label">当前余额</text>
       <text class="balance {{balanceToneClass}}">{{balanceLabel}}</text>
       <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
-      <text class="hint" wx:if="{{negativeBalanceHint}}">{{negativeBalanceHint}}</text>
-      <button class="adjust" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
+      <view class="asset-links">
+        <text class="nav-link" wx:if="{{!archived}}" bindtap="onAdjust">余额调整</text>
+        <text class="nav-link" bindtap="onStatistics">统计</text>
+      </view>
     </view>
     <view class="month">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>
       <text class="month-label">{{monthLabel}}</text>
       <text class="month-step" bindtap="onNextMonth">›</text>
     </view>
-    <input class="search" value="{{searchInput}}" placeholder="搜索交易名称" bindinput="onSearchInput" confirm-type="search" />
-    <button class="statistics" disabled="{{loggingOut}}" bindtap="onStatistics">统计</button>
     <view class="summary" wx:if="{{phase === 'ready'}}">
       <view class="summary-item">
         <text class="label">收入</text>
-        <text class="{{incomeToneClass}}">{{incomeLabel}}</text>
+        <text class="figure {{incomeToneClass}}">{{incomeLabel}}</text>
       </view>
       <view class="summary-item">
         <text class="label">支出</text>
-        <text class="{{expenseToneClass}}">{{expenseLabel}}</text>
+        <text class="figure {{expenseToneClass}}">{{expenseLabel}}</text>
       </view>
       <view class="summary-item">
-        <text class="label">结余</text>
-        <text class="{{surplusToneClass}}">{{surplusLabel}}</text>
+        <text class="label">{{monthCloseCaption || '结余'}}</text>
+        <text class="figure {{monthCloseLabel ? monthCloseTone : surplusToneClass}}">{{monthCloseLabel || surplusLabel}}</text>
       </view>
     </view>
-    <text wx:if="{{monthCloseLabel}}">{{monthCloseCaption}} <text class="{{monthCloseTone}}">{{monthCloseLabel}}</text></text>
-    <text class="count" wx:if="{{phase === 'ready'}}">{{countLabel}}</text>
-    <view class="fab" wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}">
-      <view class="fab-menu" wx:if="{{fabOpen}}">
-        <text bindtap="onFabExpense">支出</text>
-        <text bindtap="onFabIncome">收入</text>
-        <text bindtap="onFabTransfer">转账</text>
-      </view>
-      <text class="fab-button" bindtap="onToggleFab">记</text>
-    </view>
+    <input class="search" value="{{searchInput}}" placeholder="搜索交易名称" bindinput="onSearchInput" confirm-type="search" />
+    <entry-fab wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
     <text class="status" wx:if="{{phase === 'ledger-loading'}}">正在读取流水</text>
     <block wx:elif="{{phase === 'ledger-error'}}">
       <text class="error">{{errorMessage}}</text>
@@ -62,19 +54,20 @@
       <text class="locate-miss" wx:if="{{locateMiss}}">{{locateMiss}}</text>
       <text class="empty" wx:if="{{searchEmpty}}">没有匹配的交易</text>
       <text class="empty" wx:elif="{{empty}}">本月暂无记录</text>
-      <view id="{{item.key}}" class="row {{item.kind}} {{highlightKey === item.key ? 'post-save-highlight' : ''}}" wx:for="{{rows}}" wx:key="key" data-kind="{{item.kind}}" data-id="{{item.recordId}}" bindtap="onOpenRecord">
-        <view class="row-main">
-          <text class="row-title">{{item.title}}</text>
-          <text class="row-detail" wx:if="{{item.detail}}">{{item.detail}}</text>
-          <text class="row-time">{{item.timeLabel}}</text>
+      <block wx:for="{{groups}}" wx:key="key">
+        <view class="day">
+          <text>{{item.label}}</text>
+          <text class="count">{{item.count}} 笔</text>
         </view>
-        <view class="row-side">
-          <text class="type {{item.kind}}">{{item.typeLabel}}</text>
-          <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
+        <view id="{{row.key}}" class="row {{row.kind}} {{highlightKey === row.key ? 'post-save-highlight' : ''}}" wx:for="{{item.rows}}" wx:for-item="row" wx:key="key" data-kind="{{row.kind}}" data-id="{{row.recordId}}" bindtap="onOpenRecord">
+          <view class="row-main">
+            <text class="row-title">{{row.title}}</text>
+            <text class="row-detail" wx:if="{{row.detail}}">{{row.detail}}</text>
+            <text class="row-time">{{row.timeLabel}}</text>
+          </view>
+          <text class="amount {{row.amountToneClass}}">{{row.amountLabel}}</text>
         </view>
-      </view>
+      </block>
     </block>
   </block>
-  <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
-  <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
 </view>

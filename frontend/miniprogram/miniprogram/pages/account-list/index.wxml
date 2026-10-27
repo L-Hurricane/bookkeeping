@@ -6,43 +6,35 @@
   </block>
   <block wx:else>
     <view class="toolbar">
-      <button class="link" disabled="{{loggingOut}}" bindtap="onCreateAccount">创建账户</button>
-      <button class="link" disabled="{{loggingOut}}" bindtap="onOpenArchive">归档账户</button>
+      <text class="tool" bindtap="onCreateAccount">创建账户</text>
+      <text class="tool" bindtap="onOpenArchive">归档账户</text>
+      <text class="tool" bindtap="onOpenAll">全部交易</text>
     </view>
-    <text class="toolbar-hint">正常账户总览。归档账户不在此列表，可从归档账户查看历史并恢复。</text>
-    <view class="summary" wx:if="{{summaryReady}}">
-      <text>本月账本净值 <text class="{{netTone}}">{{netLabel}}</text></text>
-      <text>本月收入 <text class="{{incomeTone}}">{{incomeLabel}}</text></text>
-      <text>本月支出 <text class="{{expenseTone}}">{{expenseLabel}}</text></text>
+    <view class="board" wx:if="{{summaryReady}}">
+      <text class="board-label">本月账本净值</text>
+      <text class="board-net {{netTone}}">{{netLabel}}</text>
+      <view class="board-split">
+        <view class="board-cell">
+          <text class="board-label">本月收入</text>
+          <text class="board-amount money-neutral">{{incomeLabel}}</text>
+        </view>
+        <view class="board-cell">
+          <text class="board-label">本月支出</text>
+          <text class="board-amount money-neutral">{{expenseLabel}}</text>
+        </view>
+      </view>
     </view>
-    <text class="toolbar-hint" wx:if="{{summaryReady}}">本月账本净值按业务时间计算到本月结束，不是包含未来记录的当前账面余额。</text>
     <text class="error" wx:if="{{summaryError}}">{{summaryError}}</text>
-    <button class="link" bindtap="onOpenAll">全部交易</button>
     <text class="error" wx:if="{{refreshError}}">{{refreshError}}</text>
     <button wx:if="{{refreshError}}" bindtap="onRetry">重新加载</button>
-    <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">正常账户列表是空的。归档账户仍保留余额和历史。</text>
+    <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">没有正常账户</text>
     <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
       <view class="card-main">
         <text class="card-name">{{item.name}}</text>
         <text class="card-kind">{{item.kindLabel}}</text>
       </view>
-      <view class="card-side">
-        <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
-        <text class="card-hint" wx:if="{{item.negativeHint}}">{{item.negativeHint}}</text>
-      </view>
+      <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
     </view>
   </block>
-  <view class="fab" wx:if="{{rows.length > 0 && !loggingOut}}">
-    <view class="fab-accounts" wx:if="{{fabPicking}}">
-      <view class="fab-account" wx:for="{{fabAccounts}}" wx:key="id" data-id="{{item.id}}" bindtap="onPickAccount">{{item.name}}</view>
-    </view>
-    <view class="fab-menu" wx:if="{{fabOpen}}">
-      <text bindtap="onFabExpense">支出</text>
-      <text bindtap="onFabIncome">收入</text>
-      <text bindtap="onFabTransfer">转账</text>
-    </view>
-    <text class="fab-button" bindtap="onToggleFab">记</text>
-  </view>
-  <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
-  <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
+  <entry-fab wx:if="{{rows.length > 0 && !loggingOut}}" above-tab="{{true}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
 </view>

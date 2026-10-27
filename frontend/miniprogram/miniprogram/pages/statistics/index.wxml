@@ -1,103 +1,34 @@
 <view class="page">
-  <view class="choices">
-    <text class="choice {{preset === 'MONTH' ? 'selected' : ''}}" data-preset="MONTH" bindtap="onSelectPreset">本月</text>
-    <text class="choice {{preset === 'QUARTER' ? 'selected' : ''}}" data-preset="QUARTER" bindtap="onSelectPreset">本季度</text>
-    <text class="choice {{preset === 'YEAR' ? 'selected' : ''}}" data-preset="YEAR" bindtap="onSelectPreset">本年</text>
-    <text class="choice {{preset === 'ROLLING_MONTH' ? 'selected' : ''}}" data-preset="ROLLING_MONTH" bindtap="onSelectPreset">近1月</text>
-    <text class="choice {{preset === 'ROLLING_3_MONTHS' ? 'selected' : ''}}" data-preset="ROLLING_3_MONTHS" bindtap="onSelectPreset">近3月</text>
-    <text class="choice {{preset === 'ROLLING_YEAR' ? 'selected' : ''}}" data-preset="ROLLING_YEAR" bindtap="onSelectPreset">近1年</text>
-    <text class="choice {{moreOpen ? 'selected' : ''}}" bindtap="onToggleMore">更多</text>
-  </view>
-  <block wx:if="{{moreOpen}}">
-  <view class="choices">
-    <picker mode="date" value="{{customFrom}}" bindchange="onCustomFrom">
-      <text class="choice">开始 {{customFrom}}</text>
-    </picker>
-    <picker mode="date" value="{{customTo}}" bindchange="onCustomTo">
-      <text class="choice">结束 {{customTo}}</text>
-    </picker>
-  </view>
-  <view class="choices">
-    <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">不含归档</text>
-    <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">包含归档</text>
-    <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
-  </view>
-  <view wx:if="{{scope === 'SELECTED'}}">
-    <view class="choice {{item.checked ? 'selected' : ''}}" wx:for="{{picker}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAccount">
-      {{item.name}}{{item.archived ? ' · 已归档' : ''}}
+  <view class="group">
+    <view class="entry" data-view="net" bindtap="onOpenReport">
+      <text class="entry-title">净值趋势</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" data-view="income-category" bindtap="onOpenReport">
+      <text class="entry-title">收入分类对比</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" data-view="income-tag" bindtap="onOpenReport">
+      <text class="entry-title">收入标签对比</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" data-view="expense-category" bindtap="onOpenReport">
+      <text class="entry-title">支出分类对比</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" data-view="expense-tag" bindtap="onOpenReport">
+      <text class="entry-title">支出标签对比</text>
+      <text class="entry-go">></text>
     </view>
   </view>
-  </block>
-  <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
-  <button wx:if="{{showAnalysis}}" class="analysis-entry" bindtap="onOpenAnalysis">AI 分析本月</button>
-  <button wx:else class="analysis-entry" bindtap="onOpenLedgerAnalysis">AI 分析</button>
-  <view class="choices">
-    <text class="choice {{module === 'NET' ? 'selected' : ''}}" data-module="NET" bindtap="onSelectModule">账本净值</text>
-    <text class="choice {{module === 'EXPENSE' ? 'selected' : ''}}" data-module="EXPENSE" bindtap="onSelectModule">支出分析</text>
-    <text class="choice {{module === 'INCOME' ? 'selected' : ''}}" data-module="INCOME" bindtap="onSelectModule">收入分析</text>
+  <view class="group analysis">
+    <view class="entry" wx:if="{{showAnalysis}}" bindtap="onOpenAnalysis">
+      <text class="entry-title">AI 分析本月</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" wx:else bindtap="onOpenLedgerAnalysis">
+      <text class="entry-title">AI 分析</text>
+      <text class="entry-go">></text>
+    </view>
   </view>
-  <text class="status" wx:if="{{phase === 'loading'}}">正在读取统计</text>
-  <text class="status" wx:elif="{{phase === 'choose'}}">{{errorMessage}}</text>
-  <block wx:elif="{{phase === 'error'}}">
-    <text class="error">{{errorMessage}}</text>
-    <button bindtap="onRetry">重新加载</button>
-  </block>
-  <block wx:elif="{{phase === 'ready' && module === 'NET'}}">
-    <text class="note">账本净值按业务时间计算，不是包含未来记录的当前账面余额。</text>
-    <view class="summary">
-      <view class="summary-item">
-        <text class="label">期初</text>
-        <text class="{{openingTone}}">{{openingLabel}}</text>
-      </view>
-      <view class="summary-item">
-        <text class="label">期末</text>
-        <text class="{{closingTone}}">{{closingLabel}}</text>
-      </view>
-      <view class="summary-item">
-        <text class="label">变动</text>
-        <text class="{{changeTone}}">{{changeLabel}}</text>
-      </view>
-    </view>
-    <text class="section">趋势</text>
-    <view class="trend">
-      <view class="trend-bar" wx:for="{{points}}" wx:key="date" style="height: {{item.height}}rpx"></view>
-    </view>
-    <button bindtap="onOpenPeriod">查看期间交易</button>
-    <view class="row" wx:for="{{points}}" wx:key="date">
-      <text class="row-title">{{item.date}}</text>
-      <text class="amount {{item.tone}}">{{item.amountLabel}}</text>
-    </view>
-  </block>
-  <block wx:elif="{{phase === 'ready'}}">
-    <text class="section {{netTone}}">合计 {{netLabel}}</text>
-    <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
-    <view class="choices">
-      <text class="choice {{breakdown === 'CATEGORY' ? 'selected' : ''}}" data-breakdown="CATEGORY" bindtap="onSelectBreakdown">分类</text>
-      <text class="choice {{breakdown === 'TAG' ? 'selected' : ''}}" data-breakdown="TAG" bindtap="onSelectBreakdown">标签</text>
-    </view>
-    <block wx:if="{{breakdown === 'CATEGORY'}}">
-    <text class="note" wx:if="{{ringNote}}">{{ringNote}}</text>
-    <canvas type="2d" id="category-ring" class="ring" wx:if="{{ringSegments.length > 0}}"></canvas>
-    <view class="row depth-{{item.depth}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
-      <view class="row-main">
-        <text class="row-title">{{item.title}}</text>
-        <text class="row-detail">{{item.detail}}</text>
-      </view>
-      <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
-    </view>
-    </block>
-    <block wx:else>
-    <text class="note">标签按当前标签树汇总，可以重叠，占比分母是全部收入或支出净额。</text>
-    <button wx:if="{{selectedTagCount > 0}}" bindtap="onOpenSelectedTags">查看所选标签</button>
-    <view class="row depth-{{item.depth}}" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
-      <view class="row-main">
-        <text class="row-title">{{item.title}}</text>
-        <text class="row-detail">{{item.detail}}</text>
-        <view class="bar-track"><view class="bar-fill" style="width: {{item.barPercent}}%"></view></view>
-        <text wx:if="{{item.drillKind === 'tag'}}" catchtap="onToggleTag" data-id="{{item.drillId}}">{{item.selected ? '取消多选' : '加入多选'}}</text>
-      </view>
-      <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
-    </view>
-    </block>
-  </block>
 </view>

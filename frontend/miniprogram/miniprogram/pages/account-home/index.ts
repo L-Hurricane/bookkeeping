@@ -5,10 +5,11 @@ import {
   type Account,
 } from "../../account/account";
 import { stashLedgerHandoff, takeLedgerHandoff } from "../../account/ledger-handoff";
-import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout } from "../../account/logout-view";
-import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
+import { selectedMonthDuringLogout } from "../../account/logout-view";
+import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
 import { accountHomePath, accountListPath, accountSettingsPath, parseAccountHomeQuery } from "../../account/navigation";
+import { groupByTimeLabel } from "../../ledger/day-groups";
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
 import { beijingDate, currentBeijingMonth, formatMonthLabel, monthLastDate, nextMonth, previousMonth } from "../../ledger/month";
 import {
@@ -30,7 +31,7 @@ import {
   type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import { accountApi, authApi, authNavigation, ledgerApi, ledgerStatisticsApi, transactionApi } from "../../services/runtime";
+import { accountApi, ledgerApi, ledgerStatisticsApi, transactionApi } from "../../services/runtime";
 import { TransactionSearchResponseError } from "../../services/transaction";
 import {
   canApplySearchResult,
@@ -104,6 +105,7 @@ Page({
     surplusToneClass: "money-zero",
     countLabel: "",
     rows: [] as ReturnType<typeof ledgerRows>,
+    groups: [] as ReturnType<typeof groupByTimeLabel<ReturnType<typeof ledgerRows>[number]>>,
     empty: false,
     searchInput: "",
     searchLoading: false,
@@ -265,7 +267,7 @@ Page({
         highlightKey: locate === null ? this.highlight.key : locate.key,
       });
       if (locate === null) {
-        this.setData(ledgerView, () => {
+        this.setData(withDayGroups(ledgerView, month), () => {
           if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
             return;
           }
@@ -276,7 +278,7 @@ Page({
       this.highlight = startHighlight(this.highlight, locate.key);
       this.locateGeneration = nextLocateGeneration(this.locateGeneration);
       const captured = this.locateGeneration;
-      this.setData(ledgerView, () => {
+      this.setData(withDayGroups(ledgerView, month), () => {
         if (!canRunLocate(this.loadGuard.pageAlive, captured, this.locateGeneration)) {
           return;
         }
@@ -597,6 +599,7 @@ Page({
       this.setData({
         searchLoading: false,
         rows,
+        groups: groupByTimeLabel(rows, this.selectedMonth),
         searchEmpty: rows.length === 0,
         empty: false,
         searchErrorMessage: "",
@@ -666,27 +669,6 @@ Page({
       return;
     }
     void this.loadAccount();
-  },
-
-  async onLogout() {
-    const phaseBeforeLogout = this.data.phase;
-    if (!beginLogout(this.loadGuard)) {
-      return;
-    }
-    this.setData({ loggingOut: true, logoutErrorMessage: "" });
-    try {
-      await authApi.logout();
-      authNavigation.enterLogin();
-    } catch {
-      endLogout(this.loadGuard);
-      const resume = resumeAfterLogoutFailure(phaseBeforeLogout);
-      this.setData(logoutFailureView(this.data));
-      if (resume === "account") {
-        void this.loadAccount();
-      } else if (resume === "ledger") {
-        void this.loadLedger();
-      }
-    }
   },
 
   restoreListScroll(scrollTop: number | null) {
@@ -760,6 +742,11 @@ Page({
     this.stopHighlightTimer();
   },
 });
+
+function withDayGroups(view: ReturnType<typeof buildLedgerLoadSetDataPatch>, month: string) {
+  if (!("rows" in view)) return view;
+  return { ...view, groups: groupByTimeLabel(view.rows, month) };
+}
 
 function readScrollMeasurement(result: unknown): { top: number; height: number; viewportHeight: number; scrollTop: number } | null {
   if (!Array.isArray(result) || result.length < 3) {

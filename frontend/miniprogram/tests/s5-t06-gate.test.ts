@@ -53,7 +53,8 @@ describe("s5-t06 miniprogram gate", () => {
     assert.equal(entry.startsWith("/pages/statistics/index?accountId=1001&month=2026-10"), true);
 
     const openAccount = handler(statisticsPage, "onOpenAnalysis");
-    assert.equal(openAccount.includes("monthlyAnalysisPagePath(accountId, this.report.from.slice(0, 7))"), true);
+    assert.equal(openAccount.includes("monthlyAnalysisPagePath(accountId, currentBeijingMonth(new Date()))"), true);
+    assert.equal(openAccount.includes("this.report"), false);
     assert.equal(openAccount.includes("ledgerAnalysisPagePath"), false);
     assert.equal(
       monthlyAnalysisPagePath(1001, "2026-10"),

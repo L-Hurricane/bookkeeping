@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,12 +95,49 @@ public class LedgerStatisticsService {
     private NetWorth netWorth(List<AccountRow> accounts, StatisticsPeriod.Range range) {
         BigDecimal opening = sum(accounts, range.openingCutoff());
         BigDecimal closing = sum(accounts, range.endInclusive());
+        List<LocalDate> dates = StatisticsPeriod.samples(range.from(), range.to());
+        List<LocalDateTime> cutoffs = new ArrayList<>();
+        for (LocalDate date : dates) {
+            cutoffs.add(date.equals(range.to()) ? range.endInclusive() : date.atTime(23, 59, 59));
+        }
+        List<BigDecimal> values = dailyValues(accounts, range.endInclusive(), cutoffs);
         List<Point> points = new ArrayList<>();
-        for (LocalDate date : StatisticsPeriod.samples(range.from(), range.to())) {
-            LocalDateTime cutoff = date.equals(range.to()) ? range.endInclusive() : date.atTime(23, 59, 59);
-            points.add(new Point(date.toString(), money(sum(accounts, cutoff))));
+        for (int index = 0; index < dates.size(); index += 1) {
+            points.add(new Point(dates.get(index).toString(), money(values.get(index))));
         }
         return new NetWorth(money(opening), money(closing), money(closing.subtract(opening)), List.copyOf(points));
+    }
+
+    private List<BigDecimal> dailyValues(List<AccountRow> accounts, LocalDateTime end, List<LocalDateTime> cutoffs) {
+        if (accounts.isEmpty()) return cutoffs.stream().map(ignored -> ZERO).toList();
+        List<Long> ids = accounts.stream().map(AccountRow::id).toList();
+        BigDecimal openingBalances = jdbc.sql("""
+                SELECT COALESCE(SUM(opening_balance), 0)
+                FROM accounts WHERE user_id = :userId AND id IN (:accountIds)
+                """).param("userId", context.userId()).param("accountIds", ids)
+                .query(BigDecimal.class).single();
+        List<NetWorthSeries.Movement> movements = jdbc.sql("""
+                SELECT business_time AS event_time,
+                       CASE WHEN type = 'INCOME' THEN amount ELSE -amount END AS delta
+                FROM transactions
+                WHERE user_id = :userId AND account_id IN (:accountIds) AND business_time <= :end
+                UNION ALL
+                SELECT business_time, adjustment_amount
+                FROM balance_adjustments
+                WHERE user_id = :userId AND account_id IN (:accountIds) AND business_time <= :end
+                UNION ALL
+                SELECT to_business_time, amount
+                FROM transfers
+                WHERE user_id = :userId AND to_account_id IN (:accountIds) AND to_business_time <= :end
+                UNION ALL
+                SELECT from_business_time, -amount
+                FROM transfers
+                WHERE user_id = :userId AND from_account_id IN (:accountIds) AND from_business_time <= :end
+                """).param("userId", context.userId()).param("accountIds", ids).param("end", end)
+                .query((rs, number) -> new NetWorthSeries.Movement(rs.getTimestamp("event_time").toLocalDateTime(), rs.getBigDecimal("delta")))
+                .list();
+        movements.sort(Comparator.comparing(NetWorthSeries.Movement::time));
+        return NetWorthSeries.atCutoffs(openingBalances, movements, cutoffs);
     }
 
     private BigDecimal sum(List<AccountRow> accounts, LocalDateTime cutoff) {

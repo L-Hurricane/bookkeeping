@@ -1,7 +1,7 @@
 import type { Account } from "../../account/account";
 import { moneyToneClass } from "../../account/money-tone";
 import { adjustmentDetailPath } from "../../balance-adjustment/navigation";
-import { entryPath, type EntryKind } from "../../entry/fab";
+import { entryChooserPath, type EntryKind } from "../../entry/fab";
 import { ApiError } from "../../http/client";
 import { formatBusinessTime, formatMoneyLabel } from "../../ledger/ledger";
 import {
@@ -32,12 +32,6 @@ interface FeedRow {
   readonly businessTime: string;
 }
 
-interface FabAccount {
-  readonly id: number;
-  readonly name: string;
-  readonly createdTime: string;
-}
-
 Page({
   pageAlive: true,
   generation: 0,
@@ -50,7 +44,6 @@ Page({
   searchTimer: null as number | null,
   cursor: null as string | null,
   items: [] as LedgerFeedItem[],
-  fabKind: "EXPENSE" as EntryKind,
   accounts: [] as Account[],
 
   data: {
@@ -71,8 +64,7 @@ Page({
     errorMessage: "",
     searchInput: "",
     fabOpen: false,
-    fabPicking: false,
-    fabAccounts: [] as FabAccount[],
+    canEnter: false,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -147,39 +139,17 @@ Page({
   },
 
   onToggleFab() {
-    this.setData({ fabOpen: !this.data.fabOpen, fabPicking: false });
+    this.setData({ fabOpen: !this.data.fabOpen });
   },
 
   onFabExpense() { this.beginEntry("EXPENSE"); },
   onFabIncome() { this.beginEntry("INCOME"); },
   onFabTransfer() { this.beginEntry("TRANSFER"); },
 
-  onPickAccount(event: WechatMiniprogram.BaseEvent) {
-    const id = Number(event.currentTarget.dataset["id"]);
-    const account = this.accounts.find((item) => item.id === id);
-    if (account === undefined) return;
-    this.setData({ fabOpen: false, fabPicking: false });
-    wx.navigateTo({ url: entryPath(this.fabKind, account) });
-  },
-
   beginEntry(kind: EntryKind) {
-    this.fabKind = kind;
-    const choices = this.scope === "SELECTED"
-      ? this.accounts.filter((account) => this.accountIds.includes(account.id))
-      : this.accounts;
-    const pool = choices.length > 0 ? choices : this.accounts;
-    if (pool.length === 1) {
-      const account = pool[0];
-      if (account === undefined) return;
-      this.setData({ fabOpen: false, fabPicking: false });
-      wx.navigateTo({ url: entryPath(kind, account) });
-      return;
-    }
-    this.setData({
-      fabOpen: true,
-      fabPicking: true,
-      fabAccounts: pool.map((account) => ({ id: account.id, name: account.name, createdTime: account.createdTime })),
-    });
+    if (this.accounts.length === 0) return;
+    this.setData({ fabOpen: false });
+    wx.navigateTo({ url: entryChooserPath(kind) });
   },
 
   async loadAccounts() {
@@ -187,9 +157,7 @@ Page({
       const accounts = await accountApi.listAccounts("ACTIVE");
       if (!this.pageAlive) return;
       this.accounts = [...accounts];
-      this.setData({
-        fabAccounts: this.accounts.map((account) => ({ id: account.id, name: account.name, createdTime: account.createdTime })),
-      });
+      this.setData({ canEnter: this.accounts.length > 0 });
     } catch {
       if (!this.pageAlive) return;
       this.accounts = [];

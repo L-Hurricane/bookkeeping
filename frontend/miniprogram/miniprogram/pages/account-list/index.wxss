@@ -1,29 +1,61 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx 48rpx;
+  padding: 24rpx 24rpx 180rpx;
   box-sizing: border-box;
-  background: #f6f6f6;
+  background: #f3f4f6;
 }
 
 .toolbar {
   display: flex;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 24rpx;
+  justify-content: flex-end;
+  gap: 28rpx;
+  margin-bottom: 20rpx;
 }
 
-.link {
-  flex: 1;
-  background: #ffffff;
-  color: #111111;
+.tool {
+  color: #1f4b73;
   font-size: 28rpx;
 }
 
-.toolbar-hint {
+.board {
+  margin-bottom: 24rpx;
+  padding: 32rpx 28rpx 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+}
+
+.board-label {
   display: block;
-  margin-bottom: 20rpx;
-  color: #888888;
+  color: #666666;
   font-size: 24rpx;
+}
+
+.board-net {
+  display: block;
+  margin: 8rpx 0 28rpx;
+  font-size: 56rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.board-split {
+  display: flex;
+  gap: 24rpx;
+}
+
+.board-cell {
+  flex: 1;
+}
+
+.board-amount {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.money-neutral {
+  color: #333333;
 }
 
 .card {
@@ -79,10 +111,4 @@
 
 .error {
   color: #b42318;
-}
-
-.logout {
-  margin-top: 32rpx;
-  background: transparent;
-  color: #666666;
 }

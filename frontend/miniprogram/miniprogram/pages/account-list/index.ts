@@ -2,12 +2,11 @@ import {
   accountKindLabel,
   formatCurrentBalance,
   routeActiveAccounts,
-  shouldWarnNegativeBalance,
   type Account,
 } from "../../account/account";
-import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
+import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
-import { entryPath, type EntryKind } from "../../entry/fab";
+import { entryChooserPath, type EntryKind } from "../../entry/fab";
 import { allTransactionsPath } from "../../ledger/feed-contract";
 import { formatMoneyLabel } from "../../ledger/ledger";
 import {
@@ -18,10 +17,9 @@ import {
   archiveArrivalFeedback,
   parseAccountListNotice,
 } from "../../account/navigation";
-import { logoutFailureView } from "../../account/logout-view";
 import { routeBootstrap } from "../../navigation/startup";
 import { isUnauthorized } from "../../services/ledger";
-import { accountApi, authApi, authNavigation, ledgerStatisticsApi } from "../../services/runtime";
+import { accountApi, authNavigation, ledgerStatisticsApi } from "../../services/runtime";
 import { restoreSession } from "../../session/session";
 import { wechatStorage } from "../../storage/wechat-storage";
 
@@ -31,7 +29,6 @@ interface AccountRow {
   readonly kindLabel: string;
   readonly balanceLabel: string;
   readonly balanceToneClass: string;
-  readonly negativeHint: string;
 }
 
 Page({
@@ -40,7 +37,6 @@ Page({
   archiveNoticeAccountId: null as number | null,
   accounts: [] as Account[],
   summaryGeneration: 0,
-  fabKind: "EXPENSE" as EntryKind,
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
@@ -59,8 +55,6 @@ Page({
         incomeTone: "money-zero",
         expenseTone: "money-zero",
     fabOpen: false,
-    fabPicking: false,
-    fabAccounts: [] as { id: number; name: string }[],
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -119,7 +113,6 @@ Page({
         hasArchived: archived.length > 0,
         errorMessage: "",
         refreshError: "",
-        fabAccounts: route.accounts.map((account) => ({ id: account.id, name: account.name })),
       });
       this.acknowledgeArchive(route.accounts);
       void this.loadSummary();
@@ -187,31 +180,17 @@ Page({
   },
 
   onToggleFab() {
-    this.setData({ fabOpen: !this.data.fabOpen, fabPicking: false });
+    this.setData({ fabOpen: !this.data.fabOpen });
   },
 
   onFabExpense() { this.beginEntry("EXPENSE"); },
   onFabIncome() { this.beginEntry("INCOME"); },
   onFabTransfer() { this.beginEntry("TRANSFER"); },
 
-  onPickAccount(event: WechatMiniprogram.BaseEvent) {
-    const id = Number(event.currentTarget.dataset["id"]);
-    const account = this.accounts.find((item) => item.id === id);
-    if (account === undefined || this.loadGuard.loggingOut) return;
-    this.setData({ fabOpen: false, fabPicking: false });
-    wx.navigateTo({ url: entryPath(this.fabKind, account) });
-  },
-
   beginEntry(kind: EntryKind) {
     if (this.loadGuard.loggingOut || this.accounts.length === 0) return;
-    this.fabKind = kind;
-    const only = this.accounts.length === 1 ? this.accounts[0] : undefined;
-    if (only !== undefined) {
-      this.setData({ fabOpen: false, fabPicking: false });
-      wx.navigateTo({ url: entryPath(kind, only) });
-      return;
-    }
-    this.setData({ fabOpen: true, fabPicking: true });
+    this.setData({ fabOpen: false });
+    wx.navigateTo({ url: entryChooserPath(kind) });
   },
 
   async loadSummary() {
@@ -235,19 +214,6 @@ Page({
     }
   },
 
-  async onLogout() {
-    if (!beginLogout(this.loadGuard)) {
-      return;
-    }
-    this.setData({ loggingOut: true, logoutErrorMessage: "" });
-    try {
-      await authApi.logout();
-      authNavigation.enterLogin();
-    } catch {
-      endLogout(this.loadGuard);
-      this.setData(logoutFailureView({ ...this.data, loggingOut: false }));
-    }
-  },
 });
 
 function toRow(account: Account): AccountRow {
@@ -257,6 +223,5 @@ function toRow(account: Account): AccountRow {
     kindLabel: accountKindLabel(account.kind),
     balanceLabel: formatCurrentBalance(account),
     balanceToneClass: moneyToneClass(account.currentBalance),
-    negativeHint: shouldWarnNegativeBalance(account) ? "余额为负，仍可继续记账" : "",
   };
 }

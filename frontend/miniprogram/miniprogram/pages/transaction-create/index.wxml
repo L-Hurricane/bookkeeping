@@ -3,10 +3,16 @@
   <button bindtap="onBackHome">返回</button>
 </view>
 <view class="page" wx:else>
+  <view class="group">
   <view class="types {{formLocked ? 'locked' : ''}}">
     <text class="type {{type === 'EXPENSE' ? 'active' : ''}}" data-type="EXPENSE" bindtap="onType">支出</text>
     <text class="type {{type === 'INCOME' ? 'active' : ''}}" data-type="INCOME" bindtap="onType">收入</text>
   </view>
+  <text class="amount-label">金额</text>
+  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
+  <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
+  </view>
+  <view class="group">
   <text class="label">资金账户</text>
   <view wx:if="{{accountPhase === 'loading'}}"><text class="hint">正在读取账户</text></view>
   <view wx:elif="{{accountPhase === 'error'}}">
@@ -15,13 +21,11 @@
   </view>
   <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenAccounts">{{accountText}} ></view>
   <text class="error" wx:if="{{accountError && accountPhase === 'ready'}}">{{accountError}}</text>
-  <text class="amount-label">金额</text>
-  <input class="amount" type="text" placeholder="0.00" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmountInput" bindblur="onAmountBlur" />
-  <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
   <text class="label">名称</text>
   <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
+  </view>
+  <view class="group">
   <text class="label">分类</text>
-  <text class="hint">只能选择当前末级分类，一级到三级都可以。</text>
   <view wx:if="{{categoryPhase === 'loading'}}"><text class="hint">正在读取分类</text></view>
   <view wx:elif="{{categoryPhase === 'error'}}">
     <text class="error">分类加载失败</text>
@@ -30,7 +34,6 @@
   </view>
   <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
   <text class="label">标签</text>
-  <text class="hint">收入和支出共用标签。可以同时选择上级和下级，互不影响。</text>
   <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
   <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
     <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
@@ -47,26 +50,38 @@
     </block>
     <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
   </view>
+  </view>
+  <view class="group">
   <text class="label">交易时间</text>
   <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTime">{{businessTimeText}} ></view>
   <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
   <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
   <text class="label">备注</text>
   <input class="field" type="text" value="{{remark}}" disabled="{{formLocked}}" bindinput="onRemarkInput" />
+  </view>
   <text class="error" wx:if="{{submitError}}">{{submitError}}</text>
   <text class="hint" wx:if="{{uncertain}}">{{uncertainHint}}</text>
   <button wx:if="{{uncertain}}" bindtap="onRetryConfirm">重试确认</button>
   <view class="actions">
     <button class="cancel" bindtap="onCancel">取消</button>
-    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存</button>
+    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">{{type === 'INCOME' ? '保存收入' : '保存支出'}}</button>
   </view>
   <view class="mask" wx:if="{{accountSelectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseAccounts"></view>
-    <view class="panel">
-      <scroll-view class="panel-list" scroll-y>
-        <view class="choice" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseAccount">{{item.label}}</view>
+    <view class="panel account-panel">
+      <text class="editor-title">选择资金账户</text>
+      <input class="field" type="text" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
+      <scroll-view class="account-list" scroll-y style="height: {{accountSheetHeight}}rpx">
+        <view class="account-option" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseAccount">
+          <view class="account-copy">
+            <text class="account-name">{{item.name}}</text>
+            <text class="account-kind">{{item.kindLabel}}</text>
+          </view>
+          <text class="account-balance {{item.balanceTone}}">{{item.balanceLabel}}</text>
+          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
+        </view>
       </scroll-view>
-      <button bindtap="onCloseAccounts">关闭</button>
+      <button class="cancel" bindtap="onCloseAccounts">取消</button>
     </view>
   </view>
   <view class="mask" wx:if="{{selectorOpen}}" catchtouchmove="onHold">

@@ -82,7 +82,9 @@ Page({
   },
 
   onLoad(query: Record<string, string | undefined>) {
-    const context = parseTransferCreateContext(query);
+    const context = query.choose === "1"
+      ? { sourceAccountId: 0, accountCreatedTime: "" }
+      : parseTransferCreateContext(query);
     if (context === null) {
       this.screen = "invalid";
       this.setData({ screen: "invalid" });
@@ -351,7 +353,8 @@ Page({
       if (!this.loadGuard.pageAlive || this.save.attempt !== attempt) {
         return;
       }
-      this.save = applyTransferCreateResult(this.save, transfer, context.sourceAccountId);
+      const handoffAccountId = context.sourceAccountId > 0 ? context.sourceAccountId : this.fromAccountId;
+      this.save = applyTransferCreateResult(this.save, transfer, handoffAccountId);
     } catch (error) {
       if (!this.loadGuard.pageAlive || this.save.attempt !== attempt) {
         return;
