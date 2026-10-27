@@ -20,7 +20,6 @@ import { routeBootstrap } from "../../navigation/startup";
 import { isUnauthorized } from "../../services/ledger";
 import { accountApi, authApi, authNavigation } from "../../services/runtime";
 import { restoreSession } from "../../session/session";
-import { ledgerStatisticsEntryPath } from "../../statistics/drilldown";
 import { wechatStorage } from "../../storage/wechat-storage";
 
 interface AccountRow {
@@ -160,13 +159,6 @@ Page({
       return;
     }
     wx.navigateTo({ url: accountArchivePath() });
-  },
-
-  onOpenStatistics() {
-    if (this.loadGuard.loggingOut) {
-      return;
-    }
-    wx.navigateTo({ url: ledgerStatisticsEntryPath() });
   },
 
   async onLogout() {

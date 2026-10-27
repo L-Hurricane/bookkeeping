@@ -6,7 +6,6 @@
   </block>
   <block wx:else>
     <view class="toolbar">
-      <button class="link" disabled="{{loggingOut}}" bindtap="onOpenStatistics">统计</button>
       <button class="link" disabled="{{loggingOut}}" bindtap="onCreateAccount">创建账户</button>
       <button class="link" disabled="{{loggingOut}}" bindtap="onOpenArchive">归档账户</button>
     </view>

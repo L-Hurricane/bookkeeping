@@ -47,7 +47,7 @@ describe("s5-t06 miniprogram gate", () => {
 
   it("keeps the account-home statistics path on account monthly analysis", () => {
     const homeStatistics = handler(accountHome, "onStatistics");
-    assert.equal(homeStatistics.includes("statisticsPagePath(this.accountId, this.selectedMonth, this.accountCreatedTime)"), true);
+    assert.equal(homeStatistics.includes("wx.switchTab({ url: accountStatisticsTarget(this.accountId) })"), true);
     assert.equal(homeStatistics.includes("ledgerAnalysisPagePath"), false);
     const entry = statisticsPagePath(1001, "2026-10", "2020-01-01T00:00:00+08:00");
     assert.equal(entry.startsWith("/pages/statistics/index?accountId=1001&month=2026-10"), true);
@@ -68,7 +68,7 @@ describe("s5-t06 miniprogram gate", () => {
     assert.equal(ledgerPage.includes("analysisGenerateMessage(error)"), true);
     assert.equal(analysisGenerateMessage(new ApiError(409, "QUOTA_EXCEEDED", "server")), ANALYSIS_QUOTA);
     assert.equal(analysisGenerateMessage(new ApiError(409, "EMPTY_MONTH", "server")), "当前月份没有可分析的收支记录。所指是这个月的账本还没有收入或支出。");
-    assert.equal(analysisGenerateMessage(new ApiError(409, "EMPTY_PERIOD", "server")), "分析没有完成。这不是账本数据出错。");
+    assert.equal(analysisGenerateMessage(new ApiError(409, "EMPTY_PERIOD", "server")), "当前期间没有可分析的收支记录。所指是这个期间的账本还没有收入或支出。");
     assert.equal(analysisGenerateMessage(new ApiError(502, "GENERATION_FAILED", "server")), "分析没有完成。这不是账本数据出错。");
   });
 

@@ -10,6 +10,7 @@ export const ANALYSIS_IN_PROGRESS = "正在分析。";
 export const ANALYSIS_FAILED = "分析没有完成。这不是账本数据出错。";
 export const ANALYSIS_NONE = "这个月还没有分析。";
 export const ANALYSIS_EMPTY_MONTH = "当前月份没有可分析的收支记录。所指是这个月的账本还没有收入或支出。";
+export const ANALYSIS_EMPTY_PERIOD = "当前期间没有可分析的收支记录。所指是这个期间的账本还没有收入或支出。";
 export const ANALYSIS_REFRESH = "月份数据已变化，请重新加载后再分析。";
 export const ANALYSIS_QUOTA = "今日成功分析次数已用完。";
 export const ANALYSIS_REUSED = "已沿用当前账本对应的分析结果。";
@@ -174,6 +175,9 @@ export function analysisGenerateMessage(error: unknown): string {
     }
     if (error.code === "EMPTY_MONTH") {
       return ANALYSIS_EMPTY_MONTH;
+    }
+    if (error.code === "EMPTY_PERIOD") {
+      return ANALYSIS_EMPTY_PERIOD;
     }
     if (error.code === "GENERATION_FAILED" && error.status === 504) {
       return ANALYSIS_TIMEOUT;

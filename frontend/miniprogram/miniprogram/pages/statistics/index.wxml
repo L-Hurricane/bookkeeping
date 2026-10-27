@@ -27,9 +27,9 @@
   <button wx:if="{{showAnalysis}}" class="analysis-entry" bindtap="onOpenAnalysis">AI 分析本月</button>
   <button wx:else class="analysis-entry" bindtap="onOpenLedgerAnalysis">AI 分析</button>
   <view class="choices">
-    <text class="choice {{module === 'NET' ? 'selected' : ''}}" data-module="NET" bindtap="onSelectModule">净资产</text>
-    <text class="choice {{module === 'EXPENSE' ? 'selected' : ''}}" data-module="EXPENSE" bindtap="onSelectModule">支出</text>
-    <text class="choice {{module === 'INCOME' ? 'selected' : ''}}" data-module="INCOME" bindtap="onSelectModule">收入</text>
+    <text class="choice {{module === 'NET' ? 'selected' : ''}}" data-module="NET" bindtap="onSelectModule">账本净值</text>
+    <text class="choice {{module === 'EXPENSE' ? 'selected' : ''}}" data-module="EXPENSE" bindtap="onSelectModule">支出分析</text>
+    <text class="choice {{module === 'INCOME' ? 'selected' : ''}}" data-module="INCOME" bindtap="onSelectModule">收入分析</text>
   </view>
   <text class="status" wx:if="{{phase === 'loading'}}">正在读取统计</text>
   <text class="status" wx:elif="{{phase === 'choose'}}">{{errorMessage}}</text>
@@ -38,7 +38,7 @@
     <button bindtap="onRetry">重新加载</button>
   </block>
   <block wx:elif="{{phase === 'ready' && module === 'NET'}}">
-    <text class="note">历史时点净资产按业务时间计算，不是包含未来记录的当前账面余额。</text>
+    <text class="note">账本净值按业务时间计算，不是包含未来记录的当前账面余额。</text>
     <view class="summary">
       <view class="summary-item">
         <text class="label">期初</text>
@@ -62,7 +62,11 @@
   <block wx:elif="{{phase === 'ready'}}">
     <text class="section {{netTone}}">合计 {{netLabel}}</text>
     <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
-    <text class="section">分类</text>
+    <view class="choices">
+      <text class="choice {{breakdown === 'CATEGORY' ? 'selected' : ''}}" data-breakdown="CATEGORY" bindtap="onSelectBreakdown">分类</text>
+      <text class="choice {{breakdown === 'TAG' ? 'selected' : ''}}" data-breakdown="TAG" bindtap="onSelectBreakdown">标签</text>
+    </view>
+    <block wx:if="{{breakdown === 'CATEGORY'}}">
     <view class="row depth-{{item.depth}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
       <view class="row-main">
         <text class="row-title">{{item.title}}</text>
@@ -70,7 +74,8 @@
       </view>
       <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
     </view>
-    <text class="section">标签</text>
+    </block>
+    <block wx:else>
     <text class="note">标签按当前标签树汇总，可以重叠，占比分母是全部收入或支出净额。</text>
     <button wx:if="{{selectedTagCount > 0}}" bindtap="onOpenSelectedTags">查看所选标签</button>
     <view class="row depth-{{item.depth}}" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
@@ -81,5 +86,6 @@
       </view>
       <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
     </view>
+    </block>
   </block>
 </view>

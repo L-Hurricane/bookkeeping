@@ -1,0 +1,5 @@
+<view class="page">
+  <text class="note">分类和标签属于整个账本，不跟随某一个账户。</text>
+  <button bindtap="onOpenCategories">分类管理</button>
+  <button bindtap="onOpenTags">标签管理</button>
+</view>

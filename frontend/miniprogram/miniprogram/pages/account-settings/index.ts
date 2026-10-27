@@ -77,20 +77,6 @@ Page({
     wx.navigateBack();
   },
 
-  onOpenCategories() {
-    if (this.data.submitting) {
-      return;
-    }
-    wx.navigateTo({ url: "/pages/category-manage/index" });
-  },
-
-  onOpenTags() {
-    if (this.data.submitting) {
-      return;
-    }
-    wx.navigateTo({ url: "/pages/tag-manage/index" });
-  },
-
   onNameInput(event: WechatMiniprogram.Input) {
     this.setData({ name: event.detail.value, errorMessage: "" });
   },

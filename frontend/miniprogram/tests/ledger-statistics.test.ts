@@ -18,13 +18,15 @@ import { flowRows } from "../miniprogram/statistics/ledger-view";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 
 describe("ledger statistics", () => {
-  it("shows a statistics entry on the ledger home and returns by the existing page stack", () => {
+  it("opens statistics from the frozen tab instead of a ledger-home button", () => {
+    const app = readFileSync(new URL("../miniprogram/app.json", import.meta.url), "utf8");
     const page = readFileSync(new URL("../miniprogram/pages/account-list/index.wxml", import.meta.url), "utf8");
-    const source = readFileSync(new URL("../miniprogram/pages/account-list/index.ts", import.meta.url), "utf8");
-    assert.match(page, /bindtap="onOpenStatistics">统计<\/button>/);
-    assert.match(source, /wx\.navigateTo\(\{ url: ledgerStatisticsEntryPath\(\) \}\)/);
+    assert.equal(app.includes('"text": "账本"'), true);
+    assert.equal(app.includes('"text": "统计"'), true);
+    assert.equal(app.includes('"text": "我的"'), true);
+    assert.equal(app.includes('"pagePath": "pages/statistics/index"'), true);
     assert.equal(ledgerStatisticsEntryPath(), "/pages/statistics/index");
-    assert.equal(page.includes("tabBar"), false);
+    assert.equal(page.includes("onOpenStatistics"), false);
   });
 
   it("requests the Beijing preset and selected accounts without using a JavaScript amount", async () => {

@@ -15,11 +15,13 @@ import {
   type LedgerReport,
 } from "../../statistics/ledger-contract";
 import { flowRows, type LedgerAmountRow } from "../../statistics/ledger-view";
+import { takeStatisticsAccount } from "../../statistics/tab-context";
 
 const LOAD_ERROR = "统计暂时没有读取成功";
 const CONTRACT_ERROR = "统计响应无法识别";
 
 type ModuleName = "NET" | LedgerFlowType;
+type BreakdownName = "CATEGORY" | "TAG";
 
 interface PickerAccount {
   readonly id: number;
@@ -39,6 +41,7 @@ Page({
   aiAccountId: null as number | null,
   report: null as LedgerReport | null,
   module: "NET" as ModuleName,
+  breakdown: "CATEGORY" as BreakdownName,
   picker: [] as PickerAccount[],
   selectedTagIds: [] as number[],
 
@@ -48,6 +51,7 @@ Page({
     preset: "MONTH" as LedgerPreset,
     scope: "ACTIVE" as LedgerAccountScope,
     module: "NET" as ModuleName,
+    breakdown: "CATEGORY" as BreakdownName,
     rangeLabel: "",
     picker: [] as PickerAccount[],
     openingLabel: "",
@@ -72,6 +76,20 @@ Page({
     const accountId = Number(query.accountId);
     this.aiAccountId = Number.isSafeInteger(accountId) && accountId > 0 ? accountId : null;
     void this.prepare();
+  },
+
+  onShow() {
+    const accountId = takeStatisticsAccount();
+    if (accountId === undefined) return;
+    this.aiAccountId = accountId;
+    if (this.report !== null) this.publish();
+    else this.setData({ showAnalysis: accountId !== null });
+  },
+
+  onTabItemTap() {
+    this.aiAccountId = null;
+    if (this.report !== null) this.publish();
+    else this.setData({ showAnalysis: false });
   },
 
   onUnload() {
@@ -139,6 +157,13 @@ Page({
     const moduleName = event.currentTarget.dataset["module"];
     if (moduleName !== "NET" && moduleName !== "EXPENSE" && moduleName !== "INCOME") return;
     this.module = moduleName;
+    this.publish();
+  },
+
+  onSelectBreakdown(event: WechatMiniprogram.BaseEvent) {
+    const breakdown = event.currentTarget.dataset["breakdown"];
+    if (breakdown !== "CATEGORY" && breakdown !== "TAG") return;
+    this.breakdown = breakdown;
     this.publish();
   },
 
@@ -244,7 +269,7 @@ Page({
       netTone: this.module === "NET" ? "" : moneyToneClass(flow.net),
       categories,
       tags,
-      emptyFlow: this.module !== "NET" && flow.net === "0.00" && categories.length === 0,
+      emptyFlow: this.module !== "NET" && flow.net === "0.00" && (this.breakdown === "TAG" ? tags.length === 0 : categories.length === 0),
       selectedTagCount: this.selectedTagIds.length,
       showAnalysis: this.aiAccountId !== null,
       customFrom: this.customFrom,
@@ -253,7 +278,13 @@ Page({
   },
 
   chrome() {
-    return { preset: this.preset, scope: this.scope, module: this.module, picker: this.scope === "SELECTED" ? this.picker : [] };
+    return {
+      preset: this.preset,
+      scope: this.scope,
+      module: this.module,
+      breakdown: this.breakdown,
+      picker: this.scope === "SELECTED" ? this.picker : [],
+    };
   },
 
   currentQuery(): LedgerQuery | null {

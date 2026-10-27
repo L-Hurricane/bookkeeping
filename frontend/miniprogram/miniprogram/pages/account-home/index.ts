@@ -55,7 +55,7 @@ import {
   transferCreatePath,
   transferDetailPath,
 } from "../../transfer/navigation";
-import { statisticsPagePath } from "../../statistics/drilldown";
+import { accountStatisticsTarget } from "../../statistics/tab-context";
 import { canOpenStatistics } from "../../statistics/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
@@ -308,9 +308,7 @@ Page({
     if (!canOpenStatistics(this.data.phase, this.loadGuard.loggingOut) || this.selectedMonth.length === 0 || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
-    wx.navigateTo({
-      url: statisticsPagePath(this.accountId, this.selectedMonth, this.accountCreatedTime),
-    });
+    wx.switchTab({ url: accountStatisticsTarget(this.accountId) });
   },
 
   onAdjust() {

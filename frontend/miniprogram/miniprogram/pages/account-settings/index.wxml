@@ -22,8 +22,6 @@
     <button class="cancel" disabled="{{submitting}}" bindtap="onBack">取消</button>
     <button class="save" disabled="{{submitting}}" bindtap="onSave">保存名称</button>
   </view>
-  <button disabled="{{submitting}}" bindtap="onOpenCategories">分类管理</button>
-  <button disabled="{{submitting}}" bindtap="onOpenTags">标签管理</button>
   <button wx:if="{{lifecycle === 'ACTIVE'}}" class="archive" disabled="{{submitting}}" bindtap="onArchive">归档账户</button>
   <button wx:else class="restore" disabled="{{submitting}}" bindtap="onRestore">恢复账户</button>
   <button wx:if="{{lifecycle === 'ARCHIVED'}}" class="permanent-delete" disabled="{{submitting}}" bindtap="onPermanentDelete">永久删除</button>
