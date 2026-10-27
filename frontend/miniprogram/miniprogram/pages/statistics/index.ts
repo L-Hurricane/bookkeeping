@@ -14,7 +14,8 @@ import {
   type LedgerQuery,
   type LedgerReport,
 } from "../../statistics/ledger-contract";
-import { flowRows, type LedgerAmountRow } from "../../statistics/ledger-view";
+import { flowRows, pointHeights, ringSegments, type LedgerAmountRow, type RingSegment } from "../../statistics/ledger-view";
+import { allTransactionsPath } from "../../ledger/feed-contract";
 import { takeStatisticsAccount } from "../../statistics/tab-context";
 
 const LOAD_ERROR = "统计暂时没有读取成功";
@@ -44,6 +45,7 @@ Page({
   breakdown: "CATEGORY" as BreakdownName,
   picker: [] as PickerAccount[],
   selectedTagIds: [] as number[],
+  ringSegments: [] as RingSegment[],
 
   data: {
     phase: "loading" as "loading" | "ready" | "error" | "choose",
@@ -60,7 +62,7 @@ Page({
     openingTone: "",
     closingTone: "",
     changeTone: "",
-    points: [] as Array<{ date: string; amountLabel: string; tone: string }>,
+    points: [] as Array<{ date: string; amountLabel: string; tone: string; height: number }>,
     netLabel: "",
     netTone: "",
     categories: [] as LedgerAmountRow[],
@@ -70,6 +72,9 @@ Page({
     showAnalysis: false,
     customFrom: "",
     customTo: "",
+    moreOpen: false,
+    ringNote: "",
+    ringSegments: [] as RingSegment[],
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -116,7 +121,8 @@ Page({
 
   onSelectPreset(event: WechatMiniprogram.BaseEvent) {
     const preset = event.currentTarget.dataset["preset"];
-    if (preset !== "MONTH" && preset !== "QUARTER" && preset !== "YEAR" && preset !== "CUSTOM") return;
+    if (preset !== "MONTH" && preset !== "QUARTER" && preset !== "YEAR"
+      && preset !== "ROLLING_MONTH" && preset !== "ROLLING_3_MONTHS" && preset !== "ROLLING_YEAR" && preset !== "CUSTOM") return;
     if (preset === "CUSTOM" && (this.customFrom.length === 0 || this.customTo.length === 0)) {
       if (this.report === null) return;
       this.customFrom = this.report.from;
@@ -124,6 +130,24 @@ Page({
     }
     this.preset = preset;
     void this.load();
+  },
+
+  onToggleMore() {
+    this.setData({ moreOpen: !this.data.moreOpen });
+  },
+
+  onOpenPeriod() {
+    const report = this.report;
+    if (report === null) return;
+    const accountIds = this.scope === "SELECTED" ? this.checkedIds.join(",") : "";
+    wx.navigateTo({
+      url: allTransactionsPath({
+        from: report.from,
+        to: report.to,
+        accountScope: this.scope,
+        accountIds,
+      }),
+    });
   },
 
   onCustomFrom(event: WechatMiniprogram.PickerChange) {
@@ -245,6 +269,9 @@ Page({
     const net = report.netWorth;
     const flow = this.module === "INCOME" ? report.income : report.expense;
     const categories = this.module === "NET" ? [] : flowRows(flow, "category");
+    const ring = this.module !== "NET" && this.breakdown === "CATEGORY" ? ringSegments(flow) : null;
+    this.ringSegments = ring ?? [];
+    const heights = pointHeights(net.points.map((point) => point.amount));
     const tags = this.module === "NET" ? [] : flowRows(flow, "tag").map((row) => ({
       ...row,
       selected: row.drillKind === "tag" && this.selectedTagIds.includes(row.drillId),
@@ -260,11 +287,16 @@ Page({
       openingTone: moneyToneClass(net.opening),
       closingTone: moneyToneClass(net.closing),
       changeTone: moneyToneClass(net.change),
-      points: net.points.map((point) => ({
+      points: net.points.map((point, index) => ({
         date: point.date,
         amountLabel: formatMoneyLabel(point.amount),
         tone: moneyToneClass(point.amount),
+        height: heights[index] ?? 24,
       })),
+      ringNote: ring === null && this.module !== "NET" && this.breakdown === "CATEGORY"
+        ? "净额含负数或为零，环形图不按 100% 构成展示。"
+        : "",
+      ringSegments: this.ringSegments,
       netLabel: this.module === "NET" ? "" : formatMoneyLabel(flow.net),
       netTone: this.module === "NET" ? "" : moneyToneClass(flow.net),
       categories,
@@ -274,6 +306,44 @@ Page({
       showAnalysis: this.aiAccountId !== null,
       customFrom: this.customFrom,
       customTo: this.customTo,
+    }, () => this.drawRing());
+  },
+
+  drawRing() {
+    const segments = this.ringSegments;
+    if (segments.length === 0) return;
+    wx.createSelectorQuery().in(this).select("#category-ring").fields({ node: true, size: true }).exec((result) => {
+      const node = result?.[0] as { node?: WechatMiniprogram.Canvas; width?: number; height?: number } | undefined;
+      if (node?.node === undefined || node.width === undefined || node.height === undefined) return;
+      const canvas = node.node;
+      const ctx = canvas.getContext("2d");
+      const dpr = wx.getWindowInfo().pixelRatio || 1;
+      canvas.width = node.width * dpr;
+      canvas.height = node.height * dpr;
+      ctx.scale(dpr, dpr);
+      const colors = ["#c23a2b", "#1f7a4c", "#3d5a80", "#c47b2b", "#6b5b95", "#8a8a8a"];
+      let start = -Math.PI / 2;
+      const cx = node.width / 2;
+      const cy = node.height / 2;
+      const radius = Math.min(node.width, node.height) / 2 - 8;
+      for (let index = 0; index < segments.length; index += 1) {
+        const segment = segments[index];
+        if (segment === undefined) continue;
+        const weight = Number(segment.share);
+        if (!Number.isFinite(weight) || weight <= 0) continue;
+        const sweep = (weight / 100) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, start, start + sweep);
+        ctx.closePath();
+        ctx.fillStyle = colors[index % colors.length] ?? "#8a8a8a";
+        ctx.fill();
+        start += sweep;
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.62, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
     });
   },
 

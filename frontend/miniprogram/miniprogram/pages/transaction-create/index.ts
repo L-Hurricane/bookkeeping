@@ -141,6 +141,10 @@ Page({
     this.accountId = context.accountId;
     this.accountCreatedTime = context.accountCreatedTime;
     this.form = createTransactionForm(new Date());
+    const initialType = transactionType(query.type);
+    if (initialType !== null && initialType !== this.form.type) {
+      this.form = switchCreateType(this.form, initialType).form;
+    }
     this.publishForm();
     wx.enableAlertBeforeUnload({ message: "放弃本次记账？" });
     void this.loadAccounts();

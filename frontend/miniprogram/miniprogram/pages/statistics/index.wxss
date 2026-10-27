@@ -1,3 +1,34 @@
+.trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 4rpx;
+  height: 96rpx;
+  margin: 16rpx 0;
+}
+
+.trend-bar {
+  flex: 1;
+  min-width: 4rpx;
+  background: #3d5a80;
+}
+
+.ring {
+  width: 280rpx;
+  height: 280rpx;
+  margin: 16rpx auto;
+}
+
+.bar-track {
+  height: 8rpx;
+  margin-top: 8rpx;
+  background: #eeeeee;
+}
+
+.bar-fill {
+  height: 8rpx;
+  background: #3d5a80;
+}
+
 .page {
   min-height: 100vh;
   padding: 32rpx 32rpx 48rpx;

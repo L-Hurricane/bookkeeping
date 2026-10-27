@@ -10,6 +10,14 @@
       <button class="link" disabled="{{loggingOut}}" bindtap="onOpenArchive">归档账户</button>
     </view>
     <text class="toolbar-hint">正常账户总览。归档账户不在此列表，可从归档账户查看历史并恢复。</text>
+    <view class="summary" wx:if="{{summaryReady}}">
+      <text>本月账本净值 {{netLabel}}</text>
+      <text>本月收入 {{incomeLabel}}</text>
+      <text>本月支出 {{expenseLabel}}</text>
+    </view>
+    <text class="toolbar-hint" wx:if="{{summaryReady}}">本月账本净值按业务时间计算到本月结束，不是包含未来记录的当前账面余额。</text>
+    <text class="error" wx:if="{{summaryError}}">{{summaryError}}</text>
+    <button class="link" bindtap="onOpenAll">全部交易</button>
     <text class="error" wx:if="{{refreshError}}">{{refreshError}}</text>
     <button wx:if="{{refreshError}}" bindtap="onRetry">重新加载</button>
     <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">正常账户列表是空的。归档账户仍保留余额和历史。</text>
@@ -24,6 +32,17 @@
       </view>
     </view>
   </block>
+  <view class="fab" wx:if="{{rows.length > 0 && !loggingOut}}">
+    <view class="fab-accounts" wx:if="{{fabPicking}}">
+      <view class="fab-account" wx:for="{{fabAccounts}}" wx:key="id" data-id="{{item.id}}" bindtap="onPickAccount">{{item.name}}</view>
+    </view>
+    <view class="fab-menu" wx:if="{{fabOpen}}">
+      <text bindtap="onFabExpense">支出</text>
+      <text bindtap="onFabIncome">收入</text>
+      <text bindtap="onFabTransfer">转账</text>
+    </view>
+    <text class="fab-button" bindtap="onToggleFab">记</text>
+  </view>
   <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
   <button class="logout" disabled="{{loggingOut}}" bindtap="onLogout">退出登录</button>
 </view>

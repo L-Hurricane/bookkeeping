@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/account-list/index",
+    "pages/all-transactions/index",
     "pages/bootstrap/index",
     "pages/login/index",
     "pages/account-init/index",

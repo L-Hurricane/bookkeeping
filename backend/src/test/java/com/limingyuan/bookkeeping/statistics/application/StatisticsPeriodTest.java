@@ -23,6 +23,11 @@ class StatisticsPeriodTest {
         assertEquals(LocalDate.parse("2026-12-31"), StatisticsPeriod.resolve("QUARTER", null, null, NOON).to());
         assertEquals(LocalDate.parse("2026-01-01"), StatisticsPeriod.resolve("YEAR", null, null, NOON).from());
         assertEquals(LocalDate.parse("2026-12-31"), StatisticsPeriod.resolve("YEAR", null, null, NOON).to());
+        assertEquals(LocalDate.parse("2026-09-26"), StatisticsPeriod.resolve("ROLLING_MONTH", null, null, NOON).from());
+        assertEquals(LocalDate.parse("2026-10-26"), StatisticsPeriod.resolve("ROLLING_MONTH", null, null, NOON).to());
+        assertEquals(LocalDate.parse("2026-07-26"), StatisticsPeriod.resolve("ROLLING_3_MONTHS", null, null, NOON).from());
+        assertEquals(LocalDate.parse("2025-10-26"), StatisticsPeriod.resolve("ROLLING_YEAR", null, null, NOON).from());
+        assertEquals(LocalDate.parse("2026-10-26"), StatisticsPeriod.resolve("ROLLING_YEAR", null, null, NOON).to());
     }
 
     @Test

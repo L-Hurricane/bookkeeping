@@ -18,8 +18,6 @@
       <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
       <text class="hint" wx:if="{{negativeBalanceHint}}">{{negativeBalanceHint}}</text>
       <button class="adjust" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onAdjust">余额调整</button>
-      <button class="transfer" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onTransfer">转账</button>
-      <button class="create" wx:if="{{!archived}}" disabled="{{loggingOut}}" bindtap="onCreate">记一笔</button>
     </view>
     <view class="month">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>
@@ -42,7 +40,16 @@
         <text class="{{surplusToneClass}}">{{surplusLabel}}</text>
       </view>
     </view>
+    <text wx:if="{{monthCloseLabel}}">{{monthCloseCaption}} {{monthCloseLabel}}</text>
     <text class="count" wx:if="{{phase === 'ready'}}">{{countLabel}}</text>
+    <view class="fab" wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}">
+      <view class="fab-menu" wx:if="{{fabOpen}}">
+        <text bindtap="onFabExpense">支出</text>
+        <text bindtap="onFabIncome">收入</text>
+        <text bindtap="onFabTransfer">转账</text>
+      </view>
+      <text class="fab-button" bindtap="onToggleFab">记</text>
+    </view>
     <text class="status" wx:if="{{phase === 'ledger-loading'}}">正在读取流水</text>
     <block wx:elif="{{phase === 'ledger-error'}}">
       <text class="error">{{errorMessage}}</text>

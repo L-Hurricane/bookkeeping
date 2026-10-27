@@ -3,9 +3,13 @@
     <text class="choice {{preset === 'MONTH' ? 'selected' : ''}}" data-preset="MONTH" bindtap="onSelectPreset">本月</text>
     <text class="choice {{preset === 'QUARTER' ? 'selected' : ''}}" data-preset="QUARTER" bindtap="onSelectPreset">本季度</text>
     <text class="choice {{preset === 'YEAR' ? 'selected' : ''}}" data-preset="YEAR" bindtap="onSelectPreset">本年</text>
-    <text class="choice {{preset === 'CUSTOM' ? 'selected' : ''}}" data-preset="CUSTOM" bindtap="onSelectPreset">自定义</text>
+    <text class="choice {{preset === 'ROLLING_MONTH' ? 'selected' : ''}}" data-preset="ROLLING_MONTH" bindtap="onSelectPreset">近1月</text>
+    <text class="choice {{preset === 'ROLLING_3_MONTHS' ? 'selected' : ''}}" data-preset="ROLLING_3_MONTHS" bindtap="onSelectPreset">近3月</text>
+    <text class="choice {{preset === 'ROLLING_YEAR' ? 'selected' : ''}}" data-preset="ROLLING_YEAR" bindtap="onSelectPreset">近1年</text>
+    <text class="choice {{moreOpen ? 'selected' : ''}}" bindtap="onToggleMore">更多</text>
   </view>
-  <view class="choices" wx:if="{{preset === 'CUSTOM'}}">
+  <block wx:if="{{moreOpen}}">
+  <view class="choices">
     <picker mode="date" value="{{customFrom}}" bindchange="onCustomFrom">
       <text class="choice">开始 {{customFrom}}</text>
     </picker>
@@ -14,15 +18,16 @@
     </picker>
   </view>
   <view class="choices">
-    <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">正常账户</text>
-    <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">全部账户</text>
-    <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选</text>
+    <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">不含归档</text>
+    <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">包含归档</text>
+    <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
   </view>
   <view wx:if="{{scope === 'SELECTED'}}">
     <view class="choice {{item.checked ? 'selected' : ''}}" wx:for="{{picker}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAccount">
       {{item.name}}{{item.archived ? ' · 已归档' : ''}}
     </view>
   </view>
+  </block>
   <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
   <button wx:if="{{showAnalysis}}" class="analysis-entry" bindtap="onOpenAnalysis">AI 分析本月</button>
   <button wx:else class="analysis-entry" bindtap="onOpenLedgerAnalysis">AI 分析</button>
@@ -54,6 +59,10 @@
       </view>
     </view>
     <text class="section">趋势</text>
+    <view class="trend">
+      <view class="trend-bar" wx:for="{{points}}" wx:key="date" style="height: {{item.height}}rpx"></view>
+    </view>
+    <button bindtap="onOpenPeriod">查看期间交易</button>
     <view class="row" wx:for="{{points}}" wx:key="date">
       <text class="row-title">{{item.date}}</text>
       <text class="amount {{item.tone}}">{{item.amountLabel}}</text>
@@ -67,6 +76,8 @@
       <text class="choice {{breakdown === 'TAG' ? 'selected' : ''}}" data-breakdown="TAG" bindtap="onSelectBreakdown">标签</text>
     </view>
     <block wx:if="{{breakdown === 'CATEGORY'}}">
+    <text class="note" wx:if="{{ringNote}}">{{ringNote}}</text>
+    <canvas type="2d" id="category-ring" class="ring" wx:if="{{ringSegments.length > 0}}"></canvas>
     <view class="row depth-{{item.depth}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
       <view class="row-main">
         <text class="row-title">{{item.title}}</text>
@@ -82,6 +93,7 @@
       <view class="row-main">
         <text class="row-title">{{item.title}}</text>
         <text class="row-detail">{{item.detail}}</text>
+        <view class="bar-track"><view class="bar-fill" style="width: {{item.barPercent}}%"></view></view>
         <text wx:if="{{item.drillKind === 'tag'}}" catchtap="onToggleTag" data-id="{{item.drillId}}">{{item.selected ? '取消多选' : '加入多选'}}</text>
       </view>
       <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>

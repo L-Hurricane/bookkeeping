@@ -7,6 +7,9 @@ import {
 } from "../../account/account";
 import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
+import { entryPath, type EntryKind } from "../../entry/fab";
+import { allTransactionsPath } from "../../ledger/feed-contract";
+import { formatMoneyLabel } from "../../ledger/ledger";
 import {
   accountArchivePath,
   accountCreatePath,
@@ -18,7 +21,7 @@ import {
 import { logoutFailureView } from "../../account/logout-view";
 import { routeBootstrap } from "../../navigation/startup";
 import { isUnauthorized } from "../../services/ledger";
-import { accountApi, authApi, authNavigation } from "../../services/runtime";
+import { accountApi, authApi, authNavigation, ledgerStatisticsApi } from "../../services/runtime";
 import { restoreSession } from "../../session/session";
 import { wechatStorage } from "../../storage/wechat-storage";
 
@@ -35,6 +38,9 @@ Page({
   loadGuard: createLoadGuard(),
   leaveToLogin: false,
   archiveNoticeAccountId: null as number | null,
+  accounts: [] as Account[],
+  summaryGeneration: 0,
+  fabKind: "EXPENSE" as EntryKind,
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
@@ -44,6 +50,14 @@ Page({
     refreshError: "",
     loggingOut: false,
     logoutErrorMessage: "",
+    summaryReady: false,
+    summaryError: "",
+    netLabel: "",
+    incomeLabel: "",
+    expenseLabel: "",
+    fabOpen: false,
+    fabPicking: false,
+    fabAccounts: [] as { id: number; name: string }[],
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -95,14 +109,17 @@ Page({
         this.failLoad(blocking, route.message);
         return;
       }
+      this.accounts = [...route.accounts];
       this.setData({
         phase: "ready",
         rows: route.accounts.map(toRow),
         hasArchived: archived.length > 0,
         errorMessage: "",
         refreshError: "",
+        fabAccounts: route.accounts.map((account) => ({ id: account.id, name: account.name })),
       });
       this.acknowledgeArchive(route.accounts);
+      void this.loadSummary();
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
         return;
@@ -159,6 +176,57 @@ Page({
       return;
     }
     wx.navigateTo({ url: accountArchivePath() });
+  },
+
+  onOpenAll() {
+    if (this.loadGuard.loggingOut) return;
+    wx.navigateTo({ url: allTransactionsPath({}) });
+  },
+
+  onToggleFab() {
+    this.setData({ fabOpen: !this.data.fabOpen, fabPicking: false });
+  },
+
+  onFabExpense() { this.beginEntry("EXPENSE"); },
+  onFabIncome() { this.beginEntry("INCOME"); },
+  onFabTransfer() { this.beginEntry("TRANSFER"); },
+
+  onPickAccount(event: WechatMiniprogram.BaseEvent) {
+    const id = Number(event.currentTarget.dataset["id"]);
+    const account = this.accounts.find((item) => item.id === id);
+    if (account === undefined || this.loadGuard.loggingOut) return;
+    this.setData({ fabOpen: false, fabPicking: false });
+    wx.navigateTo({ url: entryPath(this.fabKind, account) });
+  },
+
+  beginEntry(kind: EntryKind) {
+    if (this.loadGuard.loggingOut || this.accounts.length === 0) return;
+    this.fabKind = kind;
+    const only = this.accounts.length === 1 ? this.accounts[0] : undefined;
+    if (only !== undefined) {
+      this.setData({ fabOpen: false, fabPicking: false });
+      wx.navigateTo({ url: entryPath(kind, only) });
+      return;
+    }
+    this.setData({ fabOpen: true, fabPicking: true });
+  },
+
+  async loadSummary() {
+    const generation = ++this.summaryGeneration;
+    try {
+      const report = await ledgerStatisticsApi.load({ preset: "MONTH", accountScope: "ACTIVE" });
+      if (!canApplyLoadResult(this.loadGuard, this.loadGuard.generation) || generation !== this.summaryGeneration) return;
+      this.setData({
+        summaryReady: true,
+        summaryError: "",
+        netLabel: formatMoneyLabel(report.netWorth.closing),
+        incomeLabel: formatMoneyLabel(report.income.net),
+        expenseLabel: formatMoneyLabel(report.expense.net),
+      });
+    } catch (error) {
+      if (!canApplyLoadResult(this.loadGuard, this.loadGuard.generation) || isUnauthorized(error) || generation !== this.summaryGeneration) return;
+      this.setData({ summaryReady: false, summaryError: "本月汇总暂时没有读取成功" });
+    }
   },
 
   async onLogout() {

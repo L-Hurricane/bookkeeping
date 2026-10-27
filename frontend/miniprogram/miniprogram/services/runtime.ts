@@ -9,6 +9,7 @@ import { createAuthApi, type AuthApi } from "./auth";
 import { createBalanceAdjustmentApi, type BalanceAdjustmentApi } from "./balance-adjustment";
 import { createCategoryApi, type CategoryApi } from "./category";
 import { createLedgerApi, type LedgerApi } from "./ledger";
+import { createLedgerFeedApi, type LedgerFeedApi } from "./ledger-feed";
 import { createLedgerAnalysisApi, type LedgerAnalysisApi } from "./ledger-analysis";
 import { createLedgerStatisticsApi, type LedgerStatisticsApi } from "./ledger-statistics";
 import { createStatisticsApi, type StatisticsApi } from "./statistics";
@@ -40,6 +41,7 @@ const http = createHttpClient({
 export const authApi: AuthApi = createAuthApi(http, wechatStorage);
 export const accountApi: AccountApi = createAccountApi(http);
 export const ledgerApi: LedgerApi = createLedgerApi(http);
+export const ledgerFeedApi: LedgerFeedApi = createLedgerFeedApi(http);
 export const categoryApi: CategoryApi = createCategoryApi(http);
 export const statisticsApi: StatisticsApi = createStatisticsApi(http);
 export const ledgerStatisticsApi: LedgerStatisticsApi = createLedgerStatisticsApi(http);

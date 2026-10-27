@@ -11,6 +11,7 @@ export interface LedgerAmountRow {
   readonly depth: number;
   readonly drillKind: "category" | "uncategorized" | "tag" | "untagged" | "";
   readonly drillId: number;
+  readonly barPercent: number;
   readonly selected: boolean;
 }
 
@@ -77,6 +78,57 @@ function nodeRow(key: string, title: string, count: number, amount: string, shar
     depth,
     drillKind,
     drillId,
+    barPercent: barPercent(share),
     selected: false,
   };
+}
+
+export interface RingSegment {
+  readonly title: string;
+  readonly share: string;
+}
+
+/** Top-level composition only. Returns null when a ring would pretend to be a full non-negative pie. */
+export function ringSegments(flow: LedgerFlow): RingSegment[] | null {
+  if (flow.net.startsWith("-") || flow.net === "0.00") return null;
+  const tops: { title: string; amount: string; share: string | null }[] = flow.categories.map((node) => ({
+    title: node.name,
+    amount: node.amount,
+    share: node.share,
+  }));
+  if (flow.uncategorized !== null) {
+    tops.push({ title: "未分类", amount: flow.uncategorized.amount, share: flow.uncategorized.share });
+  }
+  if (tops.some((item) => item.amount.startsWith("-") || item.share === null)) return null;
+  return tops.filter((item) => item.share !== "0.00").map((item) => ({ title: item.title, share: item.share ?? "0.00" }));
+}
+
+export function pointHeights(amounts: readonly string[]): number[] {
+  const cents = amounts.map(centsOf);
+  if (cents.some((value) => value === null)) return amounts.map(() => 24);
+  const values = cents as number[];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return values.map(() => 24);
+  return values.map((value) => 8 + Math.round(((value - min) / (max - min)) * 72));
+}
+
+function barPercent(share: string | null): number {
+  if (share === null) return 0;
+  const match = /^-?([0-9]+)\.([0-9]{2})$/.exec(share);
+  if (match === null) return 0;
+  const whole = Number(match[1]);
+  const fraction = Number(match[2]);
+  if (!Number.isSafeInteger(whole)) return 0;
+  return Math.min(100, whole + fraction / 100);
+}
+
+function centsOf(amount: string): number | null {
+  const match = /^(-?)([0-9]+)\.([0-9]{2})$/.exec(amount);
+  if (match === null) return null;
+  const whole = Number(match[2]);
+  const fraction = Number(match[3]);
+  if (!Number.isSafeInteger(whole) || !Number.isSafeInteger(whole * 100 + fraction)) return null;
+  const cents = whole * 100 + fraction;
+  return match[1] === "-" ? -cents : cents;
 }

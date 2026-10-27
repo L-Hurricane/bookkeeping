@@ -30,8 +30,11 @@ public final class StatisticsPeriod {
             case "MONTH" -> new Range(name, today.withDayOfMonth(1), today.withDayOfMonth(today.lengthOfMonth()));
             case "QUARTER" -> quarter(today);
             case "YEAR" -> new Range(name, today.withDayOfYear(1), today.withMonth(12).withDayOfMonth(31));
+            case "ROLLING_MONTH" -> new Range(name, today.minusMonths(1), today);
+            case "ROLLING_3_MONTHS" -> new Range(name, today.minusMonths(3), today);
+            case "ROLLING_YEAR" -> new Range(name, today.minusYears(1), today);
             case "CUSTOM" -> custom(from, to);
-            default -> throw new ApiFailure(400, "VALIDATION_FAILED", "时间范围必须为本月、本季度、本年或自定义");
+            default -> throw new ApiFailure(400, "VALIDATION_FAILED", "时间范围必须为本月、本季度、本年、近1月、近3月、近1年或自定义");
         };
     }
 

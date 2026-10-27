@@ -10,7 +10,7 @@ import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout 
 import { moneyToneClass } from "../../account/money-tone";
 import { accountHomePath, accountListPath, accountSettingsPath, parseAccountHomeQuery } from "../../account/navigation";
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
-import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
+import { beijingDate, currentBeijingMonth, formatMonthLabel, monthLastDate, nextMonth, previousMonth } from "../../ledger/month";
 import {
   acceptAdjustmentCreated,
   acceptTransferCreated,
@@ -30,7 +30,7 @@ import {
   type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import { accountApi, authApi, authNavigation, ledgerApi, transactionApi } from "../../services/runtime";
+import { accountApi, authApi, authNavigation, ledgerApi, ledgerStatisticsApi, transactionApi } from "../../services/runtime";
 import { TransactionSearchResponseError } from "../../services/transaction";
 import {
   canApplySearchResult,
@@ -114,6 +114,9 @@ Page({
     logoutErrorMessage: "",
     highlightKey: "",
     locateMiss: "",
+    monthCloseCaption: "",
+    monthCloseLabel: "",
+    fabOpen: false,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -227,8 +230,9 @@ Page({
       return;
     }
     if (!background) {
-      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "" });
+      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "", monthCloseLabel: "", monthCloseCaption: "" });
     }
+    void this.loadMonthClose(month);
     try {
       const ledger = await ledgerApi.getLedger(accountId, month);
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth)) {
@@ -290,12 +294,35 @@ Page({
     }
   },
 
+  onToggleFab() {
+    this.setData({ fabOpen: !this.data.fabOpen });
+  },
+
+  onFabExpense() {
+    this.openTransaction("EXPENSE");
+  },
+
+  onFabIncome() {
+    this.openTransaction("INCOME");
+  },
+
+  onFabTransfer() {
+    this.setData({ fabOpen: false });
+    this.onTransfer();
+  },
+
   onCreate() {
+    this.openTransaction("EXPENSE");
+  },
+
+  openTransaction(type: "EXPENSE" | "INCOME") {
     if (this.archived || !canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
+    this.setData({ fabOpen: false });
+    const path = transactionCreatePath(this.accountId, this.accountCreatedTime);
     wx.navigateTo({
-      url: transactionCreatePath(this.accountId, this.accountCreatedTime),
+      url: type === "INCOME" ? `${path}&type=INCOME` : path,
       events: {
         transactionCreated: (result: unknown) => {
           this.receiveTransactionCreated(result);
@@ -323,6 +350,32 @@ Page({
         },
       },
     });
+  },
+
+  async loadMonthClose(month: string) {
+    const current = currentBeijingMonth(new Date());
+    if (month > current) {
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "" });
+      return;
+    }
+    const to = month === current ? beijingDate(new Date()) : monthLastDate(month);
+    try {
+      const report = await ledgerStatisticsApi.load({
+        preset: "CUSTOM",
+        from: `${month}-01`,
+        to,
+        accountScope: "SELECTED",
+        accountIds: [this.accountId],
+      });
+      if (this.selectedMonth !== month || !this.loadGuard.pageAlive) return;
+      this.setData({
+        monthCloseCaption: month === current ? "截至今天结束" : "月末余额",
+        monthCloseLabel: formatMoneyLabel(report.netWorth.closing),
+      });
+    } catch {
+      if (this.selectedMonth !== month || !this.loadGuard.pageAlive) return;
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "" });
+    }
   },
 
   onTransfer() {

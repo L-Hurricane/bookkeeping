@@ -5,7 +5,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
 const SHARE = /^-?[0-9]+\.[0-9]{2}$/;
 
-export type LedgerPreset = "MONTH" | "QUARTER" | "YEAR" | "CUSTOM";
+export type LedgerPreset = "MONTH" | "QUARTER" | "YEAR" | "ROLLING_MONTH" | "ROLLING_3_MONTHS" | "ROLLING_YEAR" | "CUSTOM";
 export type LedgerAccountScope = "ACTIVE" | "ALL" | "SELECTED";
 export type LedgerFlowType = "INCOME" | "EXPENSE";
 export type LedgerTagMode = "TREE" | "DIRECT";
@@ -320,7 +320,8 @@ function parsePositive(value: string | undefined): number | null {
 }
 
 function isPreset(value: unknown): value is LedgerPreset {
-  return value === "MONTH" || value === "QUARTER" || value === "YEAR" || value === "CUSTOM";
+  return value === "MONTH" || value === "QUARTER" || value === "YEAR"
+    || value === "ROLLING_MONTH" || value === "ROLLING_3_MONTHS" || value === "ROLLING_YEAR" || value === "CUSTOM";
 }
 
 function isScope(value: unknown): value is LedgerAccountScope {
