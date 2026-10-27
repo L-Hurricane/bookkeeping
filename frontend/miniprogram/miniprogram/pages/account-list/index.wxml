@@ -11,9 +11,9 @@
     </view>
     <text class="toolbar-hint">正常账户总览。归档账户不在此列表，可从归档账户查看历史并恢复。</text>
     <view class="summary" wx:if="{{summaryReady}}">
-      <text>本月账本净值 {{netLabel}}</text>
-      <text>本月收入 {{incomeLabel}}</text>
-      <text>本月支出 {{expenseLabel}}</text>
+      <text>本月账本净值 <text class="{{netTone}}">{{netLabel}}</text></text>
+      <text>本月收入 <text class="{{incomeTone}}">{{incomeLabel}}</text></text>
+      <text>本月支出 <text class="{{expenseTone}}">{{expenseLabel}}</text></text>
     </view>
     <text class="toolbar-hint" wx:if="{{summaryReady}}">本月账本净值按业务时间计算到本月结束，不是包含未来记录的当前账面余额。</text>
     <text class="error" wx:if="{{summaryError}}">{{summaryError}}</text>

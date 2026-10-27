@@ -14,9 +14,9 @@
     <input class="search" value="{{searchInput}}" placeholder="搜索交易名称" bindinput="onSearchInput" confirm-type="search" />
     <text class="note">转账和余额调整不计入收入、支出。这里不显示逐笔余额。</text>
     <view class="summary" wx:if="{{summaryReady}}">
-      <text>收入 {{incomeLabel}}</text>
-      <text>支出 {{expenseLabel}}</text>
-      <text>结余 {{surplusLabel}}</text>
+      <text>收入 <text class="{{incomeTone}}">{{incomeLabel}}</text></text>
+      <text>支出 <text class="{{expenseTone}}">{{expenseLabel}}</text></text>
+      <text>结余 <text class="{{surplusTone}}">{{surplusLabel}}</text></text>
     </view>
     <text class="empty" wx:if="{{rows.length === 0 && phase === 'ready'}}">没有交易</text>
     <view class="row" wx:for="{{rows}}" wx:key="key" data-index="{{index}}" bindtap="onOpen">

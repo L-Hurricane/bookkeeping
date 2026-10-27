@@ -116,6 +116,7 @@ Page({
     locateMiss: "",
     monthCloseCaption: "",
     monthCloseLabel: "",
+    monthCloseTone: "money-zero",
     fabOpen: false,
   },
 
@@ -230,7 +231,7 @@ Page({
       return;
     }
     if (!background) {
-      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "", monthCloseLabel: "", monthCloseCaption: "" });
+      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "", monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
     }
     void this.loadMonthClose(month);
     try {
@@ -355,7 +356,7 @@ Page({
   async loadMonthClose(month: string) {
     const current = currentBeijingMonth(new Date());
     if (month > current) {
-      this.setData({ monthCloseLabel: "", monthCloseCaption: "" });
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
       return;
     }
     const to = month === current ? beijingDate(new Date()) : monthLastDate(month);
@@ -371,10 +372,11 @@ Page({
       this.setData({
         monthCloseCaption: month === current ? "截至今天结束" : "月末余额",
         monthCloseLabel: formatMoneyLabel(report.netWorth.closing),
+        monthCloseTone: moneyToneClass(report.netWorth.closing),
       });
     } catch {
       if (this.selectedMonth !== month || !this.loadGuard.pageAlive) return;
-      this.setData({ monthCloseLabel: "", monthCloseCaption: "" });
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
     }
   },
 

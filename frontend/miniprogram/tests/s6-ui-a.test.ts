@@ -14,6 +14,8 @@ const feed = readFileSync(new URL("../miniprogram/pages/all-transactions/index.w
 describe("s6 approved ui", () => {
   it("puts the month summary and all-transactions entry on the ledger home", () => {
     assert.equal(home.includes("本月账本净值"), true);
+    assert.equal(home.includes("{{netTone}}"), true);
+    assert.equal(feed.includes("{{surplusTone}}"), true);
     assert.equal(home.includes("全部交易"), true);
     assert.equal(home.includes("最近交易"), false);
   });

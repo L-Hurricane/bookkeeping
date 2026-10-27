@@ -40,7 +40,7 @@
         <text class="{{surplusToneClass}}">{{surplusLabel}}</text>
       </view>
     </view>
-    <text wx:if="{{monthCloseLabel}}">{{monthCloseCaption}} {{monthCloseLabel}}</text>
+    <text wx:if="{{monthCloseLabel}}">{{monthCloseCaption}} <text class="{{monthCloseTone}}">{{monthCloseLabel}}</text></text>
     <text class="count" wx:if="{{phase === 'ready'}}">{{countLabel}}</text>
     <view class="fab" wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}">
       <view class="fab-menu" wx:if="{{fabOpen}}">

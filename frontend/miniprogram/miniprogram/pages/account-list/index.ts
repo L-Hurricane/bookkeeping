@@ -52,9 +52,12 @@ Page({
     logoutErrorMessage: "",
     summaryReady: false,
     summaryError: "",
-    netLabel: "",
-    incomeLabel: "",
-    expenseLabel: "",
+        netLabel: "",
+        incomeLabel: "",
+        expenseLabel: "",
+        netTone: "money-zero",
+        incomeTone: "money-zero",
+        expenseTone: "money-zero",
     fabOpen: false,
     fabPicking: false,
     fabAccounts: [] as { id: number; name: string }[],
@@ -222,6 +225,9 @@ Page({
         netLabel: formatMoneyLabel(report.netWorth.closing),
         incomeLabel: formatMoneyLabel(report.income.net),
         expenseLabel: formatMoneyLabel(report.expense.net),
+        netTone: moneyToneClass(report.netWorth.closing),
+        incomeTone: moneyToneClass(report.income.net),
+        expenseTone: moneyToneClass(report.expense.net),
       });
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, this.loadGuard.generation) || isUnauthorized(error) || generation !== this.summaryGeneration) return;
