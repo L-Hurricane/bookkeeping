@@ -39,8 +39,10 @@ Page({
     phase: "loading" as TransactionDetailScreen["phase"],
     title: "",
     rows: [] as Array<TransactionRow | LedgerTransactionView>,
-    directAvailable: false,
-    directLabel: "",
+    scopeControl: false,
+    tagMode: "" as "" | "TREE" | "DIRECT",
+    modeLocked: false,
+    modeHint: "",
     andAvailable: false,
     scopeText: "",
     amountLabel: "",
@@ -139,11 +141,16 @@ Page({
     void this.load();
   },
 
-  onToggleTagMode() {
+  onSelectTagMode(event: WechatMiniprogram.BaseEvent) {
     const ledger = this.ledger;
-    if (ledger === null || ledger.drill.kind !== "tag" || (ledger.drill.tagAnd?.length ?? 0) > 0) return;
-    const tagMode = ledger.drill.tagMode === "TREE" ? "DIRECT" : "TREE";
-    this.ledger = { ...ledger, drill: { ...ledger.drill, tagMode, tagAnd: [] } };
+    const mode = event.currentTarget.dataset["mode"];
+    if (ledger === null || ledger.drill.kind !== "tag" || (mode !== "TREE" && mode !== "DIRECT")) return;
+    if (mode === "DIRECT" && (ledger.drill.tagAnd?.length ?? 0) > 0) {
+      this.setData({ modeHint: "同时包含只按标签及下级计算" });
+      return;
+    }
+    if (ledger.drill.tagMode === mode) return;
+    this.ledger = { ...ledger, drill: { ...ledger.drill, tagMode: mode, tagAnd: [] } };
     this.setData(directState(this.ledger));
     void this.loadLedger();
   },
@@ -387,12 +394,22 @@ Page({
   },
 });
 
-function directState(ledger: LedgerDetailContext): { directAvailable: boolean; directLabel: string; andAvailable: boolean } {
-  if (ledger.drill.kind !== "tag") return { directAvailable: false, directLabel: "", andAvailable: false };
-  if ((ledger.drill.tagAnd?.length ?? 0) > 0) return { directAvailable: false, directLabel: "", andAvailable: true };
+function directState(ledger: LedgerDetailContext): {
+  scopeControl: boolean;
+  tagMode: "" | "TREE" | "DIRECT";
+  modeLocked: boolean;
+  modeHint: string;
+  andAvailable: boolean;
+} {
+  if (ledger.drill.kind !== "tag") {
+    return { scopeControl: false, tagMode: "", modeLocked: false, modeHint: "", andAvailable: false };
+  }
+  const locked = (ledger.drill.tagAnd?.length ?? 0) > 0;
   return {
-    directAvailable: true,
-    directLabel: ledger.drill.tagMode === "TREE" ? "直接关联本标签" : "查看标签及下级",
+    scopeControl: true,
+    tagMode: ledger.drill.tagMode,
+    modeLocked: locked,
+    modeHint: locked ? "同时包含只按标签及下级计算" : "",
     andAvailable: ledger.drill.tagMode === "TREE",
   };
 }
@@ -428,10 +445,11 @@ function analysisView(ledger: LedgerDetailContext, analysis: TagAnalysis, catego
   compositionNote: string;
   categories: LedgerAmountRow[];
 } {
-  const kind = analysis.scope === "AND" ? "同时包含以下标签及其下级。每笔交易只计算一次。"
-    : analysis.scope === "DIRECT" ? "只含直接关联本标签的交易，不含仅挂在下级标签上的交易。"
-      : "包含本标签及全部下级。同一笔交易只计算一次。";
+  const kind = analysis.scope === "AND" ? "同时包含所选标签及其下级 · 同一交易仅计一次"
+    : analysis.scope === "DIRECT" ? "仅直接关联本标签，不含只挂在下级的交易"
+      : "含下级标签 · 同一交易仅计一次";
   const flowName = ledger.type === "INCOME" ? "收入" : "支出";
+  const composition = "占比基于当前标签分析结果；父分类包含子分类，不能逐行相加。";
   return {
     scopeText: kind,
     amountLabel: formatMoneyLabel(analysis.amount),
@@ -439,9 +457,7 @@ function analysisView(ledger: LedgerDetailContext, analysis: TagAnalysis, catego
     coverageLabel: analysis.coverage === null
       ? "当前范围净额为零，不计算覆盖率。"
       : `占当前范围全部${flowName} ${analysis.coverage}%`,
-    compositionNote: degraded
-      ? "净额含负数或为零，不按 100% 构成展示。分类构成的分母是本次结果净额，不是覆盖率。"
-      : "分类构成的分母是本次结果净额，不是覆盖率。",
+    compositionNote: degraded ? `净额含负数或为零，不按 100% 构成展示。${composition}` : composition,
     categories,
   };
 }

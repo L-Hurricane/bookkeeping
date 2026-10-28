@@ -1,44 +1,59 @@
 <view class="page">
-  <text class="title" wx:if="{{title}}">{{title}}</text>
   <text class="status" wx:if="{{phase === 'loading'}}">正在读取明细</text>
-  <block wx:elif="{{phase === 'error'}}">
+  <view class="panel" wx:elif="{{phase === 'error'}}">
     <text class="error">{{errorMessage}}</text>
     <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
-  </block>
+  </view>
   <block wx:elif="{{phase === 'ready'}}">
-    <text class="note" wx:if="{{scopeText}}">{{scopeText}}</text>
-    <text class="figure money-neutral" wx:if="{{amountLabel}}">{{amountLabel}}</text>
-    <text class="note" wx:if="{{countLabel}}">{{countLabel}}</text>
-    <text class="note" wx:if="{{coverageLabel}}">{{coverageLabel}}</text>
-    <text class="note" wx:if="{{coverageLabel}}">覆盖率的分母是当前时间、账户和收支类型下的全部净额。</text>
-    <button wx:if="{{directAvailable}}" bindtap="onToggleTagMode">{{directLabel}}</button>
-    <button wx:if="{{andAvailable}}" bindtap="onOpenAnd">同时包含其他标签</button>
-    <view wx:if="{{andChips.length > 0}}">
-      <text class="note">同时包含</text>
-      <text class="note">这些条件要同时满足，不能把各标签金额相加。</text>
-      <view class="chip" wx:for="{{andChips}}" wx:key="id" data-id="{{item.id}}" catchtap="onRemoveAnd">{{item.name}} 移除</view>
+    <view class="panel" wx:if="{{amountLabel}}">
+      <text class="headline">{{title}}</text>
+      <text class="note" wx:if="{{scopeText}}">{{scopeText}}</text>
+      <text class="figure money-neutral">{{amountLabel}}</text>
+      <text class="meta" wx:if="{{countLabel}}">{{countLabel}}</text>
+      <text class="meta" wx:if="{{coverageLabel}}">{{coverageLabel}}</text>
+      <text class="note" wx:if="{{coverageLabel}}">覆盖率基于当前时间、账户与收支类型的净额。</text>
     </view>
-    <view wx:if="{{children.length > 0}}">
-      <text class="note">下级标签</text>
-      <text class="child" wx:for="{{children}}" wx:key="id" data-id="{{item.id}}" data-title="{{item.name}}" bindtap="onOpenChild">{{item.name}}</text>
-    </view>
-    <text class="section" wx:if="{{categories.length > 0 || compositionNote}}">分类构成</text>
-    <text class="note" wx:if="{{compositionNote}}">{{compositionNote}}</text>
-    <view class="row" wx:for="{{categories}}" wx:key="key">
-      <view class="row-main">
-        <text class="row-title">{{item.title}}</text>
-        <text class="row-detail">{{item.detail}}</text>
+    <view class="panel" wx:if="{{scopeControl}}">
+      <view class="segment">
+        <view class="choice {{tagMode === 'TREE' ? 'selected' : ''}}" data-mode="TREE" bindtap="onSelectTagMode">含下级</view>
+        <view class="choice {{tagMode === 'DIRECT' ? 'selected' : ''}} {{modeLocked ? 'disabled' : ''}}" data-mode="DIRECT" bindtap="onSelectTagMode">仅本标签</view>
       </view>
-      <text class="amount money-neutral">{{item.amountLabel}}</text>
-    </view>
-    <text class="section">关联交易</text>
-    <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
-    <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" data-account-id="{{item.accountId}}" data-created="{{item.accountCreatedTime}}" data-month="{{item.originMonth}}" bindtap="onOpenTransaction">
-      <view class="row-main">
-        <text class="row-title">{{item.title}}</text>
-        <text class="row-detail">{{item.timeLabel}}</text>
+      <text class="note" wx:if="{{modeHint}}">{{modeHint}}</text>
+      <view class="filter" wx:if="{{andAvailable}}" bindtap="onOpenAnd">同时包含其他标签</view>
+      <view class="chips" wx:if="{{andChips.length > 0}}">
+        <view class="chip" wx:for="{{andChips}}" wx:key="id" data-id="{{item.id}}" catchtap="onRemoveAnd">
+          <text>{{item.name}}</text>
+          <text class="chip-remove">移除</text>
+        </view>
       </view>
-      <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
+      <text class="note" wx:if="{{andChips.length > 0}}">这些条件要同时满足，不能把各标签金额相加。</text>
+      <block wx:if="{{children.length > 0}}">
+        <text class="subhead">下级标签</text>
+        <text class="child" wx:for="{{children}}" wx:key="id" data-id="{{item.id}}" data-title="{{item.name}}" bindtap="onOpenChild">{{item.name}}</text>
+      </block>
+    </view>
+    <view class="panel" wx:if="{{categories.length > 0 || compositionNote}}">
+      <text class="panel-title">分类构成</text>
+      <text class="note" wx:if="{{compositionNote}}">{{compositionNote}}</text>
+      <view class="row depth-{{item.depth}}" wx:for="{{categories}}" wx:key="key">
+        <view class="row-main">
+          <text class="row-title">{{item.title}}</text>
+          <text class="row-detail">{{item.detail}}</text>
+        </view>
+        <text class="amount money-neutral">{{item.amountLabel}}</text>
+      </view>
+    </view>
+    <view class="panel">
+      <text class="headline" wx:if="{{!amountLabel && title}}">{{title}}</text>
+      <text class="panel-title">关联交易</text>
+      <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
+      <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" data-account-id="{{item.accountId}}" data-created="{{item.accountCreatedTime}}" data-month="{{item.originMonth}}" bindtap="onOpenTransaction">
+        <view class="row-main">
+          <text class="row-title">{{item.title}}</text>
+          <text class="row-detail">{{item.timeLabel}}</text>
+        </view>
+        <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
+      </view>
     </view>
   </block>
   <view class="mask" wx:if="{{andSheetOpen}}" catchtouchmove="onHold">

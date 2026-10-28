@@ -23,6 +23,17 @@ describe("s6 frozen ui", () => {
     assert.equal(detail.includes("同时包含其他标签"), true);
     assert.equal(detail.includes("分类构成"), true);
     assert.equal(detail.includes("关联交易"), true);
+    assert.equal(detail.includes("含下级"), true);
+    assert.equal(detail.includes("仅本标签"), true);
+    assert.equal(detail.includes("depth-{{item.depth}}"), true);
+    assert.equal(detail.includes("不能逐行相加"), false);
+    const detailScript = readFileSync(new URL("../miniprogram/pages/statistics-detail/index.ts", import.meta.url), "utf8");
+    const detailStyle = readFileSync(new URL("../miniprogram/pages/statistics-detail/index.wxss", import.meta.url), "utf8");
+    assert.equal(detailScript.includes("不能逐行相加"), true);
+    assert.equal(detailScript.includes("当前范围净额为零，不计算覆盖率。"), true);
+    assert.equal(detailScript.includes("同时包含只按标签及下级计算"), true);
+    assert.equal(detailStyle.includes(".row.depth-1"), true);
+    assert.equal(detailStyle.includes("word-break: break-all"), true);
   });
 
   it("moves category and tag management to the ledger mine page", () => {
