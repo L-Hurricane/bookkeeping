@@ -57,7 +57,6 @@ Page({
   module: "NET" as ModuleName,
   breakdown: "CATEGORY" as BreakdownName,
   picker: [] as PickerAccount[],
-  selectedTagIds: [] as number[],
   accountSheetOpen: false,
   accountQuery: "",
   draftIds: [] as number[],
@@ -90,7 +89,6 @@ Page({
     categories: [] as LedgerAmountRow[],
     tags: [] as LedgerAmountRow[],
     emptyFlow: false,
-    selectedTagCount: 0,
     customFrom: "",
     customTo: "",
     moreOpen: false,
@@ -273,27 +271,6 @@ Page({
     void this.load();
   },
 
-  onToggleTag(event: WechatMiniprogram.BaseEvent) {
-    const id = Number(event.currentTarget.dataset["id"]);
-    if (!Number.isSafeInteger(id) || id <= 0) return;
-    this.selectedTagIds = this.selectedTagIds.includes(id)
-      ? this.selectedTagIds.filter((item) => item !== id)
-      : [...this.selectedTagIds, id];
-    this.publish();
-  },
-
-  onOpenSelectedTags() {
-    const query = this.currentQuery();
-    if (query === null || this.selectedTagIds.length === 0 || (this.module !== "INCOME" && this.module !== "EXPENSE")) return;
-    wx.navigateTo({
-      url: statisticsDetailPagePath({
-        query,
-        type: this.module,
-        drill: { kind: "tags", tagIds: this.selectedTagIds, title: "所选标签" },
-      }),
-    });
-  },
-
   onOpenRow(event: WechatMiniprogram.BaseEvent) {
     const report = this.report;
     const query = this.currentQuery();
@@ -353,10 +330,7 @@ Page({
       tone: moneyToneClass(point.amount),
       dateLabel: point.date,
     }));
-    const tags = this.module === "NET" ? [] : neutralRows(flowRows(flow, "tag")).map((row) => ({
-      ...row,
-      selected: row.drillKind === "tag" && this.selectedTagIds.includes(row.drillId),
-    }));
+    const tags = this.module === "NET" ? [] : neutralRows(flowRows(flow, "tag"));
     const ringPick = this.ringSegments.find((segment) => segment.key === this.ringPickKey) ?? null;
     if (ringPick === null) this.ringPickKey = "";
     const tagPick = tags.find((row) => row.key === this.tagPickKey) ?? null;
@@ -389,7 +363,6 @@ Page({
       categories,
       tags,
       emptyFlow: this.module !== "NET" && flow.net === "0.00" && (this.breakdown === "TAG" ? tags.length === 0 : categories.length === 0),
-      selectedTagCount: this.selectedTagIds.length,
       customFrom: this.customFrom,
       customTo: this.customTo,
     }, () => {

@@ -51,6 +51,8 @@ public class LedgerStatisticsService {
     public record TagRef(long id, String name) { }
     public record TransactionItem(long id, long accountId, String accountCreatedTime, String type, String amount,
             String displayName, CategoryRef category, List<TagRef> tags, String businessTime) { }
+    public record TagAnalysis(String scope, String amount, int transactionCount, String scopeNet, String coverage,
+            List<CategoryNode> categories, Slice uncategorized, List<TransactionItem> items) { }
 
     @Transactional(readOnly = true)
     public Report report(String preset, String from, String to, String accountScope, String accountIds) {
@@ -78,11 +80,80 @@ public class LedgerStatisticsService {
         for (Row row : rows) {
             List<TagRef> rowTags = tags.getOrDefault(row.id(), List.of());
             if (!matches(row, rowTags, knownCategories, categoryIds, tagIds, drill)) continue;
-            CategoryRef category = categoryRef(categories, row.categoryId());
-            items.add(new TransactionItem(row.id(), row.accountId(), beijing(row.accountCreatedTime()), flow,
-                    money(signed(row)), blankToNull(row.name()), category, rowTags, beijing(row.businessTime())));
+            items.add(item(row, flow, categories, rowTags));
         }
         return List.copyOf(items);
+    }
+
+    @Transactional(readOnly = true)
+    public TagAnalysis tagAnalysis(String preset, String from, String to, String accountScope, String accountIds,
+            String type, long tagId, String tagMode, String tagAnd) {
+        String flow = flowType(type);
+        if (tagId <= 0) throw new ApiFailure(400, "VALIDATION_FAILED", "标签编号不正确");
+        boolean intersection = tagAnd != null && !tagAnd.isBlank();
+        String mode = tagMode == null || tagMode.isBlank() ? "TREE" : tagMode.trim();
+        if (!mode.equals("TREE") && !mode.equals("DIRECT")) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "标签明细必须为标签树或直接关联");
+        }
+        if (intersection && !mode.equals("TREE")) {
+            throw new ApiFailure(400, "VALIDATION_FAILED", "同时包含只按标签及下级计算");
+        }
+        List<Long> extras = intersection ? parseIds(tagAnd) : List.of();
+        if (extras.contains(tagId)) throw new ApiFailure(400, "VALIDATION_FAILED", "附加标签不能与当前标签重复");
+        String scope = intersection ? "AND" : mode;
+        StatisticsPeriod.Range range = StatisticsPeriod.resolve(preset, from, to, Clock.systemUTC());
+        Selection selection = selection(accountScope, accountIds);
+        List<TagRollup.Node> nodes = tagNodes();
+        List<Set<Long>> subtrees = mode.equals("DIRECT") ? List.of() : subtrees(nodes, tagId, extras);
+        if (mode.equals("DIRECT") && nodes.stream().noneMatch(tag -> tag.id() == tagId)) {
+            throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在");
+        }
+        if (selection.accounts().isEmpty()) {
+            return new TagAnalysis(scope, "0.00", 0, "0.00", null, List.of(), null, List.of());
+        }
+        List<Row> rows = load(selection.accounts(), range, flow);
+        Map<Long, List<TagRef>> tags = tags(rows);
+        List<CategoryRollup.Node> categoryTree = categories(flow);
+        List<TransactionItem> items = new ArrayList<>();
+        List<CategoryRollup.Fact> facts = new ArrayList<>();
+        BigDecimal scopeNet = ZERO;
+        for (Row row : rows) {
+            scopeNet = scopeNet.add(signed(row));
+            List<TagRef> rowTags = tags.getOrDefault(row.id(), List.of());
+            if (!matchesTag(rowTags, tagId, mode, subtrees)) continue;
+            facts.add(new CategoryRollup.Fact(row.categoryId(), signed(row)));
+            items.add(item(row, flow, categoryTree, rowTags));
+        }
+        CategoryRollup.Tree tree = CategoryRollup.rollup(categoryTree, facts);
+        return new TagAnalysis(scope, money(tree.net()), items.size(), money(scopeNet),
+                StatisticsShare.of(tree.net(), scopeNet), categoryNodes(tree.roots(), tree.net()),
+                slice(tree.uncategorized(), tree.net()), List.copyOf(items));
+    }
+
+    private List<Set<Long>> subtrees(List<TagRollup.Node> nodes, long tagId, List<Long> extras) {
+        List<Long> roots = new ArrayList<>();
+        roots.add(tagId);
+        roots.addAll(extras);
+        List<Set<Long>> subtrees = new ArrayList<>();
+        for (long id : roots) {
+            if (nodes.stream().noneMatch(tag -> tag.id() == id)) {
+                throw new ApiFailure(404, "RESOURCE_NOT_FOUND", "资源不存在");
+            }
+            subtrees.add(TagRollup.subtreeIds(nodes, id));
+        }
+        return subtrees;
+    }
+
+    private static boolean matchesTag(List<TagRef> rowTags, long tagId, String mode, List<Set<Long>> subtrees) {
+        if (mode.equals("DIRECT")) return rowTags.stream().anyMatch(tag -> tag.id() == tagId);
+        Set<Long> explicit = rowTags.stream().map(TagRef::id).collect(Collectors.toSet());
+        return TagIntersection.matchesAll(explicit, subtrees);
+    }
+
+    private TransactionItem item(Row row, String flow, List<CategoryRollup.Node> categories, List<TagRef> rowTags) {
+        return new TransactionItem(row.id(), row.accountId(), beijing(row.accountCreatedTime()), flow,
+                money(signed(row)), blankToNull(row.name()), categoryRef(categories, row.categoryId()), rowTags,
+                beijing(row.businessTime()));
     }
 
     private Report report(StatisticsPeriod.Range range, String scope, List<AccountRow> accounts, List<Row> rows) {

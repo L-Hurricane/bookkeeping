@@ -32,5 +32,13 @@ public class LedgerStatisticsController {
                 categoryId, uncategorized, tagId, tagIds, tagMode, untagged));
     }
 
+    @GetMapping("/tag-analysis")
+    public LedgerStatisticsService.TagAnalysis tagAnalysis(@RequestParam String preset, @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to, @RequestParam(defaultValue = "ACTIVE") String accountScope,
+            @RequestParam(required = false) String accountIds, @RequestParam String type, @RequestParam long tagId,
+            @RequestParam(required = false) String tagMode, @RequestParam(required = false) String tagAnd) {
+        return statistics.tagAnalysis(preset, from, to, accountScope, accountIds, type, tagId, tagMode, tagAnd);
+    }
+
     public record TransactionList(List<LedgerStatisticsService.TransactionItem> items) { }
 }

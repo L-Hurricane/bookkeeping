@@ -33,7 +33,8 @@ describe("s6 approved ui", () => {
     assert.equal(report.includes('bindtap="onRingTap"'), true);
     assert.equal(report.includes('catchtap="onPickTagBar"'), true);
     assert.equal(report.includes("占比不必合计为 100%"), true);
-    assert.equal(report.includes("加入多选"), true);
+    assert.equal(report.includes("加入多选"), false);
+    assert.equal(report.includes("查看所选标签"), false);
   });
 
   it("does not show a per-row balance on the cross-account feed", () => {

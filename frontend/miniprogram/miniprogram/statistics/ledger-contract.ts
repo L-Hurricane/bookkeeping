@@ -96,7 +96,7 @@ export interface LedgerQuery {
 export type LedgerDrill =
   | { readonly kind: "category"; readonly categoryId: number; readonly title: string }
   | { readonly kind: "uncategorized"; readonly title: string }
-  | { readonly kind: "tag"; readonly tagId: number; readonly title: string; readonly tagMode: LedgerTagMode }
+  | { readonly kind: "tag"; readonly tagId: number; readonly title: string; readonly tagMode: LedgerTagMode; readonly tagAnd?: readonly number[] }
   | { readonly kind: "tags"; readonly tagIds: readonly number[]; readonly title: string }
   | { readonly kind: "untagged"; readonly title: string };
 
@@ -113,6 +113,14 @@ export function statisticsReportPath(query: LedgerQuery): string {
 export function statisticsTransactionPath(context: LedgerDetailContext): string {
   const drill = drillQuery(context.drill);
   return `/api/v1/statistics/transactions?${queryString(context.query)}&type=${context.type}&${drill}`;
+}
+
+export function tagAnalysisPath(context: LedgerDetailContext): string {
+  if (context.drill.kind !== "tag") return "";
+  const and = context.drill.tagAnd !== undefined && context.drill.tagAnd.length > 0
+    ? `&tagAnd=${context.drill.tagAnd.join(",")}`
+    : "";
+  return `/api/v1/statistics/tag-analysis?${queryString(context.query)}&type=${context.type}&tagId=${context.drill.tagId}&tagMode=${context.drill.tagMode}${and}`;
 }
 
 export function statisticsDetailPagePath(context: LedgerDetailContext): string {
@@ -140,6 +148,44 @@ export function parseLedgerTransactions(value: unknown): LedgerTransactionList |
     items.push(parsed);
   }
   return { items };
+}
+
+export interface TagAnalysis {
+  readonly scope: "TREE" | "DIRECT" | "AND";
+  readonly amount: string;
+  readonly transactionCount: number;
+  readonly scopeNet: string;
+  readonly coverage: string | null;
+  readonly categories: readonly LedgerCategoryNode[];
+  readonly uncategorized: LedgerSlice | null;
+  readonly items: readonly LedgerTransaction[];
+}
+
+export function parseTagAnalysis(value: unknown): TagAnalysis | null {
+  if (!isRecord(value) || (value.scope !== "TREE" && value.scope !== "DIRECT" && value.scope !== "AND")) return null;
+  if (!isMoney(value.amount) || !isCount(value.transactionCount) || !isMoney(value.scopeNet) || !Array.isArray(value.categories)) return null;
+  const coverage = readShare(value.coverage);
+  if (coverage === undefined) return null;
+  const categories: LedgerCategoryNode[] = [];
+  for (const node of value.categories) {
+    const parsed = parseCategory(node);
+    if (parsed === null) return null;
+    categories.push(parsed);
+  }
+  const uncategorized = parseSlice(value.uncategorized);
+  if (uncategorized === undefined) return null;
+  const items = parseLedgerTransactions({ items: value.items });
+  if (items === null) return null;
+  return {
+    scope: value.scope,
+    amount: value.amount,
+    transactionCount: value.transactionCount,
+    scopeNet: value.scopeNet,
+    coverage,
+    categories,
+    uncategorized,
+    items: items.items,
+  };
 }
 
 export function parseLedgerDetailContext(query: Record<string, string | undefined>): LedgerDetailContext | null {
@@ -177,7 +223,10 @@ function parseDrill(query: Record<string, string | undefined>): LedgerDrill | nu
   }
   const tagId = parsePositive(query.tagId);
   if (tagId !== null && (query.tagMode === "TREE" || query.tagMode === "DIRECT")) {
-    return { kind: "tag", tagId, title, tagMode: query.tagMode };
+    if (query.tagAnd === undefined) return { kind: "tag", tagId, title, tagMode: query.tagMode };
+    const tagAnd = parseIdList(query.tagAnd);
+    if (tagAnd === null || query.tagMode !== "TREE" || tagAnd.includes(tagId)) return null;
+    return { kind: "tag", tagId, title, tagMode: "TREE", tagAnd };
   }
   return null;
 }
@@ -199,8 +248,10 @@ function drillQuery(drill: LedgerDrill): string {
       return `drill=category&categoryId=${drill.categoryId}`;
     case "uncategorized":
       return "drill=uncategorized&uncategorized=true";
-    case "tag":
-      return `drill=tag&tagId=${drill.tagId}&tagMode=${drill.tagMode}`;
+    case "tag": {
+      const and = drill.tagAnd !== undefined && drill.tagAnd.length > 0 ? `&tagAnd=${drill.tagAnd.join(",")}` : "";
+      return `drill=tag&tagId=${drill.tagId}&tagMode=${drill.tagMode}${and}`;
+    }
     case "tags":
       return `tagIds=${drill.tagIds.join(",")}`;
     case "untagged":

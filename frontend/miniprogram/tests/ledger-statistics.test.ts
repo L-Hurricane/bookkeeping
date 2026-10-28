@@ -8,8 +8,10 @@ import {
   parseLedgerDetailContext,
   parseLedgerReport,
   parseLedgerTransactions,
+  parseTagAnalysis,
   statisticsDetailPagePath,
   statisticsReportPath,
+  tagAnalysisPath,
   type LedgerDrill,
   type LedgerReport,
 } from "../miniprogram/statistics/ledger-contract";
@@ -82,6 +84,32 @@ describe("ledger statistics", () => {
       drill: { kind: "tags", tagIds: [9, 4], title: "所选标签" },
     });
     assert.match(selected, /tagIds=9,4/);
+    const analysis = statisticsDetailPagePath({
+      query: { preset: "CUSTOM", from: "2026-09-01", to: "2026-09-30", accountScope: "ACTIVE" },
+      type: "EXPENSE",
+      drill: { kind: "tag", tagId: 9, title: "旅游", tagMode: "TREE", tagAnd: [4, 8] },
+    });
+    assert.match(analysis, /tagAnd=4,8/);
+    assert.match(analysis, /tagMode=TREE/);
+    const parsed = parseLedgerDetailContext(Object.fromEntries(analysis.split("?")[1]?.split("&").map((part) => {
+      const index = part.indexOf("=");
+      return [part.slice(0, index), part.slice(index + 1)];
+    }) ?? []));
+    assert.equal(parsed?.drill.kind, "tag");
+    if (parsed?.drill.kind === "tag") assert.deepEqual(parsed.drill.tagAnd, [4, 8]);
+    assert.equal(tagAnalysisPath({
+      query: { preset: "MONTH", accountScope: "ACTIVE" },
+      type: "EXPENSE",
+      drill: { kind: "tag", tagId: 9, title: "旅游", tagMode: "TREE", tagAnd: [4] },
+    }), "/api/v1/statistics/tag-analysis?preset=MONTH&accountScope=ACTIVE&type=EXPENSE&tagId=9&tagMode=TREE&tagAnd=4");
+    assert.equal(parseTagAnalysis({
+      scope: "AND", amount: "4.00", transactionCount: 1, scopeNet: "37.00", coverage: "10.81",
+      categories: [], uncategorized: null, items: [],
+    })?.scope, "AND");
+    assert.equal(parseTagAnalysis({
+      scope: "OR", amount: "1.00", transactionCount: 1, scopeNet: "1.00", coverage: "100.00",
+      categories: [], uncategorized: null, items: [],
+    }), null);
   });
 
   it("decodes Chinese and special detail titles once", () => {

@@ -52,3 +52,83 @@
 .error {
   color: #b42318;
 }
+
+.figure {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 40rpx;
+  font-weight: 600;
+}
+
+.money-neutral {
+  color: #333333;
+}
+
+.note,
+.section,
+.child,
+.chip {
+  display: block;
+}
+
+.section {
+  margin-top: 28rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.child,
+.chip {
+  margin-top: 12rpx;
+  color: #1f4b73;
+}
+
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.backdrop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70vh;
+  padding: 28rpx 32rpx 48rpx;
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  overflow: auto;
+}
+
+.search {
+  margin-top: 16rpx;
+  padding: 12rpx 16rpx;
+  background: #f3f4f6;
+  border-radius: 12rpx;
+}
+
+.pick {
+  display: flex;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}

@@ -6,6 +6,7 @@ import { analysisGenerateMessage } from "../miniprogram/analysis/screen";
 
 const statistics = readFileSync(new URL("../miniprogram/pages/statistics/index.wxml", import.meta.url), "utf8");
 const report = readFileSync(new URL("../miniprogram/pages/statistics-report/index.wxml", import.meta.url), "utf8");
+const detail = readFileSync(new URL("../miniprogram/pages/statistics-detail/index.wxml", import.meta.url), "utf8");
 const settings = readFileSync(new URL("../miniprogram/pages/account-settings/index.wxml", import.meta.url), "utf8");
 const mine = readFileSync(new URL("../miniprogram/pages/mine/index.wxml", import.meta.url), "utf8");
 
@@ -17,7 +18,11 @@ describe("s6 frozen ui", () => {
     assert.equal(statistics.includes("支出分类对比"), true);
     assert.equal(statistics.includes("支出标签对比"), true);
     assert.equal(statistics.includes("净资产"), false);
-    assert.equal(report.includes("加入多选"), true);
+    assert.equal(report.includes("加入多选"), false);
+    assert.equal(report.includes("查看所选标签"), false);
+    assert.equal(detail.includes("同时包含其他标签"), true);
+    assert.equal(detail.includes("分类构成"), true);
+    assert.equal(detail.includes("关联交易"), true);
   });
 
   it("moves category and tag management to the ledger mine page", () => {

@@ -6,7 +6,32 @@
     <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
   </block>
   <block wx:elif="{{phase === 'ready'}}">
+    <text class="note" wx:if="{{scopeText}}">{{scopeText}}</text>
+    <text class="figure money-neutral" wx:if="{{amountLabel}}">{{amountLabel}}</text>
+    <text class="note" wx:if="{{countLabel}}">{{countLabel}}</text>
+    <text class="note" wx:if="{{coverageLabel}}">{{coverageLabel}}</text>
+    <text class="note" wx:if="{{coverageLabel}}">覆盖率的分母是当前时间、账户和收支类型下的全部净额。</text>
     <button wx:if="{{directAvailable}}" bindtap="onToggleTagMode">{{directLabel}}</button>
+    <button wx:if="{{andAvailable}}" bindtap="onOpenAnd">同时包含其他标签</button>
+    <view wx:if="{{andChips.length > 0}}">
+      <text class="note">同时包含</text>
+      <text class="note">这些条件要同时满足，不能把各标签金额相加。</text>
+      <view class="chip" wx:for="{{andChips}}" wx:key="id" data-id="{{item.id}}" catchtap="onRemoveAnd">{{item.name}} 移除</view>
+    </view>
+    <view wx:if="{{children.length > 0}}">
+      <text class="note">下级标签</text>
+      <text class="child" wx:for="{{children}}" wx:key="id" data-id="{{item.id}}" data-title="{{item.name}}" bindtap="onOpenChild">{{item.name}}</text>
+    </view>
+    <text class="section" wx:if="{{categories.length > 0 || compositionNote}}">分类构成</text>
+    <text class="note" wx:if="{{compositionNote}}">{{compositionNote}}</text>
+    <view class="row" wx:for="{{categories}}" wx:key="key">
+      <view class="row-main">
+        <text class="row-title">{{item.title}}</text>
+        <text class="row-detail">{{item.detail}}</text>
+      </view>
+      <text class="amount money-neutral">{{item.amountLabel}}</text>
+    </view>
+    <text class="section">关联交易</text>
     <text class="empty" wx:if="{{empty}}">{{emptyMessage}}</text>
     <view class="row" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" data-account-id="{{item.accountId}}" data-created="{{item.accountCreatedTime}}" data-month="{{item.originMonth}}" bindtap="onOpenTransaction">
       <view class="row-main">
@@ -16,4 +41,21 @@
       <text class="amount {{item.amountToneClass}}">{{item.amountLabel}}</text>
     </view>
   </block>
+  <view class="mask" wx:if="{{andSheetOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelAnd"></view>
+    <view class="sheet">
+      <text class="section">同时包含其他标签</text>
+      <input class="search" placeholder="搜索标签" value="{{andQuery}}" bindinput="onAndQuery" />
+      <text class="note">点选不会连带上级或下级。</text>
+      <view class="pick" wx:for="{{andRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAnd" style="padding-left: {{item.depth * 28}}rpx;">
+        <text>{{item.name}}</text>
+        <text wx:if="{{item.selected}}">✓</text>
+      </view>
+      <text class="empty" wx:if="{{andRows.length === 0}}">没有可选标签</text>
+      <view class="actions">
+        <button bindtap="onCancelAnd">取消</button>
+        <button bindtap="onConfirmAnd">确认</button>
+      </view>
+    </view>
+  </view>
 </view>

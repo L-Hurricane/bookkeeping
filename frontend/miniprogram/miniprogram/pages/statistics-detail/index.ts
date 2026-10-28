@@ -1,10 +1,13 @@
 import { ApiError } from "../../http/client";
-import { ledgerStatisticsApi, statisticsApi } from "../../services/runtime";
+import { formatMoneyLabel } from "../../ledger/ledger";
+import { ledgerStatisticsApi, statisticsApi, tagApi } from "../../services/runtime";
 import { LedgerStatisticsResponseError } from "../../services/ledger-statistics";
 import { StatisticsResponseError } from "../../services/statistics";
-import { parseLedgerDetailContext, type LedgerDetailContext } from "../../statistics/ledger-contract";
-import { transactionViews, type LedgerTransactionView } from "../../statistics/ledger-view";
+import { parseLedgerDetailContext, statisticsDetailPagePath, type LedgerDetailContext, type LedgerFlow, type TagAnalysis } from "../../statistics/ledger-contract";
+import { flowRows, ringSegments, transactionViews, type LedgerAmountRow, type LedgerTransactionView } from "../../statistics/ledger-view";
 import { parseStatisticsDetailContext, type StatisticsDetailContext } from "../../statistics/navigation";
+import { tagPickerRows, type TagPickerRow } from "../../transaction/tag-picker";
+import type { TagNode } from "../../tag/tag";
 import {
   DETAIL_CONTRACT_ERROR,
   DETAIL_EMPTY,
@@ -28,6 +31,8 @@ Page({
   pageScrollTop: 0,
   detailReturn: null as DetailReturn | null,
   scrollRestoreGeneration: 0,
+  tagTree: null as TagNode[] | null,
+  andDraft: [] as number[],
 
   data: {
     invalid: false,
@@ -36,6 +41,18 @@ Page({
     rows: [] as Array<TransactionRow | LedgerTransactionView>,
     directAvailable: false,
     directLabel: "",
+    andAvailable: false,
+    scopeText: "",
+    amountLabel: "",
+    countLabel: "",
+    coverageLabel: "",
+    compositionNote: "",
+    categories: [] as LedgerAmountRow[],
+    children: [] as Array<{ id: number; name: string }>,
+    andChips: [] as Array<{ id: number; name: string }>,
+    andSheetOpen: false,
+    andQuery: "",
+    andRows: [] as TagPickerRow[],
     empty: false,
     emptyMessage: DETAIL_EMPTY,
     errorMessage: "",
@@ -124,11 +141,76 @@ Page({
 
   onToggleTagMode() {
     const ledger = this.ledger;
-    if (ledger === null || ledger.drill.kind !== "tag") return;
+    if (ledger === null || ledger.drill.kind !== "tag" || (ledger.drill.tagAnd?.length ?? 0) > 0) return;
     const tagMode = ledger.drill.tagMode === "TREE" ? "DIRECT" : "TREE";
-    this.ledger = { ...ledger, drill: { ...ledger.drill, tagMode } };
+    this.ledger = { ...ledger, drill: { ...ledger.drill, tagMode, tagAnd: [] } };
     this.setData(directState(this.ledger));
     void this.loadLedger();
+  },
+
+  onOpenChild(event: WechatMiniprogram.BaseEvent) {
+    const ledger = this.ledger;
+    const id = Number(event.currentTarget.dataset["id"]);
+    const title = event.currentTarget.dataset["title"];
+    if (ledger === null || ledger.drill.kind !== "tag" || !Number.isSafeInteger(id) || id <= 0 || typeof title !== "string" || title.length === 0) return;
+    wx.navigateTo({
+      url: statisticsDetailPagePath({
+        query: ledger.query,
+        type: ledger.type,
+        drill: { kind: "tag", tagId: id, title, tagMode: "TREE" },
+      }),
+    });
+  },
+
+  onOpenAnd() {
+    const ledger = this.ledger;
+    if (ledger === null || ledger.drill.kind !== "tag" || ledger.drill.tagMode !== "TREE") return;
+    this.andDraft = [...(ledger.drill.tagAnd ?? [])];
+    this.setData({ andSheetOpen: true, andQuery: "", andRows: this.andRows("") });
+    if (this.tagTree === null) void this.loadTagTree();
+  },
+
+  onAndQuery(event: WechatMiniprogram.Input) {
+    const andQuery = event.detail.value;
+    this.setData({ andQuery, andRows: this.andRows(andQuery) });
+  },
+
+  onToggleAnd(event: WechatMiniprogram.BaseEvent) {
+    const id = Number(event.currentTarget.dataset["id"]);
+    const ledger = this.ledger;
+    if (ledger === null || ledger.drill.kind !== "tag" || !Number.isSafeInteger(id) || id <= 0 || id === ledger.drill.tagId) return;
+    this.andDraft = this.andDraft.includes(id) ? this.andDraft.filter((item) => item !== id) : [...this.andDraft, id];
+    this.setData({ andRows: this.andRows(this.data.andQuery) });
+  },
+
+  onCancelAnd() {
+    this.andDraft = [];
+    this.setData({ andSheetOpen: false });
+  },
+
+  onConfirmAnd() {
+    const ledger = this.ledger;
+    if (ledger === null || ledger.drill.kind !== "tag") return;
+    this.ledger = { ...ledger, drill: { ...ledger.drill, tagMode: "TREE", tagAnd: [...this.andDraft] } };
+    this.andDraft = [];
+    this.setData({ andSheetOpen: false, ...directState(this.ledger) });
+    void this.loadLedger();
+  },
+
+  onRemoveAnd(event: WechatMiniprogram.BaseEvent) {
+    const ledger = this.ledger;
+    const id = Number(event.currentTarget.dataset["id"]);
+    if (ledger === null || ledger.drill.kind !== "tag" || !Number.isSafeInteger(id) || id <= 0) return;
+    this.ledger = {
+      ...ledger,
+      drill: { ...ledger.drill, tagAnd: (ledger.drill.tagAnd ?? []).filter((item) => item !== id) },
+    };
+    this.setData(directState(this.ledger));
+    void this.loadLedger();
+  },
+
+  onHold() {
+    return;
   },
 
   onOpenTransaction(event: WechatMiniprogram.BaseEvent) {
@@ -176,6 +258,10 @@ Page({
     if (!background) this.setData({ phase: "loading", errorMessage: "", rows: [], empty: false });
     const requested = ++this.scrollRestoreGeneration;
     try {
+      if (ledger.drill.kind === "tag") {
+        await this.publishTagAnalysis(ledger, requested, background, restoreScrollTop);
+        return;
+      }
       const list = await ledgerStatisticsApi.listTransactions(ledger);
       if (!this.pageAlive || requested !== this.scrollRestoreGeneration) return;
       const withMonth = list.items.map((item) => {
@@ -237,13 +323,126 @@ Page({
       : null;
     this.publish(restore);
   },
+
+  async publishTagAnalysis(ledger: LedgerDetailContext, requested: number, background: boolean, restoreScrollTop: number | null) {
+    if (ledger.drill.kind !== "tag") return;
+    const analysis = await ledgerStatisticsApi.loadTagAnalysis(ledger);
+    if (!this.pageAlive || requested !== this.scrollRestoreGeneration) return;
+    if (this.tagTree === null) void this.loadTagTree();
+    const withMonth = analysis.items.map((item) => {
+      const view = transactionViews([item])[0];
+      return view === undefined ? null : { ...view, originMonth: item.businessTime.slice(0, 7) };
+    }).filter((row) => row !== null);
+    const flow: LedgerFlow = {
+      net: analysis.amount,
+      categories: analysis.categories,
+      tags: [],
+      uncategorized: analysis.uncategorized,
+      untagged: null,
+    };
+    const categories = flowRows(flow, "category").map((row) => ({ ...row, amountToneClass: "money-neutral" }));
+    const pie = ringSegments(flow);
+    const hasComposition = categories.length > 0;
+    const andCount = ledger.drill.tagAnd?.length ?? 0;
+    this.setData({
+      phase: "ready",
+      rows: withMonth,
+      empty: withMonth.length === 0,
+      emptyMessage: andCount > 0 && withMonth.length === 0 ? "没有同时包含这些标签的交易。" : DETAIL_EMPTY,
+      errorMessage: "",
+      ...directState(ledger),
+      ...analysisView(ledger, analysis, categories, pie === null && hasComposition),
+      children: this.tagTree === null || ledger.drill.kind !== "tag" ? [] : childEntries(this.tagTree, ledger.drill.tagId),
+      andChips: andChips(this.tagTree ?? [], ledger),
+    });
+    if (background && restoreScrollTop !== null) {
+      this.pageScrollTop = restoreScrollTop;
+      wx.pageScrollTo({ scrollTop: restoreScrollTop, duration: 0 });
+    }
+  },
+
+  async loadTagTree() {
+    const ledger = this.ledger;
+    if (ledger === null || ledger.drill.kind !== "tag") return;
+    try {
+      const tree = await tagApi.listTagTree(ledger.type);
+      const current = this.ledger;
+      if (!this.pageAlive || current === null || current.drill.kind !== "tag") return;
+      this.tagTree = tree;
+      this.setData({
+        children: childEntries(tree, current.drill.tagId),
+        andChips: andChips(tree, current),
+        andRows: this.data.andSheetOpen ? this.andRows(this.data.andQuery) : [],
+      });
+    } catch (error) {
+      if (!this.pageAlive || error instanceof ApiError && error.status === 401) return;
+    }
+  },
+
+  andRows(query: string): TagPickerRow[] {
+    const ledger = this.ledger;
+    if (ledger === null || ledger.drill.kind !== "tag" || this.tagTree === null) return [];
+    const subjectId = ledger.drill.tagId;
+    return tagPickerRows(this.tagTree, this.andDraft, query).filter((row) => row.id !== subjectId);
+  },
 });
 
-function directState(ledger: LedgerDetailContext): { directAvailable: boolean; directLabel: string } {
-  if (ledger.drill.kind !== "tag") return { directAvailable: false, directLabel: "" };
+function directState(ledger: LedgerDetailContext): { directAvailable: boolean; directLabel: string; andAvailable: boolean } {
+  if (ledger.drill.kind !== "tag") return { directAvailable: false, directLabel: "", andAvailable: false };
+  if ((ledger.drill.tagAnd?.length ?? 0) > 0) return { directAvailable: false, directLabel: "", andAvailable: true };
   return {
     directAvailable: true,
     directLabel: ledger.drill.tagMode === "TREE" ? "直接关联本标签" : "查看标签及下级",
+    andAvailable: ledger.drill.tagMode === "TREE",
+  };
+}
+
+function childEntries(nodes: readonly TagNode[], id: number): Array<{ id: number; name: string }> {
+  const found = findTag(nodes, id);
+  return found === null ? [] : found.children.map((child) => ({ id: child.id, name: child.name }));
+}
+
+function findTag(nodes: readonly TagNode[], id: number): TagNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const nested = findTag(node.children, id);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+function tagName(nodes: readonly TagNode[], id: number): string {
+  return findTag(nodes, id)?.name ?? "标签";
+}
+
+function andChips(nodes: readonly TagNode[], ledger: LedgerDetailContext): Array<{ id: number; name: string }> {
+  if (ledger.drill.kind !== "tag") return [];
+  return (ledger.drill.tagAnd ?? []).map((id) => ({ id, name: tagName(nodes, id) }));
+}
+
+function analysisView(ledger: LedgerDetailContext, analysis: TagAnalysis, categories: LedgerAmountRow[], degraded: boolean): {
+  scopeText: string;
+  amountLabel: string;
+  countLabel: string;
+  coverageLabel: string;
+  compositionNote: string;
+  categories: LedgerAmountRow[];
+} {
+  const kind = analysis.scope === "AND" ? "同时包含以下标签及其下级。每笔交易只计算一次。"
+    : analysis.scope === "DIRECT" ? "只含直接关联本标签的交易，不含仅挂在下级标签上的交易。"
+      : "包含本标签及全部下级。同一笔交易只计算一次。";
+  const flowName = ledger.type === "INCOME" ? "收入" : "支出";
+  return {
+    scopeText: kind,
+    amountLabel: formatMoneyLabel(analysis.amount),
+    countLabel: `${analysis.transactionCount} 笔`,
+    coverageLabel: analysis.coverage === null
+      ? "当前范围净额为零，不计算覆盖率。"
+      : `占当前范围全部${flowName} ${analysis.coverage}%`,
+    compositionNote: degraded
+      ? "净额含负数或为零，不按 100% 构成展示。分类构成的分母是本次结果净额，不是覆盖率。"
+      : "分类构成的分母是本次结果净额，不是覆盖率。",
+    categories,
   };
 }
 
@@ -256,7 +455,7 @@ function ledgerListContext(ledger: LedgerDetailContext): string {
     case "uncategorized":
       return `${range}|${ledger.type}|uncategorized`;
     case "tag":
-      return `${range}|${ledger.type}|tag|${drill.tagId}|${drill.tagMode}`;
+      return `${range}|${ledger.type}|tag|${drill.tagId}|${drill.tagMode}|${(drill.tagAnd ?? []).join(",")}`;
     case "tags":
       return `${range}|${ledger.type}|tags|${drill.tagIds.join(",")}`;
     case "untagged":
