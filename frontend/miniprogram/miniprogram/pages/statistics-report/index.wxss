@@ -250,3 +250,58 @@
   color: #111111;
   font-size: 28rpx;
 }
+
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 26, 26, 0.28);
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-radius: 28rpx 28rpx 0 0;
+}
+
+.sheet-list {
+  height: 640rpx;
+}
+
+.sheet-tools,
+.sheet-actions,
+.group-head,
+.pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-tools,
+.group-head {
+  margin: 16rpx 0;
+  color: #1a1a1a;
+  font-size: 28rpx;
+}
+
+.pick {
+  padding: 22rpx 0;
+  border-top: 1rpx solid #f0f0f0;
+  font-size: 30rpx;
+}
+
+.search {
+  margin-top: 12rpx;
+  padding: 16rpx 20rpx;
+  background: #f3f4f6;
+  border-radius: 16rpx;
+}

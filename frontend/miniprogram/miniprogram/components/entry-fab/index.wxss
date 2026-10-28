@@ -24,6 +24,12 @@
   font-size: 30rpx;
 }
 
+.fab-divider {
+  height: 1rpx;
+  margin: 8rpx 24rpx;
+  background: #e6e6e6;
+}
+
 .above-tab {
   bottom: calc(160rpx + env(safe-area-inset-bottom));
 }

@@ -1,3 +1,4 @@
+<import src="../../transaction/tag-sheet.wxml" />
 <view class="page" wx:if="{{screen === 'invalid'}}">
   <text class="error">交易页面参数无效</text>
   <button bindtap="onBack">返回</button>
@@ -27,31 +28,34 @@
     <text class="title">{{title}}</text>
     <text class="amount {{amountToneClass}}">{{amountLabel}}</text>
   </view>
+  <view class="card">
+  <view class="fact">
+    <text class="label">资金账户</text>
+    <text>{{accountName}}</text>
+  </view>
   <view class="fact">
     <text class="label">分类</text>
     <text>{{categoryLabel}}</text>
   </view>
   <view class="fact">
     <text class="label">标签</text>
-    <view class="chips" wx:if="{{tagNames.length}}">
-      <text class="chip" wx:for="{{tagNames}}" wx:key="*this">{{item}}</text>
-    </view>
-    <text class="placeholder" wx:else>—</text>
+    <text>{{tagNamesLabel}}</text>
   </view>
   <view class="fact">
     <text class="label">交易时间</text>
     <text>{{businessTimeLabel}}</text>
   </view>
-  <view class="fact">
+  <view class="fact" wx:if="{{showRemark}}">
     <text class="label">备注</text>
     <text>{{remarkLabel}}</text>
+  </view>
   </view>
   <text class="error" wx:if="{{actionError}}">{{actionError}}</text>
   <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
   <text class="hint" wx:if="{{readOnly}}">{{archiveHint}}</text>
   <button wx:if="{{readOnly}}" bindtap="onOpenSettings">账户设置</button>
   <view class="actions" wx:if="{{!readOnly}}">
-    <button class="edit" disabled="{{deleteLocked}}" bindtap="onEdit">编辑</button>
+    <button class="edit" disabled="{{deleteLocked}}" bindtap="onEdit">编辑交易</button>
     <button class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除</button>
   </view>
 </view>
@@ -86,22 +90,12 @@
     <view wx:elif="{{categoryPhase === 'ready'}}" class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
     <text wx:else>{{categoryText}}</text>
     <text class="label">标签</text>
-    <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
-    <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
-      <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
-    </view>
-    <view wx:if="{{tagPhase === 'error'}}">
+    <text class="hint" wx:if="{{tagPhase === 'loading'}}">正在读取标签</text>
+    <block wx:elif="{{tagPhase === 'error'}}">
       <text class="error">标签加载失败</text>
       <button bindtap="onRetryTags">重新加载</button>
-    </view>
-    <view class="composer" wx:if="{{tagPhase !== 'loading'}}">
-      <text class="{{formLocked ? 'locked' : ''}}" wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
-      <block wx:else>
-        <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked || formLocked}}" bindinput="onTagDraft" />
-        <button disabled="{{tagCreateInFlight || formLocked}}" bindtap="onCreateTag">创建</button>
-      </block>
-      <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
-    </view>
+    </block>
+    <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTags">{{tagSummary}} ></view>
   </view>
   <view class="card">
     <text class="label">交易时间</text>
@@ -116,9 +110,8 @@
   <button wx:if="{{uncertain}}" bindtap="onRetryUpdate">重试确认</button>
   <view class="actions">
     <button class="cancel" bindtap="onCancelEdit">取消</button>
-    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">{{typeLabel === '收入' ? '保存收入' : '保存支出'}}</button>
+    <button class="save" disabled="{{saveDisabled}}" bindtap="onSave">保存修改</button>
   </view>
-  <text class="delete-link" wx:if="{{!formLocked}}" bindtap="onDelete">删除这笔交易</text>
   <view class="mask" wx:if="{{accountSelectorOpen}}" catchtouchmove="onHold">
     <view class="backdrop" bindtap="onCloseAccounts"></view>
     <view class="panel">
@@ -187,4 +180,5 @@
       </view>
     </view>
   </view>
+  <template is="tagSheet" data="{{tagSheetOpen: tagSheetOpen, tagQuery: tagQuery, tagRows: tagRows, tagSheetHeight: tagSheetHeight, tagComposer: tagComposer, tagDraft: tagDraft, tagInputLocked: tagInputLocked, formLocked: formLocked, tagCreateInFlight: tagCreateInFlight, tagError: tagError, tagNotice: tagNotice}}" />
 </view>

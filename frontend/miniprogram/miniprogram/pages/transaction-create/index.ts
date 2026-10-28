@@ -11,7 +11,7 @@ import { accountHomePath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
 import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
-import type { Tag } from "../../tag/tag";
+import type { Tag, TagNode } from "../../tag/tag";
 import {
   applyDatePickerValue,
   applyNow,
@@ -59,6 +59,14 @@ import {
   type CategoryRow,
 } from "../../transaction/reference";
 import {
+  appendCreatedTag,
+  flattenTagNodes,
+  TAG_SAVED_NOTICE,
+  tagPickerRows,
+  tagSelectionSummary,
+  tagSheetHeight,
+} from "../../transaction/tag-picker";
+import {
   alertBeforeUnloadMessage,
   applySubmitOutcome,
   canSave,
@@ -88,6 +96,10 @@ Page({
   postSaveCompleted: false,
   categories: { EXPENSE: emptyBucket<CategoryNode>(), INCOME: emptyBucket<CategoryNode>() },
   tags: { EXPENSE: emptyBucket<Tag>(), INCOME: emptyBucket<Tag>() },
+  tagTrees: { EXPENSE: [] as TagNode[], INCOME: [] as TagNode[] },
+  tagDraftIds: null as number[] | null,
+  tagQuery: "",
+  tagNotice: "",
   composers: { EXPENSE: emptyComposer(), INCOME: emptyComposer() },
   tagRequest: null as { type: TransactionType; generation: number } | null,
   tagCreateInFlight: false,
@@ -123,7 +135,12 @@ Page({
     categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as "idle" | "loading" | "ready" | "error",
-    tagChips: [] as { id: number; name: string; selected: boolean }[],
+    tagSummary: "未选择",
+    tagSheetOpen: false,
+    tagRows: [] as { id: number; name: string; depth: number; selected: boolean }[],
+    tagQuery: "",
+    tagSheetHeight: 176,
+    tagNotice: "",
     tagComposer: false,
     tagDraft: "",
     tagError: "",
@@ -178,7 +195,10 @@ Page({
     this.forgetSubmitError();
     if (switched.clearTagDraft) {
       this.composers[previous] = retireComposer(this.composers[previous]);
-      this.setData({ selectorOpen: false });
+      this.tagDraftIds = null;
+      this.tagQuery = "";
+      this.tagNotice = "";
+      this.setData({ selectorOpen: false, tagSheetOpen: false });
     }
     this.publishForm();
     if (shouldLoadReference(this.categories[next].phase)) {
@@ -245,15 +265,44 @@ Page({
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
-    if (!this.canEdit()) {
+    if (!this.canEdit() || this.tagDraftIds === null) {
       return;
     }
     const tagId = Number(event.currentTarget.dataset["id"]);
-    this.form = {
-      ...this.form,
-      selectedTagIds: toggleTagSelection(this.form.selectedTagIds, tagId, this.tags[this.form.type].items),
-    };
+    this.tagDraftIds = toggleTagSelection(this.tagDraftIds, tagId, this.tags[this.form.type].items);
     this.forgetSubmitError();
+    this.publishForm();
+  },
+
+  onOpenTags() {
+    if (!this.canEdit() || this.tags[this.form.type].phase !== "ready") {
+      return;
+    }
+    this.tagDraftIds = [...this.form.selectedTagIds];
+    this.tagQuery = "";
+    this.tagNotice = "";
+    this.publishForm();
+  },
+
+  onTagQuery(event: WechatMiniprogram.Input) {
+    this.tagQuery = event.detail.value;
+    this.publishForm();
+  },
+
+  onCancelTags() {
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    const type = this.form.type;
+    this.composers[type] = { ...this.composers[type], open: false, draft: "", error: "" };
+    this.publishForm();
+  },
+
+  onConfirmTags() {
+    if (this.tagDraftIds !== null) {
+      this.form = { ...this.form, selectedTagIds: [...this.tagDraftIds] };
+    }
+    this.tagDraftIds = null;
+    this.tagQuery = "";
     this.publishForm();
   },
 
@@ -298,12 +347,16 @@ Page({
         return;
       }
       this.tags[submittedType] = rememberCreatedTag(this.tags[submittedType], created);
+      this.tagTrees[submittedType] = appendCreatedTag(this.tagTrees[submittedType], { ...created, children: [] });
       this.createdTagIds = this.createdTagIds.includes(created.id) ? this.createdTagIds : [...this.createdTagIds, created.id];
-      if (this.form.type === submittedType) {
-        this.form = {
-          ...this.form,
-          selectedTagIds: applyOwnedSelection(this.form.selectedTagIds, this.form.type, created),
-        };
+      const selecting = this.tagDraftIds ?? this.form.selectedTagIds;
+      const nextIds = applyOwnedSelection(selecting, this.form.type === submittedType ? this.form.type : submittedType, created);
+      if (this.form.type === submittedType && this.tagDraftIds !== null) {
+        this.tagDraftIds = nextIds;
+        this.tagNotice = TAG_SAVED_NOTICE;
+        this.forgetSubmitError();
+      } else if (this.form.type === submittedType) {
+        this.form = { ...this.form, selectedTagIds: nextIds };
         this.forgetSubmitError();
       }
       this.composers[submittedType] = settleCreateTagComposer(this.composers[submittedType], requestGeneration, { status: "success" });
@@ -601,8 +654,9 @@ Page({
       this.setData({ tagPhase: "loading" });
     }
     try {
-      const items = await tagApi.listTags(type);
-      this.finishTags(type, started.generation, items);
+      const tree = await tagApi.listTagTree(type);
+      this.tagTrees[type] = tree;
+      this.finishTags(type, started.generation, flattenTagNodes(tree));
     } catch (error) {
       if (isUnauthorized(error)) {
         return;
@@ -809,11 +863,12 @@ Page({
       uncategorizedSelected: categorySheet.uncategorizedSelected,
       categorySheetHeight: categorySheet.height,
       tagPhase: tags.phase,
-      tagChips: tags.items.map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        selected: this.form.selectedTagIds.includes(tag.id),
-      })),
+      tagSummary: tagSelectionSummary(this.form.selectedTagIds, tags.items),
+      tagSheetOpen: this.tagDraftIds !== null,
+      tagRows: tagPickerRows(this.tagTrees[type], this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery),
+      tagQuery: this.tagQuery,
+      tagSheetHeight: tagSheetHeight(tagPickerRows(this.tagTrees[type], this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery).length),
+      tagNotice: this.tagNotice,
       tagComposer: this.composers[type].open,
       tagDraft: this.composers[type].draft,
       tagError: this.composers[type].error,

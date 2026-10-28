@@ -12,14 +12,9 @@
     </view>
     <view class="asset">
       <text class="name">{{name}}</text>
-      <text class="kind">{{kindLabel}}</text>
       <text class="label">当前余额</text>
       <text class="balance {{balanceToneClass}}">{{balanceLabel}}</text>
       <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
-      <view class="asset-links">
-        <text class="nav-link" wx:if="{{!archived}}" bindtap="onAdjust">余额调整</text>
-        <text class="nav-link" bindtap="onStatistics">统计</text>
-      </view>
     </view>
     <view class="month">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>
@@ -41,7 +36,7 @@
       </view>
     </view>
     <input class="search" value="{{searchInput}}" placeholder="搜索交易名称" bindinput="onSearchInput" confirm-type="search" />
-    <entry-fab wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
+    <entry-fab wx:if="{{!archived && phase !== 'account-loading' && phase !== 'account-error'}}" show-adjust="{{true}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" bind:adjust="onFabAdjust" />
     <text class="status" wx:if="{{phase === 'ledger-loading'}}">正在读取流水</text>
     <block wx:elif="{{phase === 'ledger-error'}}">
       <text class="error">{{errorMessage}}</text>

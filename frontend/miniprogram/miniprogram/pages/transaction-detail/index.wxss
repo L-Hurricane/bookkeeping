@@ -76,6 +76,11 @@
   margin-top: 28rpx;
 }
 
+.fact .label {
+  display: block;
+  margin-bottom: 6rpx;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

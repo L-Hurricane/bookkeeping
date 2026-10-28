@@ -314,6 +314,11 @@ Page({
     this.onTransfer();
   },
 
+  onFabAdjust() {
+    this.setData({ fabOpen: false });
+    this.onAdjust();
+  },
+
   onCreate() {
     this.openTransaction("EXPENSE");
   },

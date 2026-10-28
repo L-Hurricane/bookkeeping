@@ -2,6 +2,13 @@ import { moneyToneClass } from "../../account/money-tone";
 import { ApiError } from "../../http/client";
 import { formatMoneyLabel } from "../../ledger/ledger";
 import { accountApi, ledgerStatisticsApi } from "../../services/runtime";
+import {
+  accountChoiceGroups,
+  rememberStatisticsSelection,
+  retainKnownAccountIds,
+  statisticsSelection,
+  type AccountChoiceGroup,
+} from "../../statistics/account-filter";
 import { LedgerStatisticsResponseError } from "../../services/ledger-statistics";
 import {
   statisticsDetailPagePath,
@@ -51,6 +58,10 @@ Page({
   breakdown: "CATEGORY" as BreakdownName,
   picker: [] as PickerAccount[],
   selectedTagIds: [] as number[],
+  accountSheetOpen: false,
+  accountQuery: "",
+  draftIds: [] as number[],
+  groupCollapsed: { active: false, archived: false } as Record<string, boolean>,
   ringSegments: [] as RingSegment[],
 
   data: {
@@ -83,6 +94,10 @@ Page({
     moreOpen: false,
     ringNote: "",
     ringSegments: [] as RingSegment[],
+    selectedCount: 0,
+    accountSheetOpen: false,
+    accountQuery: "",
+    accountGroups: [] as AccountChoiceGroup[],
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -93,6 +108,12 @@ Page({
     }
     this.module = view.module;
     this.breakdown = view.breakdown;
+    const saved = statisticsSelection();
+    this.preset = saved.preset;
+    this.scope = saved.scope;
+    this.checkedIds = [...saved.accountIds];
+    this.customFrom = saved.customFrom;
+    this.customTo = saved.customTo;
     wx.setNavigationBarTitle({ title: view.title });
     void this.prepare();
   },
@@ -112,6 +133,8 @@ Page({
         ...active.map((account) => ({ id: account.id, name: account.name, archived: false, checked: false })),
         ...archived.map((account) => ({ id: account.id, name: account.name, archived: true, checked: false })),
       ];
+      this.checkedIds = retainKnownAccountIds(this.checkedIds, this.picker.map((account) => account.id));
+      this.picker = this.picker.map((account) => ({ ...account, checked: this.checkedIds.includes(account.id) }));
     } catch (error) {
       if (!this.pageAlive || error instanceof ApiError && error.status === 401) return;
       this.picker = [];
@@ -165,16 +188,78 @@ Page({
   onSelectScope(event: WechatMiniprogram.BaseEvent) {
     const scope = event.currentTarget.dataset["scope"];
     if (scope !== "ACTIVE" && scope !== "ALL" && scope !== "SELECTED") return;
+    if (scope === "SELECTED") {
+      this.openAccountSheet();
+      return;
+    }
     this.scope = scope;
+    this.accountSheetOpen = false;
     void this.load();
   },
 
-  onToggleAccount(event: WechatMiniprogram.BaseEvent) {
+  openAccountSheet() {
+    this.draftIds = [...this.checkedIds];
+    this.accountQuery = "";
+    this.accountSheetOpen = true;
+    this.publishAccountSheet();
+  },
+
+  onOpenAccountSheet() {
+    this.openAccountSheet();
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    this.accountQuery = event.detail.value;
+    this.publishAccountSheet();
+  },
+
+  onToggleGroup(event: WechatMiniprogram.BaseEvent) {
+    const key = event.currentTarget.dataset["key"];
+    if (key !== "active" && key !== "archived") return;
+    this.groupCollapsed = { ...this.groupCollapsed, [key]: !this.groupCollapsed[key] };
+    this.publishAccountSheet();
+  },
+
+  onToggleDraftAccount(event: WechatMiniprogram.BaseEvent) {
     const id = Number(event.currentTarget.dataset["id"]);
     if (!Number.isSafeInteger(id)) return;
-    this.checkedIds = this.checkedIds.includes(id) ? this.checkedIds.filter((item) => item !== id) : [...this.checkedIds, id];
+    this.draftIds = this.draftIds.includes(id) ? this.draftIds.filter((item) => item !== id) : [...this.draftIds, id];
+    this.publishAccountSheet();
+  },
+
+  onSelectAllAccounts() {
+    this.draftIds = this.picker.map((account) => account.id);
+    this.publishAccountSheet();
+  },
+
+  onClearAccounts() {
+    this.draftIds = [];
+    this.publishAccountSheet();
+  },
+
+  onCancelAccounts() {
+    this.accountSheetOpen = false;
+    this.setData({ accountSheetOpen: false });
+  },
+
+  onConfirmAccounts() {
+    this.checkedIds = [...this.draftIds];
+    this.scope = "SELECTED";
     this.picker = this.picker.map((account) => ({ ...account, checked: this.checkedIds.includes(account.id) }));
+    this.accountSheetOpen = false;
     void this.load();
+  },
+
+  onHold() {
+    return;
+  },
+
+  publishAccountSheet() {
+    this.setData({
+      accountSheetOpen: true,
+      accountQuery: this.accountQuery,
+      accountGroups: accountChoiceGroups(this.picker, this.draftIds, this.accountQuery, this.groupCollapsed),
+    });
   },
 
   onRetry() {
@@ -213,6 +298,13 @@ Page({
   },
 
   async load() {
+    rememberStatisticsSelection({
+      preset: this.preset,
+      customFrom: this.customFrom,
+      customTo: this.customTo,
+      scope: this.scope,
+      accountIds: this.checkedIds,
+    });
     const query = this.currentQuery();
     const requested = ++this.generation;
     if (query === null) {
@@ -379,6 +471,11 @@ Page({
       module: this.module,
       breakdown: this.breakdown,
       picker: this.scope === "SELECTED" ? this.picker : [],
+      selectedCount: this.checkedIds.length,
+      accountSheetOpen: this.accountSheetOpen,
+      accountGroups: this.accountSheetOpen
+        ? accountChoiceGroups(this.picker, this.draftIds, this.accountQuery, this.groupCollapsed)
+        : [],
     };
   },
 

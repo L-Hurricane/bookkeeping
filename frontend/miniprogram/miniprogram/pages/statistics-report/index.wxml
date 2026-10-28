@@ -28,20 +28,17 @@
   <view class="panel">
     <text class="panel-title">账户范围</text>
     <view class="choices">
-      <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">不含归档</text>
-      <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">包含归档</text>
+      <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">未归档账户</text>
+      <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">全部账户（含已归档）</text>
       <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
     </view>
-    <view wx:if="{{scope === 'SELECTED'}}">
-      <view class="choice {{item.checked ? 'selected' : ''}}" wx:for="{{picker}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleAccount">
-        {{item.name}}{{item.archived ? ' · 已归档' : ''}}
-      </view>
-    </view>
+    <text wx:if="{{scope === 'SELECTED'}}" class="range" bindtap="onOpenAccountSheet">已选 {{selectedCount}} 个账户</text>
     <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
   </view>
 
   <text class="status" wx:if="{{phase === 'loading'}}">正在读取统计</text>
   <text class="status" wx:elif="{{phase === 'choose'}}">{{errorMessage}}</text>
+  <button wx:if="{{phase === 'choose' && scope === 'SELECTED'}}" bindtap="onOpenAccountSheet">选择账户</button>
   <block wx:elif="{{phase === 'error'}}">
     <text class="error">{{errorMessage}}</text>
     <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
@@ -121,4 +118,31 @@
       </view>
     </view>
   </block>
+  <view class="mask" wx:if="{{accountSheetOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelAccounts"></view>
+    <view class="sheet">
+      <text class="panel-title">选择账户</text>
+      <input class="search" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
+      <view class="sheet-tools">
+        <text bindtap="onSelectAllAccounts">全选</text>
+        <text bindtap="onClearAccounts">清空</text>
+      </view>
+      <scroll-view scroll-y class="sheet-list">
+        <text class="status" wx:if="{{accountGroups.length === 0}}">没有匹配的账户</text>
+        <block wx:for="{{accountGroups}}" wx:key="key">
+          <view class="group-head" data-key="{{item.key}}" bindtap="onToggleGroup">{{item.title}} {{item.collapsed ? '展开' : '收起'}}</view>
+          <block wx:if="{{!item.collapsed}}">
+            <view class="pick" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onToggleDraftAccount">
+              <text>{{account.name}}</text>
+              <text wx:if="{{account.checked}}">✓</text>
+            </view>
+          </block>
+        </block>
+      </scroll-view>
+      <view class="sheet-actions">
+        <button bindtap="onCancelAccounts">取消</button>
+        <button bindtap="onConfirmAccounts">确认</button>
+      </view>
+    </view>
+  </view>
 </view>

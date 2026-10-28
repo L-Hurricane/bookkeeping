@@ -1,3 +1,4 @@
+<import src="../../transaction/tag-sheet.wxml" />
 <view class="page" wx:if="{{contextInvalid}}">
   <text class="error">记账页面参数无效</text>
   <button bindtap="onBackHome">返回</button>
@@ -34,22 +35,12 @@
   </view>
   <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenCategories">{{categoryText}} ></view>
   <text class="label">标签</text>
-  <view wx:if="{{tagPhase === 'loading'}}"><text class="hint">正在读取标签</text></view>
-  <view class="chips {{formLocked ? 'locked' : ''}}" wx:if="{{tagChips.length}}">
-    <text class="chip {{item.selected ? 'selected' : ''}}" wx:for="{{tagChips}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag">{{item.name}}</text>
-  </view>
-  <view wx:if="{{tagPhase === 'error'}}">
+  <text class="hint" wx:if="{{tagPhase === 'loading'}}">正在读取标签</text>
+  <block wx:elif="{{tagPhase === 'error'}}">
     <text class="error">标签加载失败</text>
     <button bindtap="onRetryTags">重新加载</button>
-  </view>
-  <view class="composer" wx:if="{{tagPhase !== 'loading'}}">
-    <text class="{{formLocked ? 'locked' : ''}}" wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新增标签</text>
-    <block wx:else>
-      <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked || formLocked}}" bindinput="onTagDraft" />
-      <button disabled="{{tagCreateInFlight || formLocked}}" bindtap="onCreateTag">创建</button>
-    </block>
-    <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
-  </view>
+  </block>
+  <view wx:else class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTags">{{tagSummary}} ></view>
   </view>
   <view class="group">
   <text class="label">交易时间</text>
@@ -134,4 +125,5 @@
       </view>
     </view>
   </view>
+  <template is="tagSheet" data="{{tagSheetOpen: tagSheetOpen, tagQuery: tagQuery, tagRows: tagRows, tagSheetHeight: tagSheetHeight, tagComposer: tagComposer, tagDraft: tagDraft, tagInputLocked: tagInputLocked, formLocked: formLocked, tagCreateInFlight: tagCreateInFlight, tagError: tagError, tagNotice: tagNotice}}" />
 </view>

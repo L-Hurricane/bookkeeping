@@ -29,7 +29,7 @@ describe("s6 approved ui", () => {
     assert.equal(report.includes("近3月"), true);
     assert.equal(report.includes("近1年"), true);
     assert.equal(report.includes("查看期间交易"), true);
-    assert.equal(report.includes("包含归档"), true);
+    assert.equal(report.includes("全部账户（含已归档）"), true);
   });
 
   it("does not show a per-row balance on the cross-account feed", () => {

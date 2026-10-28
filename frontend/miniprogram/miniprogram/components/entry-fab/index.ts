@@ -2,6 +2,7 @@ Component({
   properties: {
     open: { type: Boolean, value: false },
     aboveTab: { type: Boolean, value: false },
+    showAdjust: { type: Boolean, value: false },
   },
   methods: {
     onToggle() {
@@ -15,6 +16,9 @@ Component({
     },
     onTransfer() {
       this.triggerEvent("transfer");
+    },
+    onAdjust() {
+      this.triggerEvent("adjust");
     },
   },
 });

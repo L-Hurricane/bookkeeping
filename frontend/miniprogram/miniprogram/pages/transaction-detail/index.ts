@@ -5,15 +5,14 @@ import {
   formatCurrentBalance,
   type Account,
 } from "../../account/account";
-import { stashLedgerHandoff } from "../../account/ledger-handoff";
-import { createLoadGuard } from "../../account/load-guard";
+import { accountSettingsPath } from "../../account/navigation";
 import { moneyToneClass } from "../../account/money-tone";
-import { accountHomePath, accountSettingsPath } from "../../account/navigation";
+import { createLoadGuard } from "../../account/load-guard";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
 import { handoffPostSave } from "../../ledger/post-save";
 import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
-import type { Tag } from "../../tag/tag";
+import type { Tag, TagNode } from "../../tag/tag";
 import {
   applyDatePickerValue,
   applyNow,
@@ -77,6 +76,14 @@ import {
   type TypeBucket,
 } from "../../transaction/reference";
 import { UNCERTAIN_MESSAGE } from "../../transaction/submission";
+import {
+  appendCreatedTag,
+  flattenTagNodes,
+  TAG_SAVED_NOTICE,
+  tagPickerRows,
+  tagSelectionSummary,
+  tagSheetHeight,
+} from "../../transaction/tag-picker";
 import type { TransactionView } from "../../transaction/transaction";
 
 interface AccountCard {
@@ -103,6 +110,11 @@ Page({
   selectedAccountCreatedTime: "",
   categories: emptyBucket<CategoryNode>(),
   tags: emptyBucket<Tag>(),
+  tagTree: [] as TagNode[],
+  tagDraftIds: null as number[] | null,
+  tagQuery: "",
+  tagNotice: "",
+  accountName: "",
   tagSession: initialTagEditSession(),
   timeDraft: null as BusinessTimeDraft | null,
   deletePhase: "idle" as "idle" | "deleting" | "uncertain",
@@ -119,6 +131,7 @@ Page({
     amountToneClass: "money-zero",
     categoryLabel: "",
     tagNames: [] as string[],
+    tagNamesLabel: "—",
     businessTimeLabel: "",
     remarkLabel: "",
     amount: "",
@@ -139,7 +152,12 @@ Page({
     categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as TypeBucket<Tag>["phase"],
-    tagChips: [] as { id: number; name: string; selected: boolean }[],
+    tagSummary: "未选择",
+    tagSheetOpen: false,
+    tagRows: [] as { id: number; name: string; depth: number; selected: boolean }[],
+    tagQuery: "",
+    tagSheetHeight: 176,
+    tagNotice: "",
     tagComposer: false,
     tagDraft: "",
     tagError: "",
@@ -161,6 +179,8 @@ Page({
     deleteHint: "",
     readOnly: false,
     archiveHint: "",
+    accountName: "",
+    showRemark: false,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -201,11 +221,9 @@ Page({
         return;
       }
       this.readOnly = account.lifecycle === "ARCHIVED";
+      this.accountName = account.name;
       this.transaction = transaction;
       this.publishDetail();
-      if (!this.readOnly) {
-        this.onEdit();
-      }
     } catch (error) {
       const failure = classifyDetailError(error);
       if (!this.loadGuard.pageAlive || generation !== this.detailGeneration || failure === "unauthorized") {
@@ -235,6 +253,9 @@ Page({
     this.update = editingUpdate();
     this.updateCompleted = false;
     this.tagSession = enterEditSession(this.tagSession);
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    this.tagNotice = "";
     this.screen = "edit";
     this.timeDraft = null;
     wx.setNavigationBarTitle({ title: "编辑交易" });
@@ -365,12 +386,43 @@ Page({
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
-    if (!this.canEdit()) {
+    if (!this.canEdit() || this.tagDraftIds === null) {
       return;
     }
     const tagId = Number(event.currentTarget.dataset["id"]);
-    this.form = { ...this.form, selectedTagIds: toggleTagSelection(this.form.selectedTagIds, tagId, this.currentTagChoices()) };
+    this.tagDraftIds = toggleTagSelection(this.tagDraftIds, tagId, this.currentTagChoices());
     this.setData({ submitError: "" });
+    this.publishEdit();
+  },
+
+  onOpenTags() {
+    if (!this.canEdit() || this.tags.phase !== "ready") {
+      return;
+    }
+    this.tagDraftIds = [...this.form.selectedTagIds];
+    this.tagQuery = "";
+    this.tagNotice = "";
+    this.publishEdit();
+  },
+
+  onTagQuery(event: WechatMiniprogram.Input) {
+    this.tagQuery = event.detail.value;
+    this.publishEdit();
+  },
+
+  onCancelTags() {
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    this.tagSession = { ...this.tagSession, composer: { ...this.tagSession.composer, open: false, draft: "", error: "" } };
+    this.publishEdit();
+  },
+
+  onConfirmTags() {
+    if (this.tagDraftIds !== null) {
+      this.form = { ...this.form, selectedTagIds: [...this.tagDraftIds] };
+    }
+    this.tagDraftIds = null;
+    this.tagQuery = "";
     this.publishEdit();
   },
 
@@ -410,10 +462,17 @@ Page({
       if (!this.loadGuard.pageAlive) {
         return;
       }
-      const applied = applyCreateTagToEditSession(this.tagSession, request, this.tags, this.form.selectedTagIds, { status: "success", tag: created });
+      const selecting = this.tagDraftIds ?? this.form.selectedTagIds;
+      const applied = applyCreateTagToEditSession(this.tagSession, request, this.tags, selecting, { status: "success", tag: created });
       this.tags = applied.bucket;
+      this.tagTree = appendCreatedTag(this.tagTree, { ...created, children: [] });
       this.tagSession = applied.session;
-      this.form = { ...this.form, selectedTagIds: applied.selectedTagIds };
+      if (this.tagDraftIds !== null) {
+        this.tagDraftIds = [...applied.selectedTagIds];
+        this.tagNotice = TAG_SAVED_NOTICE;
+      } else {
+        this.form = { ...this.form, selectedTagIds: [...applied.selectedTagIds] };
+      }
     } catch (error) {
       if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
         return;
@@ -676,8 +735,9 @@ Page({
       this.setData({ tagPhase: "loading" });
     }
     try {
-      const items = await tagApi.listTags(this.transaction.type);
-      this.finishTags(started.generation, items);
+      const items = await tagApi.listTagTree(this.transaction.type);
+      this.tagTree = items;
+      this.finishTags(started.generation, flattenTagNodes(items));
     } catch (error) {
       if (isUnauthorized(error)) {
         return;
@@ -735,14 +795,22 @@ Page({
     this.updateCompleted = true;
     wx.disableAlertBeforeUnload();
     const result = decision.result;
-    const sourceAccountId = this.context?.accountId ?? 0;
-    if (result.accountId > 0 && result.accountId !== sourceAccountId) {
-      stashLedgerHandoff(result.accountId, result);
-      wx.reLaunch({ url: accountHomePath(result.accountId) });
-      return;
+    if (this.context !== null) {
+      const account = findAccount(this.accounts, result.accountId);
+      if (account !== null) {
+        this.accountName = account.name;
+        this.selectedAccountCreatedTime = account.createdTime;
+      }
+      this.context = {
+        ...this.context,
+        accountId: result.accountId,
+        transactionId: result.transactionId,
+        accountCreatedTime: this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : this.context.accountCreatedTime,
+      };
     }
+    this.tagDraftIds = null;
     emitTransactionUpdated(this, result);
-    wx.navigateBack();
+    this.returnToDetail();
   },
 
   async loadAccounts() {
@@ -890,8 +958,11 @@ Page({
       amountToneClass: moneyToneClass(this.transaction.amount),
       categoryLabel: view.categoryLabel,
       tagNames: [...view.tagNames],
+      tagNamesLabel: view.tagNames.length === 0 ? "—" : view.tagNames.join("、"),
       businessTimeLabel: view.businessTimeLabel,
       remarkLabel: view.remarkLabel,
+      showRemark: view.remarkLabel !== "—",
+      accountName: this.accountName,
       deleteLocked: false,
       deleteHint: "",
       readOnly: this.readOnly,
@@ -927,11 +998,12 @@ Page({
       uncategorizedSelected: categorySheet.uncategorizedSelected,
       categorySheetHeight: categorySheet.height,
       tagPhase: this.tags.phase,
-      tagChips: this.currentTagChoices().map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        selected: this.form.selectedTagIds.includes(tag.id),
-      })),
+      tagSummary: tagSelectionSummary(this.form.selectedTagIds, this.currentTagChoices()),
+      tagSheetOpen: this.tagDraftIds !== null,
+      tagRows: tagPickerRows(this.tagTree, this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery),
+      tagQuery: this.tagQuery,
+      tagSheetHeight: tagSheetHeight(tagPickerRows(this.tagTree, this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery).length),
+      tagNotice: this.tagNotice,
       tagComposer: this.tagSession.composer.open,
       tagDraft: this.tagSession.composer.draft,
       tagError: this.tagSession.composer.error,
