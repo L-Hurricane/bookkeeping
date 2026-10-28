@@ -457,7 +457,9 @@ Page({
   },
 
   captureTransactionUpdate(result: unknown) {
-    if (this.redirectIfForeignAccount(result)) {
+    const saved = parsePostSaveResult(result);
+    if (saved !== null && saved.accountId > 0 && saved.accountId !== this.accountId) {
+      this.detailReturn = noteListStale(this.openList()).visit;
       return;
     }
     const current = this.locateNavigation();

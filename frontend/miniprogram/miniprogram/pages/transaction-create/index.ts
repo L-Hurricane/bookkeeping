@@ -355,9 +355,6 @@ Page({
         this.tagDraftIds = nextIds;
         this.tagNotice = TAG_SAVED_NOTICE;
         this.forgetSubmitError();
-      } else if (this.form.type === submittedType) {
-        this.form = { ...this.form, selectedTagIds: nextIds };
-        this.forgetSubmitError();
       }
       this.composers[submittedType] = settleCreateTagComposer(this.composers[submittedType], requestGeneration, { status: "success" });
       this.publishForm();

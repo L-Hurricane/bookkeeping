@@ -6,6 +6,7 @@ import { appendCreatedTag, tagPickerRows, tagSelectionSummary } from "../minipro
 import type { TagNode } from "../miniprogram/tag/tag";
 
 const home = readFileSync(new URL("../miniprogram/pages/account-home/index.wxml", import.meta.url), "utf8");
+const accountHomeTs = readFileSync(new URL("../miniprogram/pages/account-home/index.ts", import.meta.url), "utf8");
 const list = readFileSync(new URL("../miniprogram/pages/account-list/index.wxml", import.meta.url), "utf8");
 const feed = readFileSync(new URL("../miniprogram/pages/all-transactions/index.wxml", import.meta.url), "utf8");
 const fab = readFileSync(new URL("../miniprogram/components/entry-fab/index.wxml", import.meta.url), "utf8");
@@ -56,6 +57,13 @@ describe("s6 fb-016 to fb-019", () => {
     assert.equal(tagSheet.includes("选择标签"), true);
     assert.equal(tagSheet.includes("新建标签"), true);
     assert.equal(detail.includes("this.onEdit();"), false);
+    const capture = accountHomeTs.slice(
+      accountHomeTs.indexOf("captureTransactionUpdate(result: unknown)"),
+      accountHomeTs.indexOf("receiveAdjustmentCreated(payload: unknown)"),
+    );
+    assert.equal(capture.includes("redirectIfForeignAccount"), false);
+    assert.equal(capture.includes("noteListStale"), true);
+    assert.equal(accountHomeTs.includes("receiveTransactionCreated"), true);
     assert.equal(detail.includes("wx.navigateBack();"), true);
   });
 

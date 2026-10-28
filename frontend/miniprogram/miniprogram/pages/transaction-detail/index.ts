@@ -470,8 +470,6 @@ Page({
       if (this.tagDraftIds !== null) {
         this.tagDraftIds = [...applied.selectedTagIds];
         this.tagNotice = TAG_SAVED_NOTICE;
-      } else {
-        this.form = { ...this.form, selectedTagIds: [...applied.selectedTagIds] };
       }
     } catch (error) {
       if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
