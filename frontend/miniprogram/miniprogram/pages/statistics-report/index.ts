@@ -19,7 +19,7 @@ import {
   type LedgerQuery,
   type LedgerReport,
 } from "../../statistics/ledger-contract";
-import { flowRows, ringSegments, type LedgerAmountRow, type RingSegment } from "../../statistics/ledger-view";
+import { flowRows, ringGeometry, ringHit, ringSegments, ringSweeps, ringTouchPoint, type LedgerAmountRow, type RingSegment } from "../../statistics/ledger-view";
 import { lineYs } from "../../statistics/line-layout";
 import { allTransactionsPath } from "../../ledger/feed-contract";
 
@@ -63,6 +63,8 @@ Page({
   draftIds: [] as number[],
   groupCollapsed: { active: false, archived: false } as Record<string, boolean>,
   ringSegments: [] as RingSegment[],
+  ringPickKey: "",
+  tagPickKey: "",
 
   data: {
     phase: "loading" as "loading" | "ready" | "error" | "choose",
@@ -94,6 +96,11 @@ Page({
     moreOpen: false,
     ringNote: "",
     ringSegments: [] as RingSegment[],
+    ringPick: null as { title: string; amountLabel: string; share: string } | null,
+    ringPickKey: "",
+    ringLocateNote: "",
+    tagPick: null as { title: string; amountLabel: string; detail: string } | null,
+    tagPickKey: "",
     selectedCount: 0,
     accountSheetOpen: false,
     accountQuery: "",
@@ -350,6 +357,10 @@ Page({
       ...row,
       selected: row.drillKind === "tag" && this.selectedTagIds.includes(row.drillId),
     }));
+    const ringPick = this.ringSegments.find((segment) => segment.key === this.ringPickKey) ?? null;
+    if (ringPick === null) this.ringPickKey = "";
+    const tagPick = tags.find((row) => row.key === this.tagPickKey) ?? null;
+    if (tagPick === null) this.tagPickKey = "";
     this.setData({
       ...this.chrome(),
       phase: "ready",
@@ -368,6 +379,11 @@ Page({
         ? "净额含负数或为零，环形图不按 100% 构成展示。"
         : "",
       ringSegments: this.ringSegments,
+      ringPick: ringPick === null ? null : { title: ringPick.title, amountLabel: ringPick.amountLabel, share: ringPick.share },
+      ringPickKey: this.ringPickKey,
+      ringLocateNote: "",
+      tagPick: tagPick === null ? null : { title: tagPick.title, amountLabel: tagPick.amountLabel, detail: tagPick.detail },
+      tagPickKey: this.tagPickKey,
       netLabel: this.module === "NET" ? "" : formatMoneyLabel(flow.net),
       netTone: "money-neutral",
       categories,
@@ -426,12 +442,65 @@ Page({
     });
   },
 
+  onRingTap(event: { detail?: { x?: number; y?: number }; touches?: Array<{ clientX: number; clientY: number }>; changedTouches?: Array<{ clientX: number; clientY: number }> }) {
+    const touch = event.changedTouches?.[0] ?? event.touches?.[0];
+    wx.createSelectorQuery().in(this).select("#category-ring").fields({ node: true, size: true, rect: true }).exec((result) => {
+      const node = result?.[0] as { width?: number; height?: number; left?: number; top?: number } | undefined;
+      const width = node?.width;
+      const height = node?.height;
+      if (width === undefined || height === undefined) {
+        this.setData({ ringLocateNote: "点到的位置无法对应扇区。" });
+        return;
+      }
+      const point = ringTouchPoint(event.detail?.x, event.detail?.y, touch, { width, height, left: node?.left, top: node?.top });
+      if (point === null) {
+        this.setData({ ringLocateNote: "点到的位置无法对应扇区。" });
+        return;
+      }
+      const hit = ringHit(this.ringSegments, point.x, point.y, width, height);
+      if (hit.kind === "miss") {
+        this.setData({ ringLocateNote: "这个位置没有对应的分类扇区。" });
+        return;
+      }
+      if (hit.kind === "hole") {
+        this.ringPickKey = "";
+        this.setData({ ringPick: null, ringPickKey: "", ringLocateNote: "" }, () => this.drawRing());
+        return;
+      }
+      const segment = this.ringSegments[hit.index];
+      if (segment === undefined) {
+        this.setData({ ringLocateNote: "点到的位置无法对应扇区。" });
+        return;
+      }
+      this.ringPickKey = segment.key;
+      this.setData({
+        ringPick: { title: segment.title, amountLabel: segment.amountLabel, share: segment.share },
+        ringPickKey: segment.key,
+        ringLocateNote: "",
+      }, () => this.drawRing());
+    });
+  },
+
+  onPickTagBar(event: WechatMiniprogram.BaseEvent) {
+    const key = event.currentTarget.dataset["key"];
+    if (typeof key !== "string" || key.length === 0) return;
+    const row = this.data.tags.find((item) => item.key === key);
+    if (row === undefined) return;
+    this.tagPickKey = key;
+    this.setData({
+      tagPickKey: key,
+      tagPick: { title: row.title, amountLabel: row.amountLabel, detail: row.detail },
+    });
+  },
+
   drawRing() {
     const segments = this.ringSegments;
     if (segments.length === 0) return;
     wx.createSelectorQuery().in(this).select("#category-ring").fields({ node: true, size: true }).exec((result) => {
       const node = result?.[0] as { node?: WechatMiniprogram.Canvas; width?: number; height?: number } | undefined;
       if (node?.node === undefined || node.width === undefined || node.height === undefined) return;
+      const geometry = ringGeometry(node.width, node.height);
+      if (geometry === null) return;
       const canvas = node.node;
       const ctx = canvas.getContext("2d");
       const dpr = wx.getWindowInfo().pixelRatio || 1;
@@ -439,26 +508,27 @@ Page({
       canvas.height = node.height * dpr;
       ctx.scale(dpr, dpr);
       const colors = ["#3d5a80", "#c47b2b", "#6b5b95", "#7a8fa6", "#8d6e63", "#5c7a6e"];
-      let start = -Math.PI / 2;
-      const cx = node.width / 2;
-      const cy = node.height / 2;
-      const radius = Math.min(node.width, node.height) / 2 - 8;
-      for (let index = 0; index < segments.length; index += 1) {
-        const segment = segments[index];
+      ctx.clearRect(0, 0, node.width, node.height);
+      for (const sweep of ringSweeps(segments)) {
+        const segment = segments[sweep.index];
         if (segment === undefined) continue;
-        const weight = Number(segment.share);
-        if (!Number.isFinite(weight) || weight <= 0) continue;
-        const sweep = (weight / 100) * Math.PI * 2;
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, radius, start, start + sweep);
+        ctx.moveTo(geometry.cx, geometry.cy);
+        ctx.arc(geometry.cx, geometry.cy, geometry.radius, sweep.start, sweep.end);
         ctx.closePath();
-        ctx.fillStyle = colors[index % colors.length] ?? "#8a8a8a";
+        ctx.globalAlpha = this.ringPickKey.length > 0 && segment.key !== this.ringPickKey ? 0.4 : 1;
+        ctx.fillStyle = colors[sweep.index % colors.length] ?? "#8a8a8a";
         ctx.fill();
-        start += sweep;
+        if (segment.key === this.ringPickKey) {
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "#1a1a1a";
+          ctx.stroke();
+        }
       }
+      ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.62, 0, Math.PI * 2);
+      ctx.arc(geometry.cx, geometry.cy, geometry.hole, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.fill();
     });

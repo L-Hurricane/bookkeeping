@@ -77,17 +77,19 @@
       <text class="panel-title">构成</text>
       <text class="note" wx:if="{{ringNote}}">{{ringNote}}</text>
       <view class="ring-wrap" wx:if="{{ringSegments.length > 0}}">
-        <canvas type="2d" id="category-ring" class="ring"></canvas>
+        <canvas type="2d" id="category-ring" class="ring" bindtap="onRingTap"></canvas>
         <view class="ring-center">
-          <text class="label">合计</text>
-          <text class="figure money-neutral">{{netLabel}}</text>
+          <text class="label">{{ringPick ? ringPick.title : '合计'}}</text>
+          <text class="figure money-neutral">{{ringPick ? ringPick.amountLabel : netLabel}}</text>
+          <text wx:if="{{ringPick}}" class="note">{{ringPick.share}}%</text>
         </view>
       </view>
+      <text class="note" wx:if="{{ringLocateNote}}">{{ringLocateNote}}</text>
       <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
     </view>
     <view class="panel" wx:if="{{categories.length > 0}}">
       <text class="panel-title">分类</text>
-      <view class="row depth-{{item.depth}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+      <view class="row depth-{{item.depth}} {{ringPickKey === item.key ? 'picked' : ''}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
         <view class="row-main">
           <text class="row-title">{{item.title}}</text>
           <text class="row-detail">{{item.detail}}</text>
@@ -101,17 +103,18 @@
     <view class="panel">
       <text class="panel-title">合计</text>
       <text class="figure money-neutral">{{netLabel}}</text>
-      <text class="note">标签金额可以重叠。</text>
+      <text class="note">标签金额可以重叠，占比不必合计为 100%。</text>
+      <text wx:if="{{tagPick}}" class="note">{{tagPick.title}} {{tagPick.amountLabel}} · {{tagPick.detail}}</text>
       <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
       <button wx:if="{{selectedTagCount > 0}}" class="quiet" bindtap="onOpenSelectedTags">查看所选标签</button>
     </view>
     <view class="panel" wx:if="{{tags.length > 0}}">
       <text class="panel-title">标签</text>
-      <view class="row depth-{{item.depth}}" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+      <view class="row depth-{{item.depth}} {{tagPickKey === item.key ? 'picked' : ''}}" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
         <view class="row-main">
           <text class="row-title">{{item.title}}</text>
           <text class="row-detail">{{item.detail}}</text>
-          <view class="bar-track"><view class="bar-fill" style="width: {{item.barPercent}}%"></view></view>
+          <view class="bar-track" catchtap="onPickTagBar" data-key="{{item.key}}"><view class="bar-fill {{tagPickKey === item.key ? 'picked' : ''}}" style="width: {{item.barPercent}}%"></view></view>
           <text wx:if="{{item.drillKind === 'tag'}}" class="multi" catchtap="onToggleTag" data-id="{{item.drillId}}">{{item.selected ? '取消多选' : '加入多选'}}</text>
         </view>
         <text class="amount money-neutral">{{item.amountLabel}}</text>

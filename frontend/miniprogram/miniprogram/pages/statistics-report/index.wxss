@@ -35,6 +35,14 @@
   background: #3d5a80;
 }
 
+.bar-fill.picked {
+  background: #1a1a1a;
+}
+
+.row.picked {
+  background: #f4f6f8;
+}
+
 .page {
   min-height: 100vh;
   padding: 24rpx 24rpx 48rpx;

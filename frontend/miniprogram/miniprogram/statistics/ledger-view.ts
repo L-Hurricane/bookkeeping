@@ -84,23 +84,112 @@ function nodeRow(key: string, title: string, count: number, amount: string, shar
 }
 
 export interface RingSegment {
+  readonly key: string;
   readonly title: string;
+  readonly amountLabel: string;
   readonly share: string;
+  readonly drillKind: "category" | "uncategorized";
+  readonly drillId: number;
 }
+
+export interface RingSweep {
+  readonly index: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+export type RingHit =
+  | { readonly kind: "sector"; readonly index: number }
+  | { readonly kind: "hole" }
+  | { readonly kind: "miss" };
+
+const RING_INSET = 8;
+const RING_HOLE_RATIO = 0.62;
 
 /** Top-level composition only. Returns null when a ring would pretend to be a full non-negative pie. */
 export function ringSegments(flow: LedgerFlow): RingSegment[] | null {
   if (flow.net.startsWith("-") || flow.net === "0.00") return null;
-  const tops: { title: string; amount: string; share: string | null }[] = flow.categories.map((node) => ({
+  const tops: Array<{ key: string; title: string; amount: string; share: string | null; drillKind: RingSegment["drillKind"]; drillId: number }> = flow.categories.map((node) => ({
+    key: `category-${node.id}`,
     title: node.name,
     amount: node.amount,
     share: node.share,
+    drillKind: "category",
+    drillId: node.id,
   }));
   if (flow.uncategorized !== null) {
-    tops.push({ title: "未分类", amount: flow.uncategorized.amount, share: flow.uncategorized.share });
+    tops.push({
+      key: "uncategorized",
+      title: "未分类",
+      amount: flow.uncategorized.amount,
+      share: flow.uncategorized.share,
+      drillKind: "uncategorized",
+      drillId: 0,
+    });
   }
   if (tops.some((item) => item.amount.startsWith("-") || item.share === null)) return null;
-  return tops.filter((item) => item.share !== "0.00").map((item) => ({ title: item.title, share: item.share ?? "0.00" }));
+  return tops.filter((item) => item.share !== "0.00").map((item) => ({
+    key: item.key,
+    title: item.title,
+    amountLabel: formatMoneyLabel(item.amount),
+    share: item.share ?? "0.00",
+    drillKind: item.drillKind,
+    drillId: item.drillId,
+  }));
+}
+
+/** Geometry only. The displayed amount and share stay the backend strings on each segment. */
+export function ringSweeps(segments: readonly { share: string }[]): RingSweep[] {
+  const sweeps: RingSweep[] = [];
+  let start = -Math.PI / 2;
+  for (let index = 0; index < segments.length; index += 1) {
+    const weight = Number(segments[index]?.share);
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+    const end = start + (weight / 100) * Math.PI * 2;
+    sweeps.push({ index, start, end });
+    start = end;
+  }
+  return sweeps;
+}
+
+export function ringHit(segments: readonly { share: string }[], x: number, y: number, width: number, height: number): RingHit {
+  const geometry = ringGeometry(width, height);
+  if (geometry === null || !Number.isFinite(x) || !Number.isFinite(y)) return { kind: "miss" };
+  const distance = Math.hypot(x - geometry.cx, y - geometry.cy);
+  if (distance > geometry.radius) return { kind: "miss" };
+  if (distance < geometry.hole) return { kind: "hole" };
+  let angle = Math.atan2(y - geometry.cy, x - geometry.cx);
+  if (angle < -Math.PI / 2) angle += Math.PI * 2;
+  for (const sweep of ringSweeps(segments)) {
+    if (angle >= sweep.start && angle < sweep.end) return { kind: "sector", index: sweep.index };
+  }
+  return { kind: "miss" };
+}
+
+export function ringTouchPoint(
+  detailX: number | undefined,
+  detailY: number | undefined,
+  touch: { clientX: number; clientY: number } | undefined,
+  canvas: { width: number; height: number; left?: number; top?: number },
+): { x: number; y: number } | null {
+  const direct = canvasPoint(detailX, detailY, canvas.width, canvas.height);
+  if (direct !== null) return direct;
+  if (touch !== undefined && canvas.left !== undefined && canvas.top !== undefined) {
+    return canvasPoint(touch.clientX - canvas.left, touch.clientY - canvas.top, canvas.width, canvas.height);
+  }
+  return null;
+}
+
+export function ringGeometry(width: number, height: number): { cx: number; cy: number; radius: number; hole: number } | null {
+  if (!(width > 0) || !(height > 0)) return null;
+  const radius = Math.min(width, height) / 2 - RING_INSET;
+  if (!(radius > 0)) return null;
+  return { cx: width / 2, cy: height / 2, radius, hole: radius * RING_HOLE_RATIO };
+}
+
+function canvasPoint(x: number | undefined, y: number | undefined, width: number, height: number): { x: number; y: number } | null {
+  if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > width || y > height) return null;
+  return { x, y };
 }
 
 export function pointHeights(amounts: readonly string[]): number[] {

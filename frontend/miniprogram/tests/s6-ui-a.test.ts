@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { entryChooserPath, entryPath } from "../miniprogram/entry/fab";
 import { ledgerFeedPath, parseLedgerFeed } from "../miniprogram/ledger/feed-contract";
 import { beijingDate, monthLastDate } from "../miniprogram/ledger/month";
-import { pointHeights, ringSegments } from "../miniprogram/statistics/ledger-view";
+import { pointHeights, ringHit, ringSegments, ringTouchPoint } from "../miniprogram/statistics/ledger-view";
 import type { LedgerFlow } from "../miniprogram/statistics/ledger-contract";
 
 const home = readFileSync(new URL("../miniprogram/pages/account-list/index.wxml", import.meta.url), "utf8");
@@ -30,6 +30,10 @@ describe("s6 approved ui", () => {
     assert.equal(report.includes("近1年"), true);
     assert.equal(report.includes("查看期间交易"), true);
     assert.equal(report.includes("全部账户（含已归档）"), true);
+    assert.equal(report.includes('bindtap="onRingTap"'), true);
+    assert.equal(report.includes('catchtap="onPickTagBar"'), true);
+    assert.equal(report.includes("占比不必合计为 100%"), true);
+    assert.equal(report.includes("加入多选"), true);
   });
 
   it("does not show a per-row balance on the cross-account feed", () => {
@@ -85,6 +89,34 @@ describe("s6 approved ui", () => {
     };
     assert.equal(ringSegments(flow), null);
     assert.deepEqual(pointHeights(["0.00", "10.00"]), [8, 80]);
+  });
+
+  it("identifies a ring sector from the backend share without inventing an amount", () => {
+    const flow: LedgerFlow = {
+      net: "80.00",
+      categories: [
+        { id: 3, name: "餐饮", transactionCount: 2, amount: "40.00", share: "50.00", children: [] },
+        { id: 4, name: "交通", transactionCount: 1, amount: "40.00", share: "50.00", children: [] },
+      ],
+      tags: [],
+      uncategorized: null,
+      untagged: null,
+    };
+    const segments = ringSegments(flow);
+    assert.equal(segments?.[0]?.key, "category-3");
+    assert.equal(segments?.[0]?.amountLabel, "¥40.00");
+    assert.equal(segments?.[0]?.share, "50.00");
+    assert.deepEqual(ringHit(segments ?? [], 175, 100, 200, 200), { kind: "sector", index: 0 });
+    assert.deepEqual(ringHit(segments ?? [], 25, 100, 200, 200), { kind: "sector", index: 1 });
+    assert.deepEqual(ringHit(segments ?? [], 100, 100, 200, 200), { kind: "hole" });
+    assert.deepEqual(ringHit(segments ?? [], 1, 1, 200, 200), { kind: "miss" });
+    const partial = ringSegments({
+      ...flow,
+      categories: [{ id: 3, name: "餐饮", transactionCount: 1, amount: "20.00", share: "25.00", children: [] }],
+    });
+    assert.equal(ringHit(partial ?? [], 25, 100, 200, 200).kind, "miss");
+    assert.deepEqual(ringTouchPoint(undefined, undefined, undefined, { width: 200, height: 200 }), null);
+    assert.deepEqual(ringTouchPoint(10, 12, undefined, { width: 200, height: 200 }), { x: 10, y: 12 });
   });
 
   it("uses the Beijing calendar day for the current-month cutoff", () => {
