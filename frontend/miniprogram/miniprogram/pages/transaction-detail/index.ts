@@ -1,9 +1,18 @@
+import { ARCHIVED_HISTORY_HINT } from "../../account/archive-copy";
+import {
+  defaultSelectableAccountId,
+  findAccount,
+  formatCurrentBalance,
+  type Account,
+} from "../../account/account";
+import { accountSettingsPath } from "../../account/navigation";
+import { moneyToneClass } from "../../account/money-tone";
 import { createLoadGuard } from "../../account/load-guard";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
 import { handoffPostSave } from "../../ledger/post-save";
-import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
-import type { Tag } from "../../tag/tag";
+import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
+import type { Tag, TagNode } from "../../tag/tag";
 import {
   applyDatePickerValue,
   applyNow,
@@ -53,7 +62,7 @@ import { parseDetailPageContext, type DetailPageContext } from "../../transactio
 import {
   amountFeedback,
   beginBucket,
-  categoryRows,
+  categorySheetView,
   createTagFailureMessage,
   editComposer,
   emptyBucket,
@@ -67,7 +76,24 @@ import {
   type TypeBucket,
 } from "../../transaction/reference";
 import { UNCERTAIN_MESSAGE } from "../../transaction/submission";
+import {
+  appendCreatedTag,
+  flattenTagNodes,
+  TAG_SAVED_NOTICE,
+  tagPickerRows,
+  tagSelectionSummary,
+  tagSheetHeight,
+} from "../../transaction/tag-picker";
 import type { TransactionView } from "../../transaction/transaction";
+
+interface AccountCard {
+  readonly id: number;
+  readonly name: string;
+  readonly kindLabel: string;
+  readonly balanceLabel: string;
+  readonly balanceTone: string;
+  readonly selected: boolean;
+}
 
 type Screen = "invalid" | "loading" | "error" | "missing" | "detail" | "edit" | "delete-uncertain";
 
@@ -79,12 +105,21 @@ Page({
   form: createTransactionForm(new Date()),
   update: editingUpdate(),
   updateCompleted: false,
+  accounts: [] as Account[],
+  selectedAccountId: 0,
+  selectedAccountCreatedTime: "",
   categories: emptyBucket<CategoryNode>(),
   tags: emptyBucket<Tag>(),
+  tagTree: [] as TagNode[],
+  tagDraftIds: null as number[] | null,
+  tagQuery: "",
+  tagNotice: "",
+  accountName: "",
   tagSession: initialTagEditSession(),
   timeDraft: null as BusinessTimeDraft | null,
   deletePhase: "idle" as "idle" | "deleting" | "uncertain",
   screen: "loading" as Screen,
+  readOnly: false,
 
   data: {
     screen: "loading" as Screen,
@@ -93,20 +128,36 @@ Page({
     typeLabel: "",
     title: "",
     amountLabel: "",
+    amountToneClass: "money-zero",
     categoryLabel: "",
     tagNames: [] as string[],
+    tagNamesLabel: "—",
     businessTimeLabel: "",
     remarkLabel: "",
     amount: "",
     name: "",
     remark: "",
     amountError: "",
+    accountText: "选择账户",
+    accountPhase: "idle" as "idle" | "loading" | "ready" | "error",
+    accountRows: [] as AccountCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
+    accountSelectorOpen: false,
+    accountError: "",
     categoryText: "未分类",
     categoryPhase: "idle" as TypeBucket<CategoryNode>["phase"],
-    categoryRows: [] as CategoryRow[],
+    categoryRows: [] as Array<CategoryRow & { selected: boolean }>,
+    uncategorizedSelected: true,
+    categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as TypeBucket<Tag>["phase"],
-    tagChips: [] as { id: number; name: string; selected: boolean }[],
+    tagSummary: "未选择",
+    tagSheetOpen: false,
+    tagRows: [] as { id: number; name: string; depth: number; selected: boolean }[],
+    tagQuery: "",
+    tagSheetHeight: 176,
+    tagNotice: "",
     tagComposer: false,
     tagDraft: "",
     tagError: "",
@@ -126,6 +177,10 @@ Page({
     timeDraftError: "",
     deleteLocked: false,
     deleteHint: "",
+    readOnly: false,
+    archiveHint: "",
+    accountName: "",
+    showRemark: false,
   },
 
   onLoad(query: Record<string, string | undefined>) {
@@ -157,9 +212,16 @@ Page({
     this.setData({ screen: "loading", errorMessage: "" });
     try {
       const transaction = await transactionApi.getTransaction(context.accountId, context.transactionId);
+      const account = await accountApi.loadAccount(context.accountId);
       if (!this.loadGuard.pageAlive || generation !== this.detailGeneration) {
         return;
       }
+      if (account === null) {
+        this.showMissing();
+        return;
+      }
+      this.readOnly = account.lifecycle === "ARCHIVED";
+      this.accountName = account.name;
       this.transaction = transaction;
       this.publishDetail();
     } catch (error) {
@@ -182,23 +244,29 @@ Page({
   },
 
   onEdit() {
-    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null) {
+    if (this.readOnly || this.screen !== "detail" || !detailActionAccess(this.deletePhase).edit || this.transaction === null || this.context === null) {
       return;
     }
     this.form = editFormFromTransaction(this.transaction);
+    this.selectedAccountId = this.transaction.accountId;
+    this.selectedAccountCreatedTime = this.context.accountCreatedTime;
     this.update = editingUpdate();
     this.updateCompleted = false;
     this.tagSession = enterEditSession(this.tagSession);
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    this.tagNotice = "";
     this.screen = "edit";
     this.timeDraft = null;
     wx.setNavigationBarTitle({ title: "编辑交易" });
     this.publishEdit();
+    void this.loadAccounts();
     void this.loadCategories();
     void this.loadTags();
   },
 
   onDelete() {
-    if (this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
+    if (this.readOnly || (this.screen !== "detail" && this.screen !== "edit") || !detailActionAccess(this.deletePhase).delete || this.transaction === null) {
       return;
     }
     wx.showModal({
@@ -208,7 +276,7 @@ Page({
       cancelText: "取消",
       confirmColor: "#b42318",
       success: (result) => {
-        if (decideDelete(result.confirm) !== "send" || this.screen !== "detail" || !detailActionAccess(this.deletePhase).delete) {
+        if (decideDelete(result.confirm) !== "send" || (this.screen !== "detail" && this.screen !== "edit") || !detailActionAccess(this.deletePhase).delete) {
           return;
         }
         void this.performDelete();
@@ -318,12 +386,43 @@ Page({
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
-    if (!this.canEdit()) {
+    if (!this.canEdit() || this.tagDraftIds === null) {
       return;
     }
     const tagId = Number(event.currentTarget.dataset["id"]);
-    this.form = { ...this.form, selectedTagIds: toggleTagSelection(this.form.selectedTagIds, tagId, this.currentTagChoices()) };
+    this.tagDraftIds = toggleTagSelection(this.tagDraftIds, tagId, this.currentTagChoices());
     this.setData({ submitError: "" });
+    this.publishEdit();
+  },
+
+  onOpenTags() {
+    if (!this.canEdit() || this.tags.phase !== "ready") {
+      return;
+    }
+    this.tagDraftIds = [...this.form.selectedTagIds];
+    this.tagQuery = "";
+    this.tagNotice = "";
+    this.publishEdit();
+  },
+
+  onTagQuery(event: WechatMiniprogram.Input) {
+    this.tagQuery = event.detail.value;
+    this.publishEdit();
+  },
+
+  onCancelTags() {
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    this.tagSession = { ...this.tagSession, composer: { ...this.tagSession.composer, open: false, draft: "", error: "" } };
+    this.publishEdit();
+  },
+
+  onConfirmTags() {
+    if (this.tagDraftIds !== null) {
+      this.form = { ...this.form, selectedTagIds: [...this.tagDraftIds] };
+    }
+    this.tagDraftIds = null;
+    this.tagQuery = "";
     this.publishEdit();
   },
 
@@ -363,10 +462,15 @@ Page({
       if (!this.loadGuard.pageAlive) {
         return;
       }
-      const applied = applyCreateTagToEditSession(this.tagSession, request, this.tags, this.form.selectedTagIds, { status: "success", tag: created });
+      const selecting = this.tagDraftIds ?? this.form.selectedTagIds;
+      const applied = applyCreateTagToEditSession(this.tagSession, request, this.tags, selecting, { status: "success", tag: created });
       this.tags = applied.bucket;
+      this.tagTree = appendCreatedTag(this.tagTree, { ...created, children: [] });
       this.tagSession = applied.session;
-      this.form = { ...this.form, selectedTagIds: applied.selectedTagIds };
+      if (this.tagDraftIds !== null) {
+        this.tagDraftIds = [...applied.selectedTagIds];
+        this.tagNotice = TAG_SAVED_NOTICE;
+      }
     } catch (error) {
       if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
         return;
@@ -515,9 +619,10 @@ Page({
     const built = buildUpdateTransactionSnapshot(
       this.form,
       this.context.accountId,
+      this.selectedAccountId > 0 ? this.selectedAccountId : this.context.accountId,
       this.transaction.id,
       this.transaction.type,
-      this.context.accountCreatedTime,
+      this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : this.context.accountCreatedTime,
     );
     if (!built.ok) {
       this.setData({ submitError: updateValidationMessage(built.reason) });
@@ -628,8 +733,9 @@ Page({
       this.setData({ tagPhase: "loading" });
     }
     try {
-      const items = await tagApi.listTags(this.transaction.type);
-      this.finishTags(started.generation, items);
+      const items = await tagApi.listTagTree(this.transaction.type);
+      this.tagTree = items;
+      this.finishTags(started.generation, flattenTagNodes(items));
     } catch (error) {
       if (isUnauthorized(error)) {
         return;
@@ -685,9 +791,108 @@ Page({
       return;
     }
     this.updateCompleted = true;
-    emitTransactionUpdated(this, decision.result);
     wx.disableAlertBeforeUnload();
-    wx.navigateBack();
+    const result = decision.result;
+    if (this.context !== null) {
+      const account = findAccount(this.accounts, result.accountId);
+      if (account !== null) {
+        this.accountName = account.name;
+        this.selectedAccountCreatedTime = account.createdTime;
+      }
+      this.context = {
+        ...this.context,
+        accountId: result.accountId,
+        transactionId: result.transactionId,
+        accountCreatedTime: this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : this.context.accountCreatedTime,
+      };
+    }
+    this.tagDraftIds = null;
+    emitTransactionUpdated(this, result);
+    this.returnToDetail();
+  },
+
+  async loadAccounts() {
+    this.setData({ accountPhase: "loading", accountError: "" });
+    try {
+      const accounts = await accountApi.listAccounts();
+      if (!this.loadGuard.pageAlive || this.screen !== "edit") {
+        return;
+      }
+      this.accounts = accounts;
+      const preferred = this.selectedAccountId > 0 ? this.selectedAccountId : this.transaction?.accountId ?? null;
+      const selectedId = defaultSelectableAccountId(accounts, preferred);
+      if (selectedId !== null) {
+        this.applySelectedAccount(selectedId);
+      }
+      this.setData({
+        accountPhase: "ready",
+        ...this.accountCards(this.data.accountQuery),
+        accountError: selectedId === null && accounts.length > 1 ? "请选择账户" : "",
+      });
+    } catch (error) {
+      if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
+        return;
+      }
+      this.setData({ accountPhase: "error", accountError: "账户列表加载失败" });
+    }
+  },
+
+  applySelectedAccount(accountId: number) {
+    const account = findAccount(this.accounts, accountId);
+    if (account === null) {
+      return;
+    }
+    this.selectedAccountId = account.id;
+    this.selectedAccountCreatedTime = account.createdTime;
+    this.setData({
+      accountText: `${account.name}  ${formatCurrentBalance(account)}`,
+      accountError: "",
+      ...this.accountCards(this.data.accountQuery),
+    });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    this.setData({ accountQuery: event.detail.value, ...this.accountCards(event.detail.value) });
+  },
+
+  accountCards(query: string) {
+    const needle = query.trim();
+    const accountRows = this.accounts.filter((account) => needle.length === 0 || account.name.includes(needle)).map((account) => ({
+      id: account.id,
+      name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
+      balanceLabel: formatCurrentBalance(account),
+      balanceTone: moneyToneClass(account.currentBalance),
+      selected: account.id === this.selectedAccountId,
+    }));
+    return { accountRows, accountSheetHeight: Math.min(Math.max(accountRows.length, 1) * 128, 640) };
+  },
+
+  onOpenAccounts() {
+    if (!this.canEdit() || this.data.accountPhase !== "ready" || this.accounts.length === 0) {
+      return;
+    }
+    this.setData({ accountSelectorOpen: true });
+  },
+
+  onCloseAccounts() {
+    this.setData({ accountSelectorOpen: false });
+  },
+
+  onChooseAccount(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const accountId = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+      return;
+    }
+    this.applySelectedAccount(accountId);
+    this.setData({ accountSelectorOpen: false, submitError: "" });
+  },
+
+  onRetryAccounts() {
+    void this.loadAccounts();
   },
 
   returnToDetail() {
@@ -748,13 +953,27 @@ Page({
       typeLabel: view.typeLabel,
       title: view.title,
       amountLabel: view.amountLabel,
+      amountToneClass: moneyToneClass(this.transaction.amount),
       categoryLabel: view.categoryLabel,
       tagNames: [...view.tagNames],
+      tagNamesLabel: view.tagNames.length === 0 ? "—" : view.tagNames.join("、"),
       businessTimeLabel: view.businessTimeLabel,
       remarkLabel: view.remarkLabel,
+      showRemark: view.remarkLabel !== "—",
+      accountName: this.accountName,
       deleteLocked: false,
       deleteHint: "",
+      readOnly: this.readOnly,
+      archiveHint: this.readOnly ? ARCHIVED_HISTORY_HINT : "",
     });
+  },
+
+  onOpenSettings() {
+    const context = this.context;
+    if (context === null || this.deletePhase === "deleting") {
+      return;
+    }
+    wx.navigateTo({ url: accountSettingsPath(context.accountId) });
   },
 
   publishEdit() {
@@ -764,6 +983,7 @@ Page({
     }
     const editing = this.update.phase === "editing";
     const creatingTag = tagCreateInFlight(this.tagSession);
+    const categorySheet = categorySheetView(this.categories.items, this.form.categoryId);
     this.setData({
       screen: "edit",
       typeLabel: this.form.type === "INCOME" ? "收入" : "支出",
@@ -772,13 +992,16 @@ Page({
       remark: this.form.remark,
       categoryText: editCategoryText(this.categories.items, this.form.categoryId, this.transaction?.category ?? null),
       categoryPhase: this.categories.phase,
-      categoryRows: categoryRows(this.categories.items),
+      categoryRows: categorySheet.rows,
+      uncategorizedSelected: categorySheet.uncategorizedSelected,
+      categorySheetHeight: categorySheet.height,
       tagPhase: this.tags.phase,
-      tagChips: this.currentTagChoices().map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        selected: this.form.selectedTagIds.includes(tag.id),
-      })),
+      tagSummary: tagSelectionSummary(this.form.selectedTagIds, this.currentTagChoices()),
+      tagSheetOpen: this.tagDraftIds !== null,
+      tagRows: tagPickerRows(this.tagTree, this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery),
+      tagQuery: this.tagQuery,
+      tagSheetHeight: tagSheetHeight(tagPickerRows(this.tagTree, this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery).length),
+      tagNotice: this.tagNotice,
       tagComposer: this.tagSession.composer.open,
       tagDraft: this.tagSession.composer.draft,
       tagError: this.tagSession.composer.error,
@@ -789,7 +1012,12 @@ Page({
       submitError: this.update.error,
       uncertain: this.update.phase === "uncertain",
       businessTimeText: businessTimeDisplay(this.form.businessTime) ?? "",
-      timeError: isBusinessTimeAllowed(this.form.businessTime, context.accountCreatedTime) ? "" : "交易时间不得早于账户创建时间",
+      timeError: isBusinessTimeAllowed(
+        this.form.businessTime,
+        this.selectedAccountCreatedTime.length > 0 ? this.selectedAccountCreatedTime : context.accountCreatedTime,
+      )
+        ? ""
+        : "请输入有效的日期和时间",
       futureHint: isFutureBusinessTime(this.form.businessTime, new Date())
         ? "未来交易保存后仍会立即影响当前余额；流水与统计归入所选自然月。"
         : "",
@@ -837,13 +1065,24 @@ function emitListStale(page: object): void {
   channel.emit("listStale", {});
 }
 
-function emitTransactionUpdated(page: object, result: { transactionId: number; targetMonth: string }): void {
-  const owner = page as { getOpenerEventChannel?: () => { emit?: (name: string, data: { transactionId: number; targetMonth: string }) => void } };
+function emitTransactionUpdated(
+  page: object,
+  result: { accountId: number; transactionId: number; targetMonth: string },
+): void {
+  const owner = page as {
+    getOpenerEventChannel?: () => {
+      emit?: (name: string, data: { accountId: number; transactionId: number; targetMonth: string }) => void;
+    };
+  };
   const channel = owner.getOpenerEventChannel?.();
   if (channel === undefined || typeof channel.emit !== "function") {
     return;
   }
-  channel.emit("transactionUpdated", { transactionId: result.transactionId, targetMonth: result.targetMonth });
+  channel.emit("transactionUpdated", {
+    accountId: result.accountId,
+    transactionId: result.transactionId,
+    targetMonth: result.targetMonth,
+  });
 }
 
 function isUnauthorized(error: unknown): boolean {

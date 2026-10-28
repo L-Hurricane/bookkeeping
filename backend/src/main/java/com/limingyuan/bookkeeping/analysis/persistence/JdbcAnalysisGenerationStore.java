@@ -7,6 +7,8 @@ import com.limingyuan.bookkeeping.analysis.application.FailureSettlement;
 import com.limingyuan.bookkeeping.analysis.application.GenerationPermit;
 import com.limingyuan.bookkeeping.analysis.application.GenerationState;
 import com.limingyuan.bookkeeping.analysis.application.GenerationStatus;
+import com.limingyuan.bookkeeping.analysis.application.LedgerGenerationPermit;
+import com.limingyuan.bookkeeping.analysis.application.LedgerPermitAcquisition;
 import com.limingyuan.bookkeeping.analysis.application.MonthlyAnalysisReport;
 import com.limingyuan.bookkeeping.analysis.application.PermitAcquisition;
 import com.limingyuan.bookkeeping.analysis.application.SuccessSettlement;
@@ -33,7 +35,7 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
     public static final Duration LEASE = Duration.ofMinutes(3);
     static final ZoneId PERMIT_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String SNAPSHOT_COLUMNS = """
-            id, user_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
+            id, user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
             points_to_watch, provider, model, prompt_version, prompt_tokens, completion_tokens, total_tokens,
             latency_millis, provider_request_id, permit_date, generated_at_utc
             """;
@@ -54,36 +56,42 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
     }
 
     @Override
-    public Optional<AnalysisSnapshot> findSuccessful(long userId, String yearMonth, String contextFingerprint) {
-        return read.execute(status -> snapshot(userId, yearMonth, contextFingerprint, true));
+    public Optional<AnalysisSnapshot> findSuccessful(long userId, long accountId, String yearMonth, String contextFingerprint) {
+        requireAccount(accountId);
+        return read.execute(status -> snapshot(userId, accountId, yearMonth, contextFingerprint, true));
     }
 
     @Override
-    public Optional<AnalysisSnapshot> findLatest(long userId, String yearMonth) {
+    public Optional<AnalysisSnapshot> findLatest(long userId, long accountId, String yearMonth) {
+        requireAccount(accountId);
         return read.execute(status -> jdbc.sql("SELECT " + SNAPSHOT_COLUMNS + """
-                FROM analysis_snapshots WHERE user_id = :userId AND analysis_month = :yearMonth ORDER BY id DESC LIMIT 1
-                """).param("userId", userId).param("yearMonth", yearMonth).query(this::snapshot).optional());
+                FROM analysis_snapshots
+                WHERE user_id = :userId AND account_id = :accountId AND analysis_month = :yearMonth
+                ORDER BY id DESC LIMIT 1
+                """).param("userId", userId).param("accountId", accountId).param("yearMonth", yearMonth)
+                .query(this::snapshot).optional());
     }
 
     @Override
-    public Optional<GenerationStatus> findCoordination(long userId, String yearMonth, String contextFingerprint) {
-        return read.execute(status -> generation(userId, yearMonth, contextFingerprint).map(GenerationRow::status));
+    public Optional<GenerationStatus> findCoordination(long userId, long accountId, String yearMonth, String contextFingerprint) {
+        requireAccount(accountId);
+        return read.execute(status -> generation(userId, accountId, yearMonth, contextFingerprint).map(GenerationRow::status));
     }
 
     @Override
-    public PermitAcquisition acquire(long userId, String yearMonth, String contextFingerprint) {
-        requireScope(yearMonth, contextFingerprint);
+    public PermitAcquisition acquire(long userId, long accountId, String yearMonth, String contextFingerprint) {
+        requireScope(accountId, yearMonth, contextFingerprint);
         return write.execute(status -> {
             lockUser(userId);
             Instant now = now();
             reclaimExpiredReservations(userId, now);
-            var existing = snapshot(userId, yearMonth, contextFingerprint, true);
+            var existing = snapshot(userId, accountId, yearMonth, contextFingerprint, true);
             if (existing.isPresent()) return new PermitAcquisition.Reused(existing.get());
             LocalDate permitDate = LocalDate.ofInstant(now, PERMIT_ZONE);
-            var row = generation(userId, yearMonth, contextFingerprint);
+            var row = generation(userId, accountId, yearMonth, contextFingerprint);
             if (row.isEmpty()) {
                 if (!reserve(userId, permitDate)) return new PermitAcquisition.QuotaExceeded();
-                return new PermitAcquisition.Granted(insertGeneration(userId, yearMonth, contextFingerprint, permitDate, now));
+                return new PermitAcquisition.Granted(insertGeneration(userId, accountId, yearMonth, contextFingerprint, permitDate, now));
             }
             GenerationRow current = row.get();
             if (current.state == GenerationState.IN_PROGRESS && current.leaseExpiresAt.isAfter(now)) {
@@ -121,6 +129,94 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
     }
 
     @Override
+    public Optional<AnalysisSnapshot> findSuccessfulLedger(long userId, String periodKind, String period, String contextFingerprint) {
+        requireLedger(periodKind, period, contextFingerprint);
+        return read.execute(status -> ledgerSnapshot(userId, periodKind, period, contextFingerprint, true));
+    }
+
+    @Override
+    public Optional<AnalysisSnapshot> findLatestLedger(long userId, String periodKind, String period) {
+        requireLedger(periodKind, period, "fingerprint");
+        return read.execute(status -> jdbc.sql("SELECT " + SNAPSHOT_COLUMNS + """
+                 FROM analysis_snapshots
+                 WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                   AND period_kind = :periodKind AND analysis_month = :period
+                 ORDER BY id DESC LIMIT 1
+                """).param("userId", userId).param("periodKind", periodKind).param("period", period)
+                .query(this::snapshot).optional());
+    }
+
+    @Override
+    public Optional<GenerationStatus> findLedgerCoordination(long userId, String periodKind, String period,
+            String contextFingerprint) {
+        requireLedger(periodKind, period, contextFingerprint);
+        return read.execute(status -> ledgerGeneration(userId, periodKind, period, contextFingerprint).map(GenerationRow::status));
+    }
+
+    @Override
+    public LedgerPermitAcquisition acquireLedger(long userId, String periodKind, String period, String contextFingerprint) {
+        requireLedger(periodKind, period, contextFingerprint);
+        return write.execute(status -> {
+            lockUser(userId);
+            Instant now = now();
+            reclaimExpiredReservations(userId, now);
+            var existing = ledgerSnapshot(userId, periodKind, period, contextFingerprint, true);
+            if (existing.isPresent()) return new LedgerPermitAcquisition.Reused(existing.get());
+            LocalDate permitDate = LocalDate.ofInstant(now, PERMIT_ZONE);
+            var row = ledgerGeneration(userId, periodKind, period, contextFingerprint);
+            if (row.isEmpty()) {
+                if (!reserve(userId, permitDate)) return new LedgerPermitAcquisition.QuotaExceeded();
+                return new LedgerPermitAcquisition.Granted(insertLedgerGeneration(userId, periodKind, period, contextFingerprint, permitDate, now));
+            }
+            GenerationRow current = row.get();
+            if (current.state == GenerationState.IN_PROGRESS && current.leaseExpiresAt.isAfter(now)) {
+                return new LedgerPermitAcquisition.Busy(current.leaseExpiresAt);
+            }
+            if (current.state == GenerationState.SUCCEEDED) {
+                throw new IllegalStateException("successful generation has no snapshot");
+            }
+            if (current.quotaReserved && !release(userId, current.permitDate)) {
+                throw new IllegalStateException("quota reservation was not released");
+            }
+            if (!reserve(userId, permitDate)) {
+                finish(current, GenerationState.FAILED, null, false);
+                return new LedgerPermitAcquisition.QuotaExceeded();
+            }
+            return new LedgerPermitAcquisition.Granted(takeoverLedger(current, periodKind, permitDate, now));
+        });
+    }
+
+    @Override
+    public SuccessSettlement completeLedgerSuccess(LedgerGenerationPermit permit, MonthlyAnalysisReport report,
+            AnalysisProvenance provenance) {
+        requireReport(report);
+        requireProvenance(provenance);
+        return write.execute(status -> {
+            lockUser(permit.userId());
+            GenerationRow row = ledgerGenerationById(permit.generationId()).orElse(null);
+            if (!holdsLedger(row, permit)) return new SuccessSettlement.StalePermit();
+            long snapshotId = insertLedgerSnapshot(permit, report, provenance, now());
+            if (!consume(permit.userId(), row.permitDate)) throw new IllegalStateException("quota reservation was not consumed");
+            if (!finish(row, GenerationState.SUCCEEDED, snapshotId, false)) {
+                throw new IllegalStateException("generation permit changed");
+            }
+            return new SuccessSettlement.Applied(snapshotById(snapshotId).orElseThrow());
+        });
+    }
+
+    @Override
+    public FailureSettlement completeLedgerFailure(LedgerGenerationPermit permit) {
+        return write.execute(status -> {
+            lockUser(permit.userId());
+            GenerationRow row = ledgerGenerationById(permit.generationId()).orElse(null);
+            if (!holdsLedger(row, permit)) return new FailureSettlement.StalePermit();
+            if (!release(permit.userId(), row.permitDate)) throw new IllegalStateException("quota reservation was not released");
+            if (!finish(row, GenerationState.FAILED, null, false)) throw new IllegalStateException("generation permit changed");
+            return new FailureSettlement.Applied();
+        });
+    }
+
+    @Override
     public FailureSettlement completeFailure(GenerationPermit permit) {
         return write.execute(status -> {
             lockUser(permit.userId());
@@ -134,7 +230,7 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
 
     private void reclaimExpiredReservations(long userId, Instant now) {
         List<GenerationRow> expired = jdbc.sql("""
-                SELECT id, user_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                SELECT id, user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
                        lease_expires_at_utc, quota_reserved, snapshot_id
                 FROM analysis_generations
                 WHERE user_id = :userId AND state = 'IN_PROGRESS' AND quota_reserved = 1
@@ -148,18 +244,21 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
         }
     }
 
-    private GenerationPermit insertGeneration(long userId, String yearMonth, String fingerprint, LocalDate permitDate, Instant now) {
+    private GenerationPermit insertGeneration(long userId, long accountId, String yearMonth, String fingerprint,
+            LocalDate permitDate, Instant now) {
         Instant leaseExpiresAt = now.plus(lease);
         var keys = new GeneratedKeyHolder();
         jdbc.sql("""
                 INSERT INTO analysis_generations
-                    (user_id, analysis_month, context_fingerprint, state, fencing_token, permit_date, lease_expires_at_utc,
-                     quota_reserved, snapshot_id, created_at_utc, updated_at_utc)
+                    (user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                     lease_expires_at_utc, quota_reserved, snapshot_id, created_at_utc, updated_at_utc)
                 VALUES
-                    (:userId, :yearMonth, :fingerprint, 'IN_PROGRESS', 1, :permitDate, :lease, 1, NULL, :now, :now)
-                """).param("userId", userId).param("yearMonth", yearMonth).param("fingerprint", fingerprint)
-                .param("permitDate", permitDate).param("lease", timestamp(leaseExpiresAt)).param("now", timestamp(now)).update(keys);
-        return new GenerationPermit(keys.getKey().longValue(), 1L, userId, yearMonth, fingerprint, permitDate, leaseExpiresAt);
+                    (:userId, :accountId, :yearMonth, :fingerprint, 'IN_PROGRESS', 1, :permitDate, :lease, 1, NULL, :now, :now)
+                """).param("userId", userId).param("accountId", accountId).param("yearMonth", yearMonth)
+                .param("fingerprint", fingerprint).param("permitDate", permitDate).param("lease", timestamp(leaseExpiresAt))
+                .param("now", timestamp(now)).update(keys);
+        return new GenerationPermit(keys.getKey().longValue(), 1L, userId, accountId, yearMonth, fingerprint, permitDate,
+                leaseExpiresAt);
     }
 
     private GenerationPermit takeover(GenerationRow current, LocalDate permitDate, Instant now) {
@@ -172,7 +271,7 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
                 """).param("permitDate", permitDate).param("lease", timestamp(leaseExpiresAt)).param("now", timestamp(now))
                 .param("id", current.id).param("token", current.fencingToken).update();
         if (updated != 1) throw new IllegalStateException("generation permit changed");
-        return new GenerationPermit(current.id, current.fencingToken + 1, current.userId, current.yearMonth,
+        return new GenerationPermit(current.id, current.fencingToken + 1, current.userId, current.accountId, current.yearMonth,
                 current.contextFingerprint, permitDate, leaseExpiresAt);
     }
 
@@ -190,13 +289,13 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
         var keys = new GeneratedKeyHolder();
         jdbc.sql("""
                 INSERT INTO analysis_snapshots
-                    (user_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
+                    (user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
                      points_to_watch, provider, model, prompt_version, prompt_tokens, completion_tokens, total_tokens,
                      latency_millis, provider_request_id, permit_date, generated_at_utc)
                 VALUES
-                    (:userId, :yearMonth, :fingerprint, :overview, :structure, :surplus, :watch, :provider, :model,
+                    (:userId, :accountId, :yearMonth, :fingerprint, :overview, :structure, :surplus, :watch, :provider, :model,
                      :promptVersion, :promptTokens, :completionTokens, :totalTokens, :latency, :requestId, :permitDate, :generatedAt)
-                """).param("userId", permit.userId()).param("yearMonth", permit.yearMonth())
+                """).param("userId", permit.userId()).param("accountId", permit.accountId()).param("yearMonth", permit.yearMonth())
                 .param("fingerprint", permit.contextFingerprint()).param("overview", report.monthlyOverview())
                 .param("structure", report.expenseStructure()).param("surplus", report.surplusReasons())
                 .param("watch", report.pointsToWatch()).param("provider", provenance.provider()).param("model", provenance.model())
@@ -246,19 +345,21 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
 
     private boolean holds(GenerationRow row, GenerationPermit permit) {
         return row != null && row.id == permit.generationId() && row.fencingToken == permit.fencingToken()
-                && row.userId == permit.userId() && row.yearMonth.equals(permit.yearMonth())
+                && row.userId == permit.userId() && row.accountId == permit.accountId()
+                && row.yearMonth.equals(permit.yearMonth())
                 && row.contextFingerprint.equals(permit.contextFingerprint()) && row.state == GenerationState.IN_PROGRESS
                 && row.quotaReserved && row.permitDate.equals(permit.permitDate()) && row.leaseExpiresAt.isAfter(now());
     }
 
-    private Optional<AnalysisSnapshot> snapshot(long userId, String yearMonth, String fingerprint, boolean earliest) {
+    private Optional<AnalysisSnapshot> snapshot(long userId, long accountId, String yearMonth, String fingerprint, boolean earliest) {
         String order = earliest ? "ASC" : "DESC";
         return jdbc.sql("SELECT " + SNAPSHOT_COLUMNS + """
                 FROM analysis_snapshots
-                WHERE user_id = :userId AND analysis_month = :yearMonth AND context_fingerprint = :fingerprint
+                WHERE user_id = :userId AND account_id = :accountId AND analysis_month = :yearMonth
+                  AND context_fingerprint = :fingerprint
                 ORDER BY id %s LIMIT 1
-                """.formatted(order)).param("userId", userId).param("yearMonth", yearMonth).param("fingerprint", fingerprint)
-                .query(this::snapshot).optional();
+                """.formatted(order)).param("userId", userId).param("accountId", accountId).param("yearMonth", yearMonth)
+                .param("fingerprint", fingerprint).query(this::snapshot).optional();
     }
 
     private Optional<AnalysisSnapshot> snapshotById(long id) {
@@ -267,8 +368,8 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
     }
 
     private AnalysisSnapshot snapshot(ResultSet rs, int row) throws SQLException {
-        return new AnalysisSnapshot(rs.getLong("id"), rs.getLong("user_id"), rs.getString("analysis_month"),
-                rs.getString("context_fingerprint"),
+        return new AnalysisSnapshot(rs.getLong("id"), rs.getLong("user_id"), rs.getLong("account_id"),
+                rs.getString("analysis_month"), rs.getString("context_fingerprint"),
                 new MonthlyAnalysisReport(rs.getString("monthly_overview"), rs.getString("expense_structure"),
                         rs.getString("surplus_reasons"), rs.getString("points_to_watch")),
                 new AnalysisProvenance(rs.getString("provider"), rs.getString("model"), rs.getString("prompt_version"),
@@ -277,27 +378,29 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
                 rs.getDate("permit_date").toLocalDate(), rs.getTimestamp("generated_at_utc").toInstant());
     }
 
-    private Optional<GenerationRow> generation(long userId, String yearMonth, String fingerprint) {
+    private Optional<GenerationRow> generation(long userId, long accountId, String yearMonth, String fingerprint) {
         return jdbc.sql("""
-                SELECT id, user_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                SELECT id, user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
                        lease_expires_at_utc, quota_reserved, snapshot_id
                 FROM analysis_generations
-                WHERE user_id = :userId AND analysis_month = :yearMonth AND context_fingerprint = :fingerprint
-                """).param("userId", userId).param("yearMonth", yearMonth).param("fingerprint", fingerprint)
-                .query(this::generation).optional();
+                WHERE user_id = :userId AND account_id = :accountId AND analysis_month = :yearMonth
+                  AND context_fingerprint = :fingerprint
+                """).param("userId", userId).param("accountId", accountId).param("yearMonth", yearMonth)
+                .param("fingerprint", fingerprint).query(this::generation).optional();
     }
 
     private Optional<GenerationRow> generationById(long id) {
         return jdbc.sql("""
-                SELECT id, user_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                SELECT id, user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
                        lease_expires_at_utc, quota_reserved, snapshot_id
                 FROM analysis_generations WHERE id = :id
                 """).param("id", id).query(this::generation).optional();
     }
 
     private GenerationRow generation(ResultSet rs, int row) throws SQLException {
-        return new GenerationRow(rs.getLong("id"), rs.getLong("user_id"), rs.getString("analysis_month"),
-                rs.getString("context_fingerprint"), GenerationState.valueOf(rs.getString("state")), rs.getLong("fencing_token"),
+        return new GenerationRow(rs.getLong("id"), rs.getLong("user_id"), rs.getLong("account_id"),
+                rs.getString("analysis_month"), rs.getString("context_fingerprint"),
+                GenerationState.valueOf(rs.getString("state")), rs.getLong("fencing_token"),
                 rs.getDate("permit_date").toLocalDate(), rs.getTimestamp("lease_expires_at_utc").toInstant(),
                 rs.getInt("quota_reserved") == 1, rs.getObject("snapshot_id") == null ? null : rs.getLong("snapshot_id"));
     }
@@ -327,11 +430,124 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
         return value == null || value.isBlank() ? null : value;
     }
 
-    private static void requireScope(String yearMonth, String contextFingerprint) {
+    private LedgerGenerationPermit insertLedgerGeneration(long userId, String periodKind, String period, String fingerprint,
+            LocalDate permitDate, Instant now) {
+        Instant leaseExpiresAt = now.plus(lease);
+        var keys = new GeneratedKeyHolder();
+        jdbc.sql("""
+                INSERT INTO analysis_generations
+                    (user_id, account_id, report_scope, period_kind, analysis_month, context_fingerprint, state,
+                     fencing_token, permit_date, lease_expires_at_utc, quota_reserved, snapshot_id, created_at_utc, updated_at_utc)
+                VALUES
+                    (:userId, NULL, 'LEDGER', :periodKind, :period, :fingerprint, 'IN_PROGRESS', 1, :permitDate, :lease,
+                     1, NULL, :now, :now)
+                """).param("userId", userId).param("periodKind", periodKind).param("period", period)
+                .param("fingerprint", fingerprint).param("permitDate", permitDate).param("lease", timestamp(leaseExpiresAt))
+                .param("now", timestamp(now)).update(keys);
+        return new LedgerGenerationPermit(keys.getKey().longValue(), 1L, userId, periodKind, period, fingerprint, permitDate,
+                leaseExpiresAt);
+    }
+
+    private LedgerGenerationPermit takeoverLedger(GenerationRow current, String periodKind, LocalDate permitDate, Instant now) {
+        Instant leaseExpiresAt = now.plus(lease);
+        int updated = jdbc.sql("""
+                UPDATE analysis_generations
+                SET state = 'IN_PROGRESS', fencing_token = fencing_token + 1, permit_date = :permitDate,
+                    lease_expires_at_utc = :lease, quota_reserved = 1, updated_at_utc = :now
+                WHERE id = :id AND fencing_token = :token AND report_scope = 'LEDGER' AND account_id IS NULL
+                """).param("permitDate", permitDate).param("lease", timestamp(leaseExpiresAt)).param("now", timestamp(now))
+                .param("id", current.id).param("token", current.fencingToken).update();
+        if (updated != 1) throw new IllegalStateException("generation permit changed");
+        return new LedgerGenerationPermit(current.id, current.fencingToken + 1, current.userId, periodKind, current.yearMonth,
+                current.contextFingerprint, permitDate, leaseExpiresAt);
+    }
+
+    private long insertLedgerSnapshot(LedgerGenerationPermit permit, MonthlyAnalysisReport report, AnalysisProvenance provenance,
+            Instant generatedAt) {
+        var keys = new GeneratedKeyHolder();
+        jdbc.sql("""
+                INSERT INTO analysis_snapshots
+                    (user_id, account_id, report_scope, period_kind, analysis_month, context_fingerprint, monthly_overview,
+                     expense_structure, surplus_reasons, points_to_watch, provider, model, prompt_version, prompt_tokens,
+                     completion_tokens, total_tokens, latency_millis, provider_request_id, permit_date, generated_at_utc)
+                VALUES
+                    (:userId, NULL, 'LEDGER', :periodKind, :period, :fingerprint, :overview, :structure, :surplus, :watch,
+                     :provider, :model, :promptVersion, :promptTokens, :completionTokens, :totalTokens, :latency, :requestId,
+                     :permitDate, :generatedAt)
+                """).param("userId", permit.userId()).param("periodKind", permit.periodKind()).param("period", permit.period())
+                .param("fingerprint", permit.contextFingerprint()).param("overview", report.monthlyOverview())
+                .param("structure", report.expenseStructure()).param("surplus", report.surplusReasons())
+                .param("watch", report.pointsToWatch()).param("provider", provenance.provider()).param("model", provenance.model())
+                .param("promptVersion", provenance.promptVersion()).param("promptTokens", provenance.promptTokens())
+                .param("completionTokens", provenance.completionTokens()).param("totalTokens", provenance.totalTokens())
+                .param("latency", provenance.latencyMillis()).param("requestId", blankToNull(provenance.providerRequestId()))
+                .param("permitDate", permit.permitDate()).param("generatedAt", timestamp(generatedAt)).update(keys);
+        return keys.getKey().longValue();
+    }
+
+    private Optional<AnalysisSnapshot> ledgerSnapshot(long userId, String periodKind, String period, String fingerprint,
+            boolean earliest) {
+        String order = earliest ? "ASC" : "DESC";
+        return jdbc.sql("SELECT " + SNAPSHOT_COLUMNS + """
+                 FROM analysis_snapshots
+                 WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                   AND period_kind = :periodKind AND analysis_month = :period
+                   AND context_fingerprint = :fingerprint
+                 ORDER BY id %s LIMIT 1
+                """.formatted(order)).param("userId", userId).param("periodKind", periodKind).param("period", period)
+                .param("fingerprint", fingerprint).query(this::snapshot).optional();
+    }
+
+    private Optional<GenerationRow> ledgerGeneration(long userId, String periodKind, String period, String fingerprint) {
+        return jdbc.sql("""
+                SELECT id, user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                       lease_expires_at_utc, quota_reserved, snapshot_id
+                FROM analysis_generations
+                WHERE user_id = :userId AND report_scope = 'LEDGER' AND account_id IS NULL
+                  AND period_kind = :periodKind AND analysis_month = :period
+                  AND context_fingerprint = :fingerprint
+                """).param("userId", userId).param("periodKind", periodKind).param("period", period)
+                .param("fingerprint", fingerprint).query(this::generation).optional();
+    }
+
+    private Optional<GenerationRow> ledgerGenerationById(long id) {
+        return jdbc.sql("""
+                SELECT id, user_id, account_id, analysis_month, context_fingerprint, state, fencing_token, permit_date,
+                       lease_expires_at_utc, quota_reserved, snapshot_id
+                FROM analysis_generations
+                WHERE id = :id AND report_scope = 'LEDGER' AND account_id IS NULL
+                """).param("id", id).query(this::generation).optional();
+    }
+
+    private boolean holdsLedger(GenerationRow row, LedgerGenerationPermit permit) {
+        return row != null && row.id == permit.generationId() && row.fencingToken == permit.fencingToken()
+                && row.userId == permit.userId() && row.accountId == 0
+                && row.yearMonth.equals(permit.period())
+                && row.contextFingerprint.equals(permit.contextFingerprint()) && row.state == GenerationState.IN_PROGRESS
+                && row.quotaReserved && row.permitDate.equals(permit.permitDate()) && row.leaseExpiresAt.isAfter(now());
+    }
+
+    private static void requireLedger(String periodKind, String period, String contextFingerprint) {
+        if (!"MONTH".equals(periodKind) && !"YEAR".equals(periodKind)) {
+            throw new IllegalArgumentException("ledger period kind is required");
+        }
+        if ("MONTH".equals(periodKind)) YearMonth.parse(period);
+        else if (period == null || !period.matches("[0-9]{4}")) throw new IllegalArgumentException("ledger year is required");
+        if (contextFingerprint == null || contextFingerprint.isBlank() || contextFingerprint.length() > 128) {
+            throw new IllegalArgumentException("context fingerprint is required");
+        }
+    }
+
+    private static void requireScope(long accountId, String yearMonth, String contextFingerprint) {
+        requireAccount(accountId);
         YearMonth.parse(yearMonth);
         if (contextFingerprint == null || contextFingerprint.isBlank() || contextFingerprint.length() > 128) {
             throw new IllegalArgumentException("context fingerprint is required");
         }
+    }
+
+    private static void requireAccount(long accountId) {
+        if (accountId <= 0) throw new IllegalArgumentException("account id is required");
     }
 
     private static void requireReport(MonthlyAnalysisReport report) {
@@ -352,10 +568,12 @@ public final class JdbcAnalysisGenerationStore implements AnalysisGenerationStor
         return value == null || value.isBlank();
     }
 
-    private record GenerationRow(long id, long userId, String yearMonth, String contextFingerprint, GenerationState state,
-            long fencingToken, LocalDate permitDate, Instant leaseExpiresAt, boolean quotaReserved, Long snapshotId) {
+    private record GenerationRow(long id, long userId, long accountId, String yearMonth, String contextFingerprint,
+            GenerationState state, long fencingToken, LocalDate permitDate, Instant leaseExpiresAt, boolean quotaReserved,
+            Long snapshotId) {
         private GenerationStatus status() {
-            return new GenerationStatus(id, userId, yearMonth, contextFingerprint, state, leaseExpiresAt, permitDate, snapshotId);
+            return new GenerationStatus(id, userId, accountId, yearMonth, contextFingerprint, state, leaseExpiresAt,
+                    permitDate, snapshotId);
         }
     }
 }

@@ -8,11 +8,11 @@ export interface ApiEnvironment {
 const ENVIRONMENTS: Record<EnvironmentName, ApiEnvironment> = {
   dev: {
     name: "dev",
-    apiBaseUrl: "http://127.0.0.1:8080",
+    apiBaseUrl: "http://127.0.0.1:18081",
   },
   test: {
     name: "test",
-    apiBaseUrl: "http://127.0.0.1:8080",
+    apiBaseUrl: "http://127.0.0.1:18081",
   },
   production: {
     name: "production",

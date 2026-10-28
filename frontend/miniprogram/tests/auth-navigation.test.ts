@@ -40,6 +40,6 @@ describe("auth navigation", () => {
     navigation.enterAuthenticatedHome();
     finish[1]?.();
     navigation.enterLogin();
-    assert.deepEqual(launched, ["/pages/login/index", "/pages/account-home/index", "/pages/login/index"]);
+    assert.deepEqual(launched, ["/pages/login/index", "/pages/account-list/index", "/pages/login/index"]);
   });
 });

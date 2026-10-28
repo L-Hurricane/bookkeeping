@@ -4,6 +4,7 @@ import com.limingyuan.bookkeeping.analysis.application.MonthlyAnalysisGenerator;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
+import com.limingyuan.bookkeeping.support.TestSchemaGuard;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -28,7 +29,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Real generation flow on bookkeeping_test. The mock has no provider client. */
+/** Real generation flow on an allowlisted ordinary test schema. The mock has no provider client. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "bookkeeping.analysis.mock.enabled=true",
         "bookkeeping.analysis.mock.allowed-usernames=mock_accept_a,mock_accept_b",
@@ -58,7 +59,7 @@ class MockGenerationHttpTest {
     @BeforeEach
     void requireTestDatabase() throws Exception {
         try (var connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo("bookkeeping_test");
+            TestSchemaGuard.requireAllowedSchema(connection.getCatalog());
         }
         assertThat(context.getBeansOfType(MonthlyAnalysisGenerator.class)).hasSize(1);
         assertThat(context.getBean(MonthlyAnalysisGenerator.class).getClass().getName()).endsWith("LocalMockMonthlyAnalysisGenerator");

@@ -65,8 +65,8 @@ const categories: CategoryNode[] = [
     type: "EXPENSE",
     bookable: false,
     children: [
-      { id: 11, name: "午餐", type: "EXPENSE", bookable: true },
-      { id: 13, name: "隐藏", type: "EXPENSE", bookable: false },
+      { id: 11, name: "午餐", type: "EXPENSE", bookable: true, children: [] },
+      { id: 13, name: "隐藏", type: "EXPENSE", bookable: false, children: [] },
     ],
   },
   { id: 2, name: "购物", type: "EXPENSE", bookable: true, children: [] },
@@ -75,7 +75,7 @@ const categories: CategoryNode[] = [
     name: "居住",
     type: "EXPENSE",
     bookable: true,
-    children: [{ id: 31, name: "房租", type: "EXPENSE", bookable: true }],
+    children: [{ id: 31, name: "房租", type: "EXPENSE", bookable: true, children: [] }],
   },
 ];
 
@@ -149,7 +149,7 @@ describe("category reference data", () => {
               bookable: false,
               children: [
                 { id: 11, name: "午餐", type: "EXPENSE", bookable: true, children: [] },
-                { id: 13, name: "隐藏", type: "EXPENSE", bookable: false },
+                { id: 13, name: "隐藏", type: "EXPENSE", bookable: false, children: [] },
               ],
             },
             categories[1],
@@ -161,7 +161,7 @@ describe("category reference data", () => {
     const loaded = await api.listCategories("EXPENSE");
     assert.equal(requests[0]?.url.endsWith("/api/v1/categories?type=EXPENSE"), true);
     assert.equal(requests[0]?.header.Authorization, "Bearer opaque-token");
-    assert.deepEqual(loaded[0]?.children[0], { id: 11, name: "午餐", type: "EXPENSE", bookable: true });
+    assert.deepEqual(loaded[0]?.children[0], { id: 11, name: "午餐", type: "EXPENSE", bookable: true, children: [] });
     assert.equal(loaded[0]?.children[1]?.name, "隐藏");
 
     const malformed = categoryApiFor(() => ({ statusCode: 200, data: { items: {} } }));
@@ -398,9 +398,9 @@ describe("business time editor", () => {
   it("confirms a legal draft once and leaves the form unchanged when cancelled", () => {
     const accountCreated = "2026-08-01T00:00:00+08:00";
     const early = applyBusinessTimeDraft({ date: "2026-07-31", time: "23:59:59" }, accountCreated);
-    assert.equal(early.ok, false);
-    if (!early.ok) {
-      assert.equal(early.message, "交易时间不得早于账户创建时间");
+    assert.equal(early.ok, true);
+    if (early.ok) {
+      assert.equal(early.businessTime, "2026-07-31T23:59:59+08:00");
     }
     assert.equal(applyBusinessTimeDraft({ date: "2026-08-01", time: "00:00:00" }, accountCreated).ok, true);
     assert.equal(applyBusinessTimeDraft({ date: "2026-09-26", time: "12:46:06" }, accountCreated).ok, true);

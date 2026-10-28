@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Account } from "../miniprogram/account/account";
+import { adjustmentBalanceSource } from "../miniprogram/balance-adjustment/balance-source";
 import {
   adjustmentDetailAccess,
   adjustmentDetailView,
@@ -175,7 +177,7 @@ describe("adjustment create state", () => {
     assert.equal(next?.attempt?.idempotencyKey, "key-b");
     assert.equal(next?.attempt?.snapshot.targetBalance, "90.00");
     const early = buildAdjustmentSnapshot("90", "2026-07-01T00:00:00+08:00", "", 1001, createdTime);
-    assert.equal(early.ok, false);
+    assert.equal(early.ok, true);
   });
 });
 
@@ -297,6 +299,32 @@ function memoryStorage(): KeyValueStorage {
     },
   };
 }
+
+describe("adjustment balance source", () => {
+  const account = (id: number, lifecycle: Account["lifecycle"]): Account => ({
+    id,
+    name: "微信",
+    kind: "NORMAL",
+    currency: "CNY",
+    openingBalance: "50.00",
+    currentBalance: "80.00",
+    createdTime: "2026-10-01T10:00:00+08:00",
+    lifecycle,
+  });
+
+  it("reads the requested account from a multi-account result", () => {
+    assert.deepEqual(adjustmentBalanceSource(account(2, "ACTIVE"), 2), { status: "ready", currentBalance: "80.00" });
+  });
+
+  it("does not treat a different account or a failed lookup as a balance", () => {
+    assert.deepEqual(adjustmentBalanceSource(account(1, "ACTIVE"), 2), { status: "unavailable" });
+    assert.deepEqual(adjustmentBalanceSource(null, 2), { status: "unavailable" });
+  });
+
+  it("refuses a new adjustment on an archived account without inventing a balance", () => {
+    assert.deepEqual(adjustmentBalanceSource(account(2, "ARCHIVED"), 2), { status: "archived" });
+  });
+});
 
 function apiFor(responder: (request: HttpTransportRequest) => { statusCode: number; data: unknown }) {
   const storage = memoryStorage();

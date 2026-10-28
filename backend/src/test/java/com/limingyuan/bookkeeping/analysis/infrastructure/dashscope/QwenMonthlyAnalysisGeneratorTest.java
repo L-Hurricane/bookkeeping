@@ -460,5 +460,9 @@ class QwenMonthlyAnalysisGeneratorTest {
             if (failure != null) throw failure;
             return new MonthlyAnalysisGeneration("dashscope", "qwen3.7-flash", content, null, null, null, 5, null);
         }
+
+        @Override public MonthlyAnalysisGeneration generateJson(String userJson, String systemPrompt) {
+            throw new AssertionError("ledger json");
+        }
     }
 }

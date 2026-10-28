@@ -1,103 +1,39 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx 48rpx;
+  padding: 24rpx;
   box-sizing: border-box;
+  background: #f3f4f6;
 }
 
-.month,
-.types {
+.group {
+  margin-bottom: 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.entry {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 32rpx 28rpx;
+  border-bottom: 1rpx solid #f0f0f0;
 }
 
-.types {
-  margin-top: 24rpx;
-  justify-content: flex-start;
-  gap: 24rpx;
+.entry:last-child {
+  border-bottom: 0;
 }
 
-.month-step,
-.month-label {
+.entry-title {
   font-size: 32rpx;
+  color: #1a1a1a;
 }
 
-.month-label,
-.section,
-.row-title {
-  font-weight: 600;
-}
-
-.type {
-  color: #666666;
-  font-size: 30rpx;
-}
-
-.type.selected {
-  color: #111111;
-  font-weight: 600;
-}
-
-.summary {
-  margin-top: 32rpx;
-  display: flex;
-  justify-content: space-between;
-}
-
-.summary-item,
-.row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.label,
-.status,
-.count,
-.row-detail,
-.note,
-.empty {
-  color: #666666;
-  font-size: 26rpx;
-}
-
-.section {
-  display: block;
-  margin-top: 36rpx;
-  font-size: 30rpx;
-}
-
-.note,
-.empty,
-.status,
-.count {
-  display: block;
-  margin-top: 12rpx;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 24rpx;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #ececec;
-}
-
-.row.depth-1 {
-  padding-left: 32rpx;
-}
-
-.amount {
-  font-size: 30rpx;
-}
-
-.error {
-  color: #b42318;
-}
-
-.analysis-entry {
-  margin-top: 24rpx;
-  background: transparent;
-  color: #111111;
+.entry-go {
+  color: #8a8a8a;
   font-size: 28rpx;
+}
+
+.analysis {
+  margin-top: 12rpx;
 }

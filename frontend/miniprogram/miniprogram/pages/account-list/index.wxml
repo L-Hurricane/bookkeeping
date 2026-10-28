@@ -1,0 +1,40 @@
+<view class="page">
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取账户</text>
+  <block wx:elif="{{phase === 'error'}}">
+    <text class="error">{{errorMessage}}</text>
+    <button bindtap="onRetry">重新加载</button>
+  </block>
+  <block wx:else>
+    <view class="toolbar">
+      <text class="tool" bindtap="onCreateAccount">创建账户</text>
+      <text class="tool" bindtap="onOpenArchive">归档账户</text>
+      <text class="tool" bindtap="onOpenAll">全部交易</text>
+    </view>
+    <view class="board" wx:if="{{summaryReady}}">
+      <text class="board-label">本月账本净值</text>
+      <text class="board-net {{netTone}}">{{netLabel}}</text>
+      <view class="board-split">
+        <view class="board-cell">
+          <text class="board-label">本月收入</text>
+          <text class="board-amount money-neutral">{{incomeLabel}}</text>
+        </view>
+        <view class="board-cell">
+          <text class="board-label">本月支出</text>
+          <text class="board-amount money-neutral">{{expenseLabel}}</text>
+        </view>
+      </view>
+    </view>
+    <text class="error" wx:if="{{summaryError}}">{{summaryError}}</text>
+    <text class="error" wx:if="{{refreshError}}">{{refreshError}}</text>
+    <button wx:if="{{refreshError}}" bindtap="onRetry">重新加载</button>
+    <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">没有正常账户</text>
+    <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
+      <view class="card-main">
+        <text class="card-name">{{item.name}}</text>
+        <text class="card-kind">{{item.kindLabel}}</text>
+      </view>
+      <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
+    </view>
+  </block>
+  <entry-fab wx:if="{{rows.length > 0 && !loggingOut}}" above-tab="{{true}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
+</view>

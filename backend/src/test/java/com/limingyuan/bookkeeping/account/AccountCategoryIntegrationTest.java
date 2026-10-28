@@ -79,7 +79,7 @@ class AccountCategoryIntegrationTest {
     }
 
     @Test void userBootstrapPreparesCategoriesButDoesNotCreateAccount() throws Exception {
-        assertThat(accounts.findByUserId(userId)).isEmpty();
+        assertThat(accounts.findAllByUserIdOrderByIdAsc(userId)).isEmpty();
         assertThat(categories.findAllByUserIdOrderById(userId)).hasSize(18);
         mvc.perform(get("/api/v1/accounts").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
@@ -91,6 +91,7 @@ class AccountCategoryIntegrationTest {
         Instant before = Instant.now().minusSeconds(1);
         var account = initialize(amount, token);
         assertThat(account.path("name").asText()).isEqualTo("微信");
+        assertThat(account.path("kind").asText()).isEqualTo("NORMAL");
         assertThat(account.path("currency").asText()).isEqualTo("CNY");
         assertThat(account.path("openingBalance").isString()).isTrue();
         assertThat(account.path("openingBalance").asText()).isEqualTo(expected);
@@ -99,12 +100,14 @@ class AccountCategoryIntegrationTest {
         assertThat(created.getOffset()).isEqualTo(ZoneOffset.ofHours(8));
         assertThat(created.getNano()).isZero();
         assertThat(created.toInstant()).isBetween(before, Instant.now());
-        var stored = accounts.findByUserId(userId).orElseThrow();
+        var stored = accounts.findAllByUserIdOrderByIdAsc(userId).getFirst();
         assertThat(stored.getLastFirstSaveOrder()).isZero();
+        assertThat(stored.getKind().name()).isEqualTo("NORMAL");
         assertThat(stored.getOpeningBalance()).isEqualByComparingTo(expected);
         assertThat(stored.getCreatedTime()).isEqualTo(created.toLocalDateTime());
         mvc.perform(get("/api/v1/accounts").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].kind").value("NORMAL"))
                 .andExpect(jsonPath("$.items[0].currentBalance").value(expected));
     }
 
@@ -115,7 +118,8 @@ class AccountCategoryIntegrationTest {
         var service = new AccountService(accounts, new CurrentBalance(jdbc, context), context, Clock.fixed(now, ZoneOffset.ofHours(-7)), transactions);
         var result = service.initialize("0");
         assertThat(result.createdTime()).isEqualTo("2026-09-25T07:59:59+08:00");
-        assertThat(accounts.findByUserId(userId).orElseThrow().getUpdatedAtUtc())
+        assertThat(result.kind()).isEqualTo("NORMAL");
+        assertThat(accounts.findAllByUserIdOrderByIdAsc(userId).getFirst().getUpdatedAtUtc())
                 .isEqualTo(LocalDateTime.parse("2026-09-24T23:59:59.123456"));
     }
 
@@ -125,9 +129,10 @@ class AccountCategoryIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"openingBalance\":\"20\"}"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("ACCOUNT_ALREADY_INITIALIZED"))
                 .andExpect(jsonPath("$.error.requestId").isNotEmpty());
-        var account = accounts.findByUserId(userId).orElseThrow();
+        var account = accounts.findAllByUserIdOrderByIdAsc(userId).getFirst();
         assertThat(account.getId()).isEqualTo(first.path("id").asLong());
         assertThat(account.getOpeningBalance()).isEqualByComparingTo("10.00");
+        // Same user + same default name 「微信」 still rejected by uk_accounts_user_name.
         assertThatThrownBy(() -> accounts.saveAndFlush(new AccountEntity(userId, BigDecimal.ZERO,
                 LocalDateTime.now(), LocalDateTime.now()))).isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -172,7 +177,7 @@ class AccountCategoryIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("openingBalance", "0", field, "forged"))))
                     .andExpect(status().isBadRequest());
         }
-        assertThat(accounts.findByUserId(userId)).isEmpty();
+        assertThat(accounts.findAllByUserIdOrderByIdAsc(userId)).isEmpty();
     }
 
     @Test void fixedCategoryTreeMatchesPrdAndCr001Exactly() throws Exception {
@@ -186,7 +191,7 @@ class AccountCategoryIntegrationTest {
         var expense = categoryList("EXPENSE", token);
         assertThat(names(expense)).containsExactly("餐饮", "交通", "购物", "居住", "娱乐", "医疗", "其他支出");
         assertThat(names(expense.get(0).path("children"))).containsExactly("早餐", "午餐", "晚餐", "其他");
-        assertThat(names(expense.get(1).path("children"))).containsExactly("公共交通", "打车", "其他");
+        assertThat(names(expense.get(1).path("children"))).containsExactly("公共交通", "打车", "其他交通");
         for (var root : expense) {
             assertThat(root.path("type").asText()).isEqualTo("EXPENSE");
             assertThat(root.path("bookable").asBoolean()).isEqualTo(root.path("children").isEmpty());
@@ -201,7 +206,7 @@ class AccountCategoryIntegrationTest {
         }
     }
 
-    @Test void categoryPreparationIsIdempotentAndRepairsMissingFixedRows() {
+    @Test void categoryPreparationLeavesAnExistingSetUntouched() {
         var original = categories.findAllByUserIdOrderById(userId);
         categoryBootstrap.prepare(userId);
         assertThat(categories.findAllByUserIdOrderById(userId)).extracting(CategoryEntity::getId)
@@ -209,10 +214,10 @@ class AccountCategoryIntegrationTest {
         var missing = original.stream().filter(c -> c.getName().equals("早餐")).findFirst().orElseThrow();
         categories.deleteById(missing.getId());
         categoryBootstrap.prepare(userId);
-        var restored = categories.findAllByUserIdOrderById(userId);
-        assertThat(restored).hasSize(18);
-        assertThat(restored).extracting(CategoryEntity::getId)
-                .containsAll(original.stream().map(CategoryEntity::getId).filter(id -> !id.equals(missing.getId())).toList());
+        var remaining = categories.findAllByUserIdOrderById(userId);
+        assertThat(remaining).hasSize(17);
+        assertThat(remaining).extracting(CategoryEntity::getId).doesNotContain(missing.getId());
+        assertThat(remaining).extracting(CategoryEntity::getName).doesNotContain("早餐");
     }
 
     @Test void startupPreparesExistingPhase1UsersWithoutCreatingAccounts() {
@@ -222,7 +227,7 @@ class AccountCategoryIntegrationTest {
         categoryBootstrap.run(new DefaultApplicationArguments());
         categoryBootstrap.run(new DefaultApplicationArguments());
         assertThat(categories.findAllByUserIdOrderById(legacy.getId())).hasSize(18);
-        assertThat(accounts.findByUserId(legacy.getId())).isEmpty();
+        assertThat(accounts.findAllByUserIdOrderByIdAsc(legacy.getId())).isEmpty();
     }
 
     @Test void categoryIdsAndQueriesAreUserScoped() throws Exception {
@@ -239,16 +244,17 @@ class AccountCategoryIntegrationTest {
         }
     }
 
-    @Test void categoryDatabaseUniquenessSeparatesRootAndParentScopes() {
+    @Test void categoryDatabaseUniquenessIsGlobalInsideOneType() {
         var owned = categories.findAllByUserIdOrderById(userId);
         var parent = owned.stream().filter(c -> c.getName().equals("餐饮")).findFirst().orElseThrow();
-        assertThatThrownBy(() -> categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "工资", null, LocalDateTime.now())))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        var expenseWage = categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "工资", null, LocalDateTime.now()));
+        assertThat(expenseWage.getId()).isNotNull();
         assertThatThrownBy(() -> categories.saveAndFlush(new CategoryEntity(userId, CategoryType.EXPENSE, "早餐", parent.getId(), LocalDateTime.now())))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThat(owned.stream().filter(c -> c.getName().equals("其他")).toList()).hasSize(2);
+        assertThat(owned.stream().filter(c -> c.getName().equals("其他")).toList()).hasSize(1);
+        assertThat(owned.stream().filter(c -> c.getName().equals("其他交通")).toList()).hasSize(1);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM categories WHERE user_id = :id AND parent_id IS NULL AND parent_scope_id = 0")
-                .param("id", userId).query(Long.class).single()).isEqualTo(11);
+                .param("id", userId).query(Long.class).single()).isEqualTo(12);
         assertThat(jdbc.sql("SELECT is_nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'categories' AND column_name = 'parent_scope_id'")
                 .query(String.class).single()).isEqualTo("NO");
     }

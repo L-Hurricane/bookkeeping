@@ -5,7 +5,6 @@ import com.limingyuan.bookkeeping.account.application.CurrentBalance;
 import com.limingyuan.bookkeeping.adjustment.persistence.BalanceAdjustmentEntity;
 import com.limingyuan.bookkeeping.adjustment.persistence.BalanceAdjustmentRepository;
 import com.limingyuan.bookkeeping.common.Money;
-import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRecord;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRepository;
@@ -70,13 +69,10 @@ public class AdjustmentService {
 
     private CreateOutcome createOnce(long userId, long accountId, String key, BigDecimal target, LocalDateTime time,
             String remark, byte[] hash) {
-        var locked = accounts.lockForWrite(accountId);
+        accounts.lockForWrite(accountId);
         var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
         if (existing != null) return outcome(accountId, existing, hash, target);
-        if (time.isBefore(locked.createdTime())) {
-            throw new ApiFailure(409, "BUSINESS_RULE_VIOLATION", "业务时间不能早于资金账户创建时间",
-                    List.of(new ApiErrors.Detail("businessTime", "BEFORE_ACCOUNT_CREATION")));
-        }
+        accounts.requireWritable(accountId);
         var before = balances.of(accountId);
         var delta = target.subtract(before);
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
@@ -111,7 +107,7 @@ public class AdjustmentService {
 
     public void delete(long accountId, long adjustmentId) {
         transaction.executeWithoutResult(status -> {
-            accounts.lockForWrite(accountId);
+            accounts.requireWritable(accountId);
             var current = load(accountId, adjustmentId);
             adjustments.delete(current);
             adjustments.flush();

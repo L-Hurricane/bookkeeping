@@ -41,6 +41,17 @@ export function nextMonth(month: string): string {
   return formatMonth(parsed.year, parsed.month + 1);
 }
 
+export function beijingDate(now: Date): string {
+  const beijing = beijingWallClock(now);
+  return `${beijing.year}-${String(beijing.month).padStart(2, "0")}-${String(beijing.day).padStart(2, "0")}`;
+}
+
+export function monthLastDate(month: string): string {
+  const parsed = parseMonth(month);
+  const last = new Date(Date.UTC(parsed.year, parsed.month, 0)).getUTCDate();
+  return `${month}-${String(last).padStart(2, "0")}`;
+}
+
 export function formatMonthLabel(month: string): string {
   const parsed = parseMonth(month);
   return `${parsed.year}年${parsed.month}月`;

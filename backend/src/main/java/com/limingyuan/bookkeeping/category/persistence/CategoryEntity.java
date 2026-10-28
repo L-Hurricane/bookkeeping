@@ -24,4 +24,6 @@ public class CategoryEntity {
     public CategoryType getType() { return type; }
     public String getName() { return name; }
     public Long getParentId() { return parentId; }
+    public void rename(String name) { this.name = name; }
+    public void place(Long parentId) { this.parentId = parentId; }
 }

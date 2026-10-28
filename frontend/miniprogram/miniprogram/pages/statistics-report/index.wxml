@@ -1,0 +1,149 @@
+<view class="page">
+  <view class="panel">
+    <text class="panel-title">时间范围</text>
+    <view class="choices">
+      <text class="choice {{preset === 'MONTH' ? 'selected' : ''}}" data-preset="MONTH" bindtap="onSelectPreset">本月</text>
+      <text class="choice {{preset === 'QUARTER' ? 'selected' : ''}}" data-preset="QUARTER" bindtap="onSelectPreset">本季</text>
+      <text class="choice {{preset === 'YEAR' ? 'selected' : ''}}" data-preset="YEAR" bindtap="onSelectPreset">本年</text>
+      <text class="choice {{preset === 'ROLLING_MONTH' ? 'selected' : ''}}" data-preset="ROLLING_MONTH" bindtap="onSelectPreset">近1月</text>
+      <text class="choice {{preset === 'ROLLING_3_MONTHS' ? 'selected' : ''}}" data-preset="ROLLING_3_MONTHS" bindtap="onSelectPreset">近3月</text>
+      <text class="choice {{preset === 'ROLLING_YEAR' ? 'selected' : ''}}" data-preset="ROLLING_YEAR" bindtap="onSelectPreset">近1年</text>
+    </view>
+  </view>
+  <view class="panel">
+    <text class="panel-title">日期范围</text>
+    <view class="date-row">
+      <text class="label">开始日期</text>
+      <picker mode="date" value="{{customFrom}}" bindchange="onCustomFrom">
+        <text class="date-value">{{customFrom || '选择'}}</text>
+      </picker>
+    </view>
+    <view class="date-row">
+      <text class="label">结束日期</text>
+      <picker mode="date" value="{{customTo}}" bindchange="onCustomTo">
+        <text class="date-value">{{customTo || '选择'}}</text>
+      </picker>
+    </view>
+  </view>
+  <view class="panel">
+    <text class="panel-title">账户范围</text>
+    <view class="choices">
+      <text class="choice {{scope === 'ACTIVE' ? 'selected' : ''}}" data-scope="ACTIVE" bindtap="onSelectScope">未归档账户</text>
+      <text class="choice {{scope === 'ALL' ? 'selected' : ''}}" data-scope="ALL" bindtap="onSelectScope">全部账户（含已归档）</text>
+      <text class="choice {{scope === 'SELECTED' ? 'selected' : ''}}" data-scope="SELECTED" bindtap="onSelectScope">自选账户</text>
+    </view>
+    <text wx:if="{{scope === 'SELECTED'}}" class="range" bindtap="onOpenAccountSheet">已选 {{selectedCount}} 个账户</text>
+    <text class="range" wx:if="{{rangeLabel}}">{{rangeLabel}}</text>
+  </view>
+
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取统计</text>
+  <text class="status" wx:elif="{{phase === 'choose'}}">{{errorMessage}}</text>
+  <button wx:if="{{phase === 'choose' && scope === 'SELECTED'}}" bindtap="onOpenAccountSheet">选择账户</button>
+  <block wx:elif="{{phase === 'error'}}">
+    <text class="error">{{errorMessage}}</text>
+    <button wx:if="{{!invalid}}" bindtap="onRetry">重新加载</button>
+  </block>
+
+  <block wx:elif="{{phase === 'ready' && module === 'NET'}}">
+    <view class="panel">
+      <view class="summary">
+        <view class="summary-item">
+          <text class="label">期初</text>
+          <text class="figure {{openingTone}}">{{openingLabel}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">期末</text>
+          <text class="figure {{closingTone}}">{{closingLabel}}</text>
+        </view>
+        <view class="summary-item">
+          <text class="label">变化</text>
+          <text class="figure {{changeTone}}">{{changeLabel}}</text>
+        </view>
+      </view>
+      <canvas type="2d" id="net-line" class="line"></canvas>
+      <button class="quiet" bindtap="onOpenPeriod">查看期间交易</button>
+    </view>
+    <view class="panel" wx:if="{{dailyPoints.length > 0}}">
+      <text class="panel-title">每日净值</text>
+      <view class="row" wx:for="{{dailyPoints}}" wx:key="date" data-date="{{item.date}}" bindtap="onSelectPoint">
+        <text class="row-title">{{item.dateLabel}}</text>
+        <text class="amount {{item.tone}}">{{item.amountLabel}}</text>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{phase === 'ready' && breakdown === 'CATEGORY'}}">
+    <view class="panel">
+      <text class="panel-title">构成</text>
+      <text class="note" wx:if="{{ringNote}}">{{ringNote}}</text>
+      <view class="ring-wrap" wx:if="{{ringSegments.length > 0}}">
+        <canvas type="2d" id="category-ring" class="ring" bindtap="onRingTap"></canvas>
+        <view class="ring-center">
+          <text class="label">{{ringPick ? ringPick.title : '合计'}}</text>
+          <text class="figure money-neutral">{{ringPick ? ringPick.amountLabel : netLabel}}</text>
+          <text wx:if="{{ringPick}}" class="note">{{ringPick.share}}%</text>
+        </view>
+      </view>
+      <text class="note" wx:if="{{ringLocateNote}}">{{ringLocateNote}}</text>
+      <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
+    </view>
+    <view class="panel" wx:if="{{categories.length > 0}}">
+      <text class="panel-title">分类</text>
+      <view class="row depth-{{item.depth}} {{ringPickKey === item.key ? 'picked' : ''}}" wx:for="{{categories}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+        <view class="row-main">
+          <text class="row-title">{{item.title}}</text>
+          <text class="row-detail">{{item.detail}}</text>
+        </view>
+        <text class="amount money-neutral">{{item.amountLabel}}</text>
+      </view>
+    </view>
+  </block>
+
+  <block wx:elif="{{phase === 'ready'}}">
+    <view class="panel">
+      <text class="panel-title">合计</text>
+      <text class="figure money-neutral">{{netLabel}}</text>
+      <text class="note">标签金额可以重叠，占比不必合计为 100%。</text>
+      <text wx:if="{{tagPick}}" class="note">{{tagPick.title}} {{tagPick.amountLabel}} · {{tagPick.detail}}</text>
+      <text class="empty" wx:if="{{emptyFlow}}">这个范围没有{{module === 'INCOME' ? '收入' : '支出'}}</text>
+    </view>
+    <view class="panel" wx:if="{{tags.length > 0}}">
+      <text class="panel-title">标签</text>
+      <view class="row depth-{{item.depth}} {{tagPickKey === item.key ? 'picked' : ''}}" wx:for="{{tags}}" wx:key="key" data-drill="{{item.drillKind}}" data-id="{{item.drillId}}" data-title="{{item.title}}" bindtap="onOpenRow">
+        <view class="row-main">
+          <text class="row-title">{{item.title}}</text>
+          <text class="row-detail">{{item.detail}}</text>
+          <view class="bar-track" catchtap="onPickTagBar" data-key="{{item.key}}"><view class="bar-fill {{tagPickKey === item.key ? 'picked' : ''}}" style="width: {{item.barPercent}}%"></view></view>
+        </view>
+        <text class="amount money-neutral">{{item.amountLabel}}</text>
+      </view>
+    </view>
+  </block>
+  <view class="mask" wx:if="{{accountSheetOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelAccounts"></view>
+    <view class="sheet">
+      <text class="panel-title">选择账户</text>
+      <input class="search" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
+      <view class="sheet-tools">
+        <text bindtap="onSelectAllAccounts">全选</text>
+        <text bindtap="onClearAccounts">清空</text>
+      </view>
+      <scroll-view scroll-y class="sheet-list">
+        <text class="status" wx:if="{{accountGroups.length === 0}}">没有匹配的账户</text>
+        <block wx:for="{{accountGroups}}" wx:key="key">
+          <view class="group-head" data-key="{{item.key}}" bindtap="onToggleGroup">{{item.title}} {{item.collapsed ? '展开' : '收起'}}</view>
+          <block wx:if="{{!item.collapsed}}">
+            <view class="pick" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onToggleDraftAccount">
+              <text>{{account.name}}</text>
+              <text wx:if="{{account.checked}}">✓</text>
+            </view>
+          </block>
+        </block>
+      </scroll-view>
+      <view class="sheet-actions">
+        <button bindtap="onCancelAccounts">取消</button>
+        <button bindtap="onConfirmAccounts">确认</button>
+      </view>
+    </view>
+  </view>
+</view>

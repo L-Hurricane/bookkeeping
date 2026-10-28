@@ -6,7 +6,7 @@ describe("resolveEnvironment", () => {
   it("defaults to the local dev API origin", () => {
     const environment = resolveEnvironment();
     assert.equal(environment.name, "dev");
-    assert.equal(environment.apiBaseUrl, "http://127.0.0.1:8080");
+    assert.equal(environment.apiBaseUrl, "http://127.0.0.1:18081");
   });
 
   it("keeps production without a committed host", () => {

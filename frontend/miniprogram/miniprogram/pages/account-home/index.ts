@@ -1,10 +1,20 @@
-import { formatCurrentBalance, routeAfterAccountQuery, type Account } from "../../account/account";
-import { logoutFailureView, resumeAfterLogoutFailure, selectedMonthDuringLogout } from "../../account/logout-view";
-import { beginLoad, beginLogout, canApplyLoadResult, createLoadGuard, endLogout } from "../../account/load-guard";
+import { ARCHIVED_HISTORY_HINT } from "../../account/archive-copy";
+import {
+  formatCurrentBalance,
+  shouldWarnNegativeBalance,
+  type Account,
+} from "../../account/account";
+import { stashLedgerHandoff, takeLedgerHandoff } from "../../account/ledger-handoff";
+import { selectedMonthDuringLogout } from "../../account/logout-view";
+import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
+import { moneyToneClass } from "../../account/money-tone";
+import { accountHomePath, accountListPath, accountSettingsPath, parseAccountHomeQuery } from "../../account/navigation";
+import { groupByTimeLabel } from "../../ledger/day-groups";
 import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
-import { currentBeijingMonth, formatMonthLabel, nextMonth, previousMonth } from "../../ledger/month";
+import { beijingDate, currentBeijingMonth, formatMonthLabel, monthLastDate, nextMonth, previousMonth } from "../../ledger/month";
 import {
   acceptAdjustmentCreated,
+  acceptTransferCreated,
   acceptTransactionCreated,
   applyAcceptedLocate,
   canRunLocate,
@@ -15,12 +25,13 @@ import {
   HIGHLIGHT_MS,
   idleHighlight,
   nextLocateGeneration,
+  parsePostSaveResult,
   settleLedger,
   startHighlight,
   type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import { accountApi, authApi, authNavigation, ledgerApi, transactionApi } from "../../services/runtime";
+import { accountApi, ledgerApi, ledgerStatisticsApi, transactionApi } from "../../services/runtime";
 import { TransactionSearchResponseError } from "../../services/transaction";
 import {
   canApplySearchResult,
@@ -39,7 +50,13 @@ import {
 } from "../../transaction/transaction-search";
 import { validateBusinessTime } from "../../transaction/business-time";
 import { adjustmentCreatePath, adjustmentDetailPath, canOpenAdjustmentDetail, canOpenBalanceAdjustment } from "../../balance-adjustment/navigation";
-import { statisticsPagePath } from "../../statistics/drilldown";
+import {
+  canOpenTransfer,
+  canOpenTransferDetail,
+  transferCreatePath,
+  transferDetailPath,
+} from "../../transfer/navigation";
+import { accountStatisticsTarget } from "../../statistics/tab-context";
 import { canOpenStatistics } from "../../statistics/navigation";
 import { canOpenCreateTransaction, canOpenTransactionDetail, transactionCreatePath, transactionDetailPath } from "../../transaction/navigation";
 import { isUnauthorized, LedgerResponseError } from "../../services/ledger";
@@ -59,6 +76,9 @@ Page({
   accountId: 0,
   accountCreatedTime: "",
   currency: "",
+  accountKind: "NORMAL" as Account["kind"],
+  archived: false,
+  contextReady: false,
   pendingPostSave: null as LedgerLocateIntent | null,
   highlight: idleHighlight(),
   highlightTimer: null as number | null,
@@ -70,13 +90,22 @@ Page({
   data: {
     phase: "account-loading" as "account-loading" | "account-error" | "ledger-loading" | "ready" | "ledger-error",
     name: "",
+    kindLabel: "",
     balanceLabel: "",
+    balanceToneClass: "money-zero",
+    negativeBalanceHint: "",
+    archived: false,
+    archiveHint: "",
     monthLabel: "",
     incomeLabel: "",
+    incomeToneClass: "money-zero",
     expenseLabel: "",
+    expenseToneClass: "money-zero",
     surplusLabel: "",
+    surplusToneClass: "money-zero",
     countLabel: "",
     rows: [] as ReturnType<typeof ledgerRows>,
+    groups: [] as ReturnType<typeof groupByTimeLabel<ReturnType<typeof ledgerRows>[number]>>,
     empty: false,
     searchInput: "",
     searchLoading: false,
@@ -87,9 +116,31 @@ Page({
     logoutErrorMessage: "",
     highlightKey: "",
     locateMiss: "",
+    monthCloseCaption: "",
+    monthCloseLabel: "",
+    monthCloseTone: "money-zero",
+    fabOpen: false,
+  },
+
+  onLoad(query: Record<string, string | undefined>) {
+    const context = parseAccountHomeQuery(query);
+    if (context === null) {
+      wx.reLaunch({ url: accountListPath() });
+      return;
+    }
+    this.accountId = context.accountId;
+    this.contextReady = true;
+    const handoff = takeLedgerHandoff(this.accountId);
+    if (handoff !== null) {
+      this.pendingPostSave = handoff;
+      this.selectedMonth = handoff.targetMonth;
+    }
   },
 
   onShow() {
+    if (!this.contextReady) {
+      return;
+    }
     if (this.selectedMonth.length === 0) {
       this.selectedMonth = currentBeijingMonth(new Date());
     }
@@ -135,24 +186,20 @@ Page({
     }
     this.setData({ phase: "account-loading", errorMessage: "" });
     try {
-      const items = await accountApi.listAccounts();
+      const account = await accountApi.loadAccount(this.accountId);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
-      const route = routeAfterAccountQuery(items);
-      if (route.destination === "init") {
-        wx.reLaunch({ url: "/pages/account-init/index" });
-        return;
-      }
-      if (route.destination === "error") {
-        this.setData({ phase: "account-error", errorMessage: route.message });
+      if (account === null) {
+        this.setData({ phase: "account-error", errorMessage: "账户不存在或无权访问" });
         return;
       }
       this.resetSearchState();
-      this.accountId = route.account.id;
-      this.accountCreatedTime = route.account.createdTime;
-      this.currency = route.account.currency;
-      this.showAccount(route.account);
+      this.accountCreatedTime = account.createdTime;
+      this.currency = account.currency;
+      this.accountKind = account.kind;
+      this.archived = account.lifecycle === "ARCHIVED";
+      this.showAccount(account);
       void this.loadLedger();
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
@@ -165,7 +212,12 @@ Page({
   showAccount(account: Account) {
     this.setData({
       name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
       balanceLabel: formatCurrentBalance(account),
+      balanceToneClass: moneyToneClass(account.currentBalance),
+      negativeBalanceHint: this.archived || !shouldWarnNegativeBalance(account) ? "" : "余额为负，仍可继续记账",
+      archived: this.archived,
+      archiveHint: this.archived ? ARCHIVED_HISTORY_HINT : "",
       monthLabel: formatMonthLabel(this.selectedMonth),
       errorMessage: "",
     });
@@ -181,8 +233,9 @@ Page({
       return;
     }
     if (!background) {
-      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "" });
+      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "", monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
     }
+    void this.loadMonthClose(month);
     try {
       const ledger = await ledgerApi.getLedger(accountId, month);
       if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth)) {
@@ -196,17 +249,25 @@ Page({
       const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, ledger.items, {
         phase: "ready",
         balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
+        balanceToneClass: moneyToneClass(ledger.currentBalance),
+        negativeBalanceHint:
+          !this.archived && this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
+            ? "余额为负，仍可继续记账"
+            : "",
         monthLabel: formatMonthLabel(ledger.month),
         incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
+        incomeToneClass: moneyToneClass(ledger.summary.netIncome),
         expenseLabel: formatMoneyLabel(ledger.summary.netExpense),
+        expenseToneClass: moneyToneClass(ledger.summary.netExpense),
         surplusLabel: formatMoneyLabel(ledger.summary.surplus),
+        surplusToneClass: moneyToneClass(ledger.summary.surplus),
         countLabel: `${ledger.summary.transactionCount} 笔收支`,
         errorMessage: "",
         locateMiss: settlement.missMessage,
         highlightKey: locate === null ? this.highlight.key : locate.key,
       });
       if (locate === null) {
-        this.setData(ledgerView, () => {
+        this.setData(withDayGroups(ledgerView), () => {
           if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
             return;
           }
@@ -217,7 +278,7 @@ Page({
       this.highlight = startHighlight(this.highlight, locate.key);
       this.locateGeneration = nextLocateGeneration(this.locateGeneration);
       const captured = this.locateGeneration;
-      this.setData(ledgerView, () => {
+      this.setData(withDayGroups(ledgerView), () => {
         if (!canRunLocate(this.loadGuard.pageAlive, captured, this.locateGeneration)) {
           return;
         }
@@ -236,12 +297,40 @@ Page({
     }
   },
 
+  onToggleFab() {
+    this.setData({ fabOpen: !this.data.fabOpen });
+  },
+
+  onFabExpense() {
+    this.openTransaction("EXPENSE");
+  },
+
+  onFabIncome() {
+    this.openTransaction("INCOME");
+  },
+
+  onFabTransfer() {
+    this.setData({ fabOpen: false });
+    this.onTransfer();
+  },
+
+  onFabAdjust() {
+    this.setData({ fabOpen: false });
+    this.onAdjust();
+  },
+
   onCreate() {
-    if (!canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+    this.openTransaction("EXPENSE");
+  },
+
+  openTransaction(type: "EXPENSE" | "INCOME") {
+    if (this.archived || !canOpenCreateTransaction(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
+    this.setData({ fabOpen: false });
+    const path = transactionCreatePath(this.accountId, this.accountCreatedTime);
     wx.navigateTo({
-      url: transactionCreatePath(this.accountId, this.accountCreatedTime),
+      url: type === "INCOME" ? `${path}&type=INCOME` : path,
       events: {
         transactionCreated: (result: unknown) => {
           this.receiveTransactionCreated(result);
@@ -254,13 +343,11 @@ Page({
     if (!canOpenStatistics(this.data.phase, this.loadGuard.loggingOut) || this.selectedMonth.length === 0 || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
-    wx.navigateTo({
-      url: statisticsPagePath(this.accountId, this.selectedMonth, this.accountCreatedTime),
-    });
+    wx.switchTab({ url: accountStatisticsTarget(this.accountId) });
   },
 
   onAdjust() {
-    if (!canOpenBalanceAdjustment(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+    if (this.archived || !canOpenBalanceAdjustment(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
     wx.navigateTo({
@@ -273,9 +360,67 @@ Page({
     });
   },
 
+  async loadMonthClose(month: string) {
+    const current = currentBeijingMonth(new Date());
+    if (month > current) {
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
+      return;
+    }
+    const to = month === current ? beijingDate(new Date()) : monthLastDate(month);
+    try {
+      const report = await ledgerStatisticsApi.load({
+        preset: "CUSTOM",
+        from: `${month}-01`,
+        to,
+        accountScope: "SELECTED",
+        accountIds: [this.accountId],
+      });
+      if (this.selectedMonth !== month || !this.loadGuard.pageAlive) return;
+      this.setData({
+        monthCloseCaption: month === current ? "截至今天结束" : "月末余额",
+        monthCloseLabel: formatMoneyLabel(report.netWorth.closing),
+        monthCloseTone: moneyToneClass(report.netWorth.closing),
+      });
+    } catch {
+      if (this.selectedMonth !== month || !this.loadGuard.pageAlive) return;
+      this.setData({ monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
+    }
+  },
+
+  onTransfer() {
+    if (this.archived || !canOpenTransfer(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
+      return;
+    }
+    wx.navigateTo({
+      url: transferCreatePath(this.accountId, this.accountCreatedTime),
+      events: {
+        transferCreated: (result: unknown) => {
+          this.receiveTransferCreated(result);
+        },
+      },
+    });
+  },
+
   onOpenRecord(event: WechatMiniprogram.BaseEvent) {
     const kind = event.currentTarget.dataset["kind"];
     const recordId = Number(event.currentTarget.dataset["id"]);
+    if (typeof kind === "string" && canOpenTransferDetail(kind, this.loadGuard.loggingOut)) {
+      if (!Number.isSafeInteger(recordId) || recordId <= 0 || !validateBusinessTime(this.accountCreatedTime)) {
+        return;
+      }
+      wx.navigateTo({
+        url: transferDetailPath(this.accountId, recordId, this.accountCreatedTime),
+        events: {
+          transferUpdated: (result: unknown) => {
+            this.receiveTransferCreated(result);
+          },
+          listStale: () => {
+            this.detailReturn = noteListStale(this.openList()).visit;
+          },
+        },
+      });
+      return;
+    }
     if (typeof kind === "string" && canOpenAdjustmentDetail(kind, this.loadGuard.loggingOut)) {
       if (!Number.isSafeInteger(recordId) || recordId <= 0) {
         return;
@@ -312,6 +457,11 @@ Page({
   },
 
   captureTransactionUpdate(result: unknown) {
+    const saved = parsePostSaveResult(result);
+    if (saved !== null && saved.accountId > 0 && saved.accountId !== this.accountId) {
+      this.detailReturn = noteListStale(this.openList()).visit;
+      return;
+    }
     const current = this.locateNavigation();
     const next = acceptTransactionCreated(current, result);
     const accepted = applyAcceptedLocate(current, next);
@@ -332,9 +482,45 @@ Page({
     this.receiveLocate(current, acceptAdjustmentCreated(current, payload));
   },
 
+  receiveTransferCreated(payload: unknown) {
+    const current = this.locateNavigation();
+    this.receiveLocate(current, acceptTransferCreated(current, payload));
+  },
+
   receiveTransactionCreated(payload: unknown) {
+    if (this.redirectIfForeignAccount(payload)) {
+      return;
+    }
     const current = this.locateNavigation();
     this.receiveLocate(current, acceptTransactionCreated(current, payload));
+  },
+
+  redirectIfForeignAccount(payload: unknown): boolean {
+    const saved = parsePostSaveResult(payload);
+    if (saved === null || saved.accountId <= 0 || saved.accountId === this.accountId) {
+      return false;
+    }
+    stashLedgerHandoff(saved.accountId, saved);
+    wx.reLaunch({ url: accountHomePath(saved.accountId) });
+    return true;
+  },
+
+  onOpenSettings() {
+    if (this.loadGuard.loggingOut || this.accountId <= 0) {
+      return;
+    }
+    wx.navigateTo({ url: accountSettingsPath(this.accountId) });
+  },
+
+  onBackToList() {
+    if (this.loadGuard.loggingOut) {
+      return;
+    }
+    wx.navigateBack({
+      fail: () => {
+        wx.reLaunch({ url: accountListPath() });
+      },
+    });
   },
 
   receiveLocate(current: ReturnType<typeof this.locateNavigation>, next: ReturnType<typeof acceptTransactionCreated>) {
@@ -420,6 +606,7 @@ Page({
       this.setData({
         searchLoading: false,
         rows,
+        groups: groupByTimeLabel(rows),
         searchEmpty: rows.length === 0,
         empty: false,
         searchErrorMessage: "",
@@ -489,27 +676,6 @@ Page({
       return;
     }
     void this.loadAccount();
-  },
-
-  async onLogout() {
-    const phaseBeforeLogout = this.data.phase;
-    if (!beginLogout(this.loadGuard)) {
-      return;
-    }
-    this.setData({ loggingOut: true, logoutErrorMessage: "" });
-    try {
-      await authApi.logout();
-      authNavigation.enterLogin();
-    } catch {
-      endLogout(this.loadGuard);
-      const resume = resumeAfterLogoutFailure(phaseBeforeLogout);
-      this.setData(logoutFailureView(this.data));
-      if (resume === "account") {
-        void this.loadAccount();
-      } else if (resume === "ledger") {
-        void this.loadLedger();
-      }
-    }
   },
 
   restoreListScroll(scrollTop: number | null) {
@@ -583,6 +749,11 @@ Page({
     this.stopHighlightTimer();
   },
 });
+
+function withDayGroups(view: ReturnType<typeof buildLedgerLoadSetDataPatch>) {
+  if (!("rows" in view)) return view;
+  return { ...view, groups: groupByTimeLabel(view.rows) };
+}
 
 function readScrollMeasurement(result: unknown): { top: number; height: number; viewportHeight: number; scrollTop: number } | null {
   if (!Array.isArray(result) || result.length < 3) {

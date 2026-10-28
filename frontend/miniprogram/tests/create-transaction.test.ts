@@ -76,8 +76,8 @@ describe("category and tag responses", () => {
           type: "EXPENSE",
           bookable: false,
           children: [
-            { id: 202, name: "早餐", type: "EXPENSE", bookable: true },
-            { id: 204, name: "分组", type: "EXPENSE", bookable: false },
+            { id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] },
+            { id: 204, name: "分组", type: "EXPENSE", bookable: false, children: [] },
           ],
         },
       ],
@@ -98,7 +98,7 @@ describe("category and tag responses", () => {
         children: [{ id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] }],
       }],
     });
-    assert.deepEqual(emptyChild?.[0]?.children[0], { id: 202, name: "早餐", type: "EXPENSE", bookable: true });
+    assert.deepEqual(emptyChild?.[0]?.children[0], { id: 202, name: "早餐", type: "EXPENSE", bookable: true, children: [] });
     assert.equal(parseCategoryList({
       items: [{
         id: 1,
@@ -108,7 +108,7 @@ describe("category and tag responses", () => {
         children: [{ id: 2, name: "子", type: "EXPENSE", bookable: true, children: {} }],
       }],
     }), null);
-    assert.equal(parseCategoryList({
+    const third = parseCategoryList({
       items: [{
         id: 1,
         name: "三级",
@@ -118,8 +118,30 @@ describe("category and tag responses", () => {
           id: 2,
           name: "子",
           type: "EXPENSE",
-          bookable: true,
-          children: [{ id: 999, name: "三级", type: "EXPENSE", bookable: true }],
+          bookable: false,
+          children: [{ id: 999, name: "末级", type: "EXPENSE", bookable: true, children: [] }],
+        }],
+      }],
+    });
+    assert.equal(third?.[0]?.children[0]?.children[0]?.name, "末级");
+    assert.equal(parseCategoryList({
+      items: [{
+        id: 1,
+        name: "四级",
+        type: "EXPENSE",
+        bookable: false,
+        children: [{
+          id: 2,
+          name: "子",
+          type: "EXPENSE",
+          bookable: false,
+          children: [{
+            id: 3,
+            name: "孙",
+            type: "EXPENSE",
+            bookable: false,
+            children: [{ id: 4, name: "过深", type: "EXPENSE", bookable: true }],
+          }],
         }],
       }],
     }), null);
@@ -136,7 +158,7 @@ describe("category and tag responses", () => {
       ],
     });
     assert.equal(official?.[0]?.children.length, 1);
-    assert.deepEqual(official?.[0]?.children[0], { id: 371, name: "公共交通", type: "EXPENSE", bookable: true });
+    assert.deepEqual(official?.[0]?.children[0], { id: 371, name: "公共交通", type: "EXPENSE", bookable: true, children: [] });
     assert.deepEqual(official?.[1]?.children, []);
     assert.equal(parseCategoryList({ items: [{ id: 1, name: "坏", type: "EXPENSE", bookable: "yes", children: [] }] }), null);
     assert.equal(parseCategoryList({ items: [{ id: 1, name: "坏", type: "FOOD", bookable: true, children: [] }] }), null);
@@ -235,7 +257,11 @@ describe("create transaction form", () => {
       type: "INCOME",
       businessTime: "2026-08-31T23:59:59+08:00",
     });
-    assert.deepEqual(saved === null ? null : postSaveResult(saved), { transactionId: 88, targetMonth: "2026-08" });
+    assert.deepEqual(saved === null ? null : postSaveResult(saved), {
+      accountId: 1001,
+      transactionId: 88,
+      targetMonth: "2026-08",
+    });
     assert.equal(businessMonth("2026-09-05T09:00:00+08:00"), "2026-09");
   });
 });
@@ -256,11 +282,12 @@ describe("beijing business time", () => {
     assert.equal(validateBusinessTime("2026-02-31T00:00:00+08:00"), false);
   });
 
-  it("allows a business time at or after account creation", () => {
+  it("allows a business time earlier than account creation", () => {
     const created = "2026-08-01T00:00:00+08:00";
-    assert.equal(isBusinessTimeAllowed("2026-07-31T23:59:59+08:00", created), false);
+    assert.equal(isBusinessTimeAllowed("2026-07-31T23:59:59+08:00", created), true);
     assert.equal(isBusinessTimeAllowed(created, created), true);
     assert.equal(isBusinessTimeAllowed("2026-10-01T00:00:00+08:00", created), true);
+    assert.equal(isBusinessTimeAllowed("not-a-time", created), false);
   });
 
   it("builds canonical business time from normalized draft parts at save", () => {

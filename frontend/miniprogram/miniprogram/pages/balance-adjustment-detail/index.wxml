@@ -31,5 +31,7 @@
   <text class="hint">余额调整属于独立记录类型，不计入收支统计；已保存后不可编辑，如需变更请删除后重建。</text>
   <text class="error" wx:if="{{actionError}}">{{actionError}}</text>
   <text class="hint" wx:if="{{deleteHint}}">{{deleteHint}}</text>
-  <button class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除余额调整</button>
+  <text class="hint" wx:if="{{readOnly}}">{{archiveHint}}</text>
+  <button wx:if="{{readOnly}}" bindtap="onOpenSettings">账户设置</button>
+  <button wx:else class="delete" disabled="{{deleteLocked}}" bindtap="onDelete">删除余额调整</button>
 </view>

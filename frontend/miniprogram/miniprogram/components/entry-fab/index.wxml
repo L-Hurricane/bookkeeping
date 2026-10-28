@@ -1,0 +1,10 @@
+<view class="fab {{aboveTab ? 'above-tab' : ''}}">
+  <view class="fab-sheet" wx:if="{{open}}">
+    <text class="fab-action" bindtap="onExpense">支出</text>
+    <text class="fab-action" bindtap="onIncome">收入</text>
+    <text class="fab-action" bindtap="onTransfer">转账</text>
+    <view wx:if="{{showAdjust}}" class="fab-divider"></view>
+    <text wx:if="{{showAdjust}}" class="fab-action" bindtap="onAdjust">调整余额</text>
+  </view>
+  <view class="fab-button" bindtap="onToggle">{{open ? '×' : '+'}}</view>
+</view>

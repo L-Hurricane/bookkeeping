@@ -5,7 +5,9 @@ import com.limingyuan.bookkeeping.category.persistence.*;
 import com.limingyuan.bookkeeping.identity.application.*;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -35,17 +37,13 @@ public class CategoryBootstrap implements UserPreparation, ApplicationRunner {
         transaction.executeWithoutResult(status -> {
             users.lockForPreparation(userId);
             var existing = new ArrayList<>(categories.findAllByUserIdOrderById(userId));
+            if (!existing.isEmpty()) return;
             var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-            Set<Long> expectedIds = new HashSet<>();
             for (var root : FixedCategories.ROOTS) {
                 var parent = ensure(existing, userId, root.type(), root.name(), null, now);
-                expectedIds.add(parent.getId());
                 for (String child : root.children()) {
-                    expectedIds.add(ensure(existing, userId, root.type(), child, parent.getId(), now).getId());
+                    ensure(existing, userId, root.type(), child, parent.getId(), now);
                 }
-            }
-            if (existing.size() != expectedIds.size()) {
-                throw new IllegalStateException("Stored category set differs from the fixed baseline");
             }
         });
     }

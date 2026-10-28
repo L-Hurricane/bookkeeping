@@ -1,8 +1,17 @@
+import {
+  defaultSelectableAccountId,
+  findAccount,
+  formatCurrentBalance,
+  type Account,
+} from "../../account/account";
+import { stashLedgerHandoff } from "../../account/ledger-handoff";
 import { createLoadGuard } from "../../account/load-guard";
+import { moneyToneClass } from "../../account/money-tone";
+import { accountHomePath } from "../../account/navigation";
 import type { CategoryNode } from "../../category/category";
 import { ApiError } from "../../http/client";
-import { categoryApi, tagApi, transactionApi } from "../../services/runtime";
-import type { Tag } from "../../tag/tag";
+import { accountApi, categoryApi, tagApi, transactionApi } from "../../services/runtime";
+import type { Tag, TagNode } from "../../tag/tag";
 import {
   applyDatePickerValue,
   applyNow,
@@ -28,7 +37,7 @@ import {
   amountFeedback,
   beginBucket,
   categoryLabel,
-  categoryRows,
+  categorySheetView,
   createTagFailureMessage,
   editComposer,
   emptyBucket,
@@ -50,6 +59,14 @@ import {
   type CategoryRow,
 } from "../../transaction/reference";
 import {
+  appendCreatedTag,
+  flattenTagNodes,
+  TAG_SAVED_NOTICE,
+  tagPickerRows,
+  tagSelectionSummary,
+  tagSheetHeight,
+} from "../../transaction/tag-picker";
+import {
   alertBeforeUnloadMessage,
   applySubmitOutcome,
   canSave,
@@ -70,13 +87,19 @@ import type { TransactionType } from "../../transaction/transaction";
 Page({
   loadGuard: createLoadGuard(),
   form: createTransactionForm(new Date()),
+  openerAccountId: 0,
   accountId: 0,
   accountCreatedTime: "",
+  accounts: [] as Account[],
   submission: editingSubmission(),
   preparingSave: false,
   postSaveCompleted: false,
   categories: { EXPENSE: emptyBucket<CategoryNode>(), INCOME: emptyBucket<CategoryNode>() },
   tags: { EXPENSE: emptyBucket<Tag>(), INCOME: emptyBucket<Tag>() },
+  tagTrees: { EXPENSE: [] as TagNode[], INCOME: [] as TagNode[] },
+  tagDraftIds: null as number[] | null,
+  tagQuery: "",
+  tagNotice: "",
   composers: { EXPENSE: emptyComposer(), INCOME: emptyComposer() },
   tagRequest: null as { type: TransactionType; generation: number } | null,
   tagCreateInFlight: false,
@@ -99,11 +122,25 @@ Page({
     timeClock: "",
     timePickerMinute: "00:00",
     timeDraftError: "",
+    accountPhase: "loading" as "loading" | "ready" | "error",
+    accountText: "选择账户",
+    accountRows: [] as AccountCard[],
+    accountQuery: "",
+    accountSheetHeight: 240,
+    accountSelectorOpen: false,
+    accountError: "",
     categoryPhase: "idle" as "idle" | "loading" | "ready" | "error",
-    categoryRows: [] as CategoryRow[],
+    categoryRows: [] as Array<CategoryRow & { selected: boolean }>,
+    uncategorizedSelected: true,
+    categorySheetHeight: 176,
     selectorOpen: false,
     tagPhase: "idle" as "idle" | "loading" | "ready" | "error",
-    tagChips: [] as { id: number; name: string; selected: boolean }[],
+    tagSummary: "未选择",
+    tagSheetOpen: false,
+    tagRows: [] as { id: number; name: string; depth: number; selected: boolean }[],
+    tagQuery: "",
+    tagSheetHeight: 176,
+    tagNotice: "",
     tagComposer: false,
     tagDraft: "",
     tagError: "",
@@ -118,16 +155,23 @@ Page({
   },
 
   onLoad(query: Record<string, string | undefined>) {
-    const context = parseCreatePageContext(query);
-    if (context === null) {
+    const choosing = query.choose === "1";
+    const context = choosing ? null : parseCreatePageContext(query);
+    if (!choosing && context === null) {
       this.setData({ contextInvalid: true });
       return;
     }
-    this.accountId = context.accountId;
-    this.accountCreatedTime = context.accountCreatedTime;
+    this.openerAccountId = context?.accountId ?? 0;
+    this.accountId = context?.accountId ?? 0;
+    this.accountCreatedTime = context?.accountCreatedTime ?? "";
     this.form = createTransactionForm(new Date());
+    const initialType = transactionType(query.type);
+    if (initialType !== null && initialType !== this.form.type) {
+      this.form = switchCreateType(this.form, initialType).form;
+    }
     this.publishForm();
     wx.enableAlertBeforeUnload({ message: "放弃本次记账？" });
+    void this.loadAccounts();
     void this.loadCategories(this.form.type);
     void this.loadTags(this.form.type);
   },
@@ -151,7 +195,10 @@ Page({
     this.forgetSubmitError();
     if (switched.clearTagDraft) {
       this.composers[previous] = retireComposer(this.composers[previous]);
-      this.setData({ selectorOpen: false });
+      this.tagDraftIds = null;
+      this.tagQuery = "";
+      this.tagNotice = "";
+      this.setData({ selectorOpen: false, tagSheetOpen: false });
     }
     this.publishForm();
     if (shouldLoadReference(this.categories[next].phase)) {
@@ -218,15 +265,44 @@ Page({
   },
 
   onToggleTag(event: WechatMiniprogram.BaseEvent) {
-    if (!this.canEdit()) {
+    if (!this.canEdit() || this.tagDraftIds === null) {
       return;
     }
     const tagId = Number(event.currentTarget.dataset["id"]);
-    this.form = {
-      ...this.form,
-      selectedTagIds: toggleTagSelection(this.form.selectedTagIds, tagId, this.tags[this.form.type].items),
-    };
+    this.tagDraftIds = toggleTagSelection(this.tagDraftIds, tagId, this.tags[this.form.type].items);
     this.forgetSubmitError();
+    this.publishForm();
+  },
+
+  onOpenTags() {
+    if (!this.canEdit() || this.tags[this.form.type].phase !== "ready") {
+      return;
+    }
+    this.tagDraftIds = [...this.form.selectedTagIds];
+    this.tagQuery = "";
+    this.tagNotice = "";
+    this.publishForm();
+  },
+
+  onTagQuery(event: WechatMiniprogram.Input) {
+    this.tagQuery = event.detail.value;
+    this.publishForm();
+  },
+
+  onCancelTags() {
+    this.tagDraftIds = null;
+    this.tagQuery = "";
+    const type = this.form.type;
+    this.composers[type] = { ...this.composers[type], open: false, draft: "", error: "" };
+    this.publishForm();
+  },
+
+  onConfirmTags() {
+    if (this.tagDraftIds !== null) {
+      this.form = { ...this.form, selectedTagIds: [...this.tagDraftIds] };
+    }
+    this.tagDraftIds = null;
+    this.tagQuery = "";
     this.publishForm();
   },
 
@@ -271,12 +347,13 @@ Page({
         return;
       }
       this.tags[submittedType] = rememberCreatedTag(this.tags[submittedType], created);
+      this.tagTrees[submittedType] = appendCreatedTag(this.tagTrees[submittedType], { ...created, children: [] });
       this.createdTagIds = this.createdTagIds.includes(created.id) ? this.createdTagIds : [...this.createdTagIds, created.id];
-      if (this.form.type === submittedType) {
-        this.form = {
-          ...this.form,
-          selectedTagIds: applyOwnedSelection(this.form.selectedTagIds, this.form.type, created),
-        };
+      const selecting = this.tagDraftIds ?? this.form.selectedTagIds;
+      const nextIds = applyOwnedSelection(selecting, this.form.type === submittedType ? this.form.type : submittedType, created);
+      if (this.form.type === submittedType && this.tagDraftIds !== null) {
+        this.tagDraftIds = nextIds;
+        this.tagNotice = TAG_SAVED_NOTICE;
         this.forgetSubmitError();
       }
       this.composers[submittedType] = settleCreateTagComposer(this.composers[submittedType], requestGeneration, { status: "success" });
@@ -574,8 +651,9 @@ Page({
       this.setData({ tagPhase: "loading" });
     }
     try {
-      const items = await tagApi.listTags(type);
-      this.finishTags(type, started.generation, items);
+      const tree = await tagApi.listTagTree(type);
+      this.tagTrees[type] = tree;
+      this.finishTags(type, started.generation, flattenTagNodes(tree));
     } catch (error) {
       if (isUnauthorized(error)) {
         return;
@@ -655,9 +733,111 @@ Page({
       return;
     }
     this.postSaveCompleted = true;
-    emitTransactionCreated(this, decision.result);
     wx.disableAlertBeforeUnload();
+    const result = decision.result;
+    if (result.accountId > 0 && result.accountId !== this.openerAccountId) {
+      stashLedgerHandoff(result.accountId, result);
+      wx.reLaunch({ url: accountHomePath(result.accountId) });
+      return;
+    }
+    emitTransactionCreated(this, result);
     wx.navigateBack();
+  },
+
+  async loadAccounts() {
+    this.setData({ accountPhase: "loading", accountError: "" });
+    try {
+      const accounts = await accountApi.listAccounts();
+      if (!this.loadGuard.pageAlive) {
+        return;
+      }
+      this.accounts = accounts;
+      const selectedId = defaultSelectableAccountId(accounts, this.accountId);
+      if (selectedId === null) {
+        this.accountId = 0;
+        this.setData({
+          accountPhase: "ready",
+          accountText: accounts.length === 0 ? "暂无可用账户" : "请选择账户",
+          ...this.accountCards(this.data.accountQuery),
+          accountError: accounts.length === 0 ? "没有可用账户" : "",
+        });
+        return;
+      }
+      this.applySelectedAccount(selectedId);
+      this.setData({
+        accountPhase: "ready",
+        ...this.accountCards(this.data.accountQuery),
+        accountError: "",
+      });
+    } catch (error) {
+      if (!this.loadGuard.pageAlive || isUnauthorized(error)) {
+        return;
+      }
+      this.setData({ accountPhase: "error", accountError: "账户列表加载失败" });
+    }
+  },
+
+  applySelectedAccount(accountId: number) {
+    const account = findAccount(this.accounts, accountId);
+    if (account === null) {
+      return;
+    }
+    this.accountId = account.id;
+    this.accountCreatedTime = account.createdTime;
+    if (this.openerAccountId === 0) {
+      this.openerAccountId = account.id;
+    }
+    this.setData({
+      accountText: `${account.name}  ${formatCurrentBalance(account)}`,
+      accountError: "",
+      ...this.accountCards(this.data.accountQuery),
+    });
+  },
+
+  onAccountQuery(event: WechatMiniprogram.Input) {
+    this.setData({ accountQuery: event.detail.value, ...this.accountCards(event.detail.value) });
+  },
+
+  accountCards(query: string) {
+    const needle = query.trim();
+    const accountRows = this.accounts.filter((account) => needle.length === 0 || account.name.includes(needle)).map((account) => ({
+      id: account.id,
+      name: account.name,
+      kindLabel: account.kind === "CREDIT" ? "信用账户" : "普通账户",
+      balanceLabel: formatCurrentBalance(account),
+      balanceTone: moneyToneClass(account.currentBalance),
+      selected: account.id === this.accountId,
+    }));
+    return { accountRows, accountSheetHeight: Math.min(Math.max(accountRows.length, 1) * 128, 640) };
+  },
+
+  onOpenAccounts() {
+    if (!this.canEdit() || this.data.accountPhase !== "ready" || this.accounts.length === 0) {
+      return;
+    }
+    this.setData({ accountSelectorOpen: true });
+  },
+
+  onCloseAccounts() {
+    this.setData({ accountSelectorOpen: false });
+  },
+
+  onChooseAccount(event: WechatMiniprogram.BaseEvent) {
+    if (!this.canEdit()) {
+      return;
+    }
+    const accountId = Number(event.currentTarget.dataset["id"]);
+    if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+      return;
+    }
+    this.applySelectedAccount(accountId);
+    this.forgetSubmitError();
+    this.setData({ accountSelectorOpen: false });
+    this.publishForm();
+  },
+
+  onRetryAccounts() {
+    void this.loadAccounts();
   },
 
   canEdit(): boolean {
@@ -668,6 +848,7 @@ Page({
     const type = this.form.type;
     const categories = this.categories[type];
     const tags = this.tags[type];
+    const categorySheet = categorySheetView(categories.items, this.form.categoryId);
     this.setData({
       type,
       amount: this.form.amount,
@@ -675,13 +856,16 @@ Page({
       remark: this.form.remark,
       categoryText: categoryLabel(categories.items, this.form.categoryId),
       categoryPhase: categories.phase,
-      categoryRows: categoryRows(categories.items),
+      categoryRows: categorySheet.rows,
+      uncategorizedSelected: categorySheet.uncategorizedSelected,
+      categorySheetHeight: categorySheet.height,
       tagPhase: tags.phase,
-      tagChips: tags.items.map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        selected: this.form.selectedTagIds.includes(tag.id),
-      })),
+      tagSummary: tagSelectionSummary(this.form.selectedTagIds, tags.items),
+      tagSheetOpen: this.tagDraftIds !== null,
+      tagRows: tagPickerRows(this.tagTrees[type], this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery),
+      tagQuery: this.tagQuery,
+      tagSheetHeight: tagSheetHeight(tagPickerRows(this.tagTrees[type], this.tagDraftIds ?? this.form.selectedTagIds, this.tagQuery).length),
+      tagNotice: this.tagNotice,
       tagComposer: this.composers[type].open,
       tagDraft: this.composers[type].draft,
       tagError: this.composers[type].error,
@@ -690,13 +874,22 @@ Page({
       formLocked: interactionLocked(this.submission.phase, this.preparingSave),
       saveDisabled: !canSave(this.submission.phase, this.tagCreateInFlight, this.preparingSave),
       businessTimeText: businessTimeDisplay(this.form.businessTime) ?? "",
-      timeError: isBusinessTimeAllowed(this.form.businessTime, this.accountCreatedTime) ? "" : "交易时间不得早于账户创建时间",
+      timeError: isBusinessTimeAllowed(this.form.businessTime, this.accountCreatedTime) ? "" : "请输入有效的日期和时间",
       futureHint: isFutureBusinessTime(this.form.businessTime, new Date())
         ? "未来交易保存后仍会立即影响当前余额；流水与统计归入所选自然月。"
         : "",
     });
   },
 });
+
+interface AccountCard {
+  readonly id: number;
+  readonly name: string;
+  readonly kindLabel: string;
+  readonly balanceLabel: string;
+  readonly balanceTone: string;
+  readonly selected: boolean;
+}
 
 function applyOwnedSelection(selected: readonly number[], currentType: TransactionType, created: Tag): number[] {
   if (currentType !== created.type || selected.includes(created.id)) {
@@ -719,5 +912,9 @@ function emitTransactionCreated(page: object, result: PostSaveResult): void {
   if (channel === undefined || typeof channel.emit !== "function") {
     return;
   }
-  channel.emit("transactionCreated", { transactionId: result.transactionId, targetMonth: result.targetMonth });
+  channel.emit("transactionCreated", {
+    accountId: result.accountId,
+    transactionId: result.transactionId,
+    targetMonth: result.targetMonth,
+  });
 }

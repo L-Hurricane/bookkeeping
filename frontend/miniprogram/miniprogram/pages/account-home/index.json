@@ -1,4 +1,6 @@
 {
-  "usingComponents": {},
+  "usingComponents": {
+    "entry-fab": "/components/entry-fab/index"
+  },
   "navigationBarTitleText": "个人记账"
 }

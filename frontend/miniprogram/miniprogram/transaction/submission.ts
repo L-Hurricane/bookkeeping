@@ -155,7 +155,7 @@ export function definiteFailureMessage(code: string, details: readonly ApiErrorD
     return "请检查填写内容";
   }
   if (code === "BUSINESS_RULE_VIOLATION" && details?.some((detail) => detail.field === "businessTime" && detail.reason === "BEFORE_ACCOUNT_CREATION")) {
-    return "交易时间不得早于账户创建时间";
+    return "交易时间无效";
   }
   if (code === "CATEGORY_NOT_BOOKABLE") {
     return "所选分类当前不可用于记账，请重新选择";
@@ -168,6 +168,9 @@ export function definiteFailureMessage(code: string, details: readonly ApiErrorD
   }
   if (code === "RESOURCE_NOT_FOUND") {
     return "账户或关联数据已发生变化，请返回后重试";
+  }
+  if (code === "ACCOUNT_ARCHIVED") {
+    return "账户已归档，恢复后才能继续记账或编辑";
   }
   return "保存失败，请检查后重试";
 }

@@ -1,0 +1,29 @@
+<template name="tagSheet">
+  <view class="mask" wx:if="{{tagSheetOpen}}" catchtouchmove="onHold">
+    <view class="backdrop" bindtap="onCancelTags"></view>
+    <view class="panel">
+      <text class="editor-title">选择标签</text>
+      <input class="field" type="text" placeholder="搜索标签" value="{{tagQuery}}" bindinput="onTagQuery" />
+      <scroll-view class="account-list" scroll-y style="height: {{tagSheetHeight}}rpx">
+        <text class="hint" wx:if="{{tagRows.length === 0}}">{{tagQuery ? '没有匹配的标签' : '还没有可选择的标签'}}</text>
+        <view class="account-option" wx:for="{{tagRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleTag" style="padding-left: {{item.depth * 28}}rpx;">
+          <view class="account-copy"><text class="account-name">{{item.name}}</text></view>
+          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
+        </view>
+      </scroll-view>
+      <view class="composer">
+        <text wx:if="{{!tagComposer}}" bindtap="onOpenTagComposer">+ 新建标签</text>
+        <block wx:else>
+          <input class="field" type="text" placeholder="标签名称" value="{{tagDraft}}" disabled="{{tagInputLocked || formLocked}}" bindinput="onTagDraft" />
+          <button disabled="{{tagCreateInFlight || formLocked}}" bindtap="onCreateTag">创建</button>
+        </block>
+        <text class="error" wx:if="{{tagError}}">{{tagError}}</text>
+        <text class="hint" wx:if="{{tagNotice}}">{{tagNotice}}</text>
+      </view>
+      <view class="editor-actions">
+        <button bindtap="onCancelTags">取消</button>
+        <button class="save" bindtap="onConfirmTags">确认</button>
+      </view>
+    </view>
+  </view>
+</template>

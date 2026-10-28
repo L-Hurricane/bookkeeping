@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "entry-fab": "/components/entry-fab/index"
+  },
+  "navigationBarTitleText": "全部交易"
+}

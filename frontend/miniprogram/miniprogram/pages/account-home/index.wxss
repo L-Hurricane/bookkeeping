@@ -1,7 +1,73 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx 48rpx;
+  padding: 24rpx 24rpx 180rpx;
   box-sizing: border-box;
+  background: #f3f4f6;
+}
+
+.asset,
+.summary,
+.row,
+.search {
+  background: #ffffff;
+  border-radius: 20rpx;
+}
+
+.asset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.asset .name,
+.asset .kind,
+.asset .label,
+.asset .balance {
+  display: block;
+  max-width: 100%;
+}
+
+.asset .balance {
+  font-size: 52rpx;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.asset-links,
+.day {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.asset-links {
+  width: 100%;
+  margin-top: 8rpx;
+}
+
+.day {
+  margin: 20rpx 8rpx 8rpx;
+  color: #666666;
+  font-size: 24rpx;
+}
+
+.figure {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.nav-link {
+  color: #666666;
+  font-size: 28rpx;
 }
 
 .header {
@@ -13,6 +79,12 @@
 .name {
   font-size: 40rpx;
   font-weight: 600;
+}
+
+.kind,
+.hint {
+  color: #888888;
+  font-size: 24rpx;
 }
 
 .label,
@@ -27,6 +99,18 @@
 .balance {
   font-size: 56rpx;
   font-weight: 600;
+}
+
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
 }
 
 .search {
@@ -57,9 +141,10 @@
 }
 
 .summary {
-  margin-top: 24rpx;
   display: flex;
   justify-content: space-between;
+  margin: 16rpx 0;
+  padding: 20rpx 16rpx;
 }
 
 .summary-item {
@@ -129,6 +214,16 @@
   background: transparent;
   color: #666666;
   font-size: 28rpx;
+}
+
+.transfer {
+  margin-top: 12rpx;
+  background: #f0f0f0;
+  color: #111111;
+}
+
+.type.transfer {
+  color: #245bdb;
 }
 
 .create {

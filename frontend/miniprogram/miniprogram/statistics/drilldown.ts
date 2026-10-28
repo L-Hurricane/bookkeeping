@@ -11,6 +11,10 @@ export function transactionListPath(accountId: number, month: string, type: Stat
   return `/api/v1/accounts/${accountId}/transactions?month=${month}&type=${type}&${filter}`;
 }
 
+export function ledgerStatisticsEntryPath(): string {
+  return "/pages/statistics/index";
+}
+
 export function statisticsPagePath(accountId: number, month: string, accountCreatedTime: string): string {
   return `/pages/statistics/index?accountId=${accountId}&month=${encodeURIComponent(month)}&accountCreatedTime=${encodeURIComponent(accountCreatedTime)}`;
 }

@@ -1,0 +1,22 @@
+<view class="page">
+  <view class="group">
+    <view class="entry" bindtap="onOpenCategories">
+      <text class="entry-title">分类管理</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" bindtap="onOpenTags">
+      <text class="entry-title">标签管理</text>
+      <text class="entry-go">></text>
+    </view>
+    <view class="entry" bindtap="onOpenArchive">
+      <text class="entry-title">已归档账户</text>
+      <text class="entry-go">></text>
+    </view>
+  </view>
+  <view class="group">
+    <view class="entry" bindtap="onLogout">
+      <text class="entry-title">退出登录</text>
+    </view>
+  </view>
+  <text class="error" wx:if="{{logoutErrorMessage}}">{{logoutErrorMessage}}</text>
+</view>

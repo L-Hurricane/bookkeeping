@@ -59,20 +59,32 @@ public class LedgerService {
                 SELECT kind, id, transaction_type, amount, name, category_id, category_name, business_time, first_save_order
                 FROM (
                     SELECT 'TRANSACTION' AS kind, t.id, t.type AS transaction_type, t.amount, t.name,
-                           t.category_id, c.name AS category_name, t.business_time, t.first_save_order
+                           t.category_id, c.name AS category_name, t.business_time, t.first_save_order,
+                           t.first_saved_at_utc
                     FROM transactions t
                     LEFT JOIN categories c ON c.id = t.category_id
                     WHERE t.account_id = :accountId AND t.user_id = :userId
                       AND t.business_time >= :start AND t.business_time < :end
                     UNION ALL
                     SELECT 'BALANCE_ADJUSTMENT', b.id, NULL, b.adjustment_amount, NULL,
-                           NULL, NULL, b.business_time, b.first_save_order
+                           NULL, NULL, b.business_time, b.first_save_order, b.first_saved_at_utc
                     FROM balance_adjustments b
                     WHERE b.account_id = :accountId AND b.user_id = :userId
                       AND b.business_time >= :start AND b.business_time < :end
+                    UNION ALL
+                    SELECT 'TRANSFER', t.id, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN -t.amount ELSE t.amount END,
+                           NULL, NULL, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN t.from_business_time ELSE t.to_business_time END,
+                           t.first_save_order, t.first_saved_at_utc
+                    FROM transfers t
+                    WHERE t.user_id = :userId
+                      AND (
+                        (t.from_account_id = :accountId AND t.from_business_time >= :start AND t.from_business_time < :end)
+                        OR (t.to_account_id = :accountId AND t.to_business_time >= :start AND t.to_business_time < :end)
+                      )
                 ) entries
-                ORDER BY business_time DESC, first_save_order DESC
-                """).param("accountId", accountId).param("userId", context.userId())
+                """ + " ORDER BY " + LedgerOrdering.LEDGER).param("accountId", accountId).param("userId", context.userId())
                 .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
                 .query((rs, row) -> new Row(rs.getString("kind"), rs.getLong("id"), rs.getString("transaction_type"),
                         rs.getBigDecimal("amount"), rs.getString("name"),
@@ -83,6 +95,9 @@ public class LedgerService {
         for (var row : rows) {
             if ("BALANCE_ADJUSTMENT".equals(row.kind())) {
                 items.add(new LedgerItem(row.kind(), row.id(), null, "余额调整", Money.format(row.amount()), null, null,
+                        TIME.format(row.businessTime().atZone(BEIJING))));
+            } else if ("TRANSFER".equals(row.kind())) {
+                items.add(new LedgerItem(row.kind(), row.id(), null, "转账", Money.format(row.amount()), null, null,
                         TIME.format(row.businessTime().atZone(BEIJING))));
             } else {
                 items.add(new LedgerItem(row.kind(), row.id(), row.transactionType(), displayName(row.name(), row.categoryName()),

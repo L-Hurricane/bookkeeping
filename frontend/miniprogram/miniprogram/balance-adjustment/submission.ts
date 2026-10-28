@@ -146,6 +146,9 @@ export function adjustmentFailureMessage(error: unknown): string {
   if (error.code === "RESOURCE_NOT_FOUND") {
     return "账户已发生变化，请返回后重试";
   }
+  if (error.code === "ACCOUNT_ARCHIVED") {
+    return "账户已归档，恢复后才能继续记账或编辑";
+  }
   return "保存失败，请检查后重试";
 }
 

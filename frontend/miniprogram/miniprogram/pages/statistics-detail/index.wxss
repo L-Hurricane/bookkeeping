@@ -1,42 +1,242 @@
 .page {
   min-height: 100vh;
-  padding: 32rpx 32rpx 48rpx;
+  padding: 24rpx 24rpx 48rpx;
   box-sizing: border-box;
+  background: #f3f4f6;
 }
 
-.title,
-.row-title {
-  font-size: 32rpx;
+.panel {
+  margin-bottom: 20rpx;
+  padding: 28rpx 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+}
+
+.headline,
+.panel-title,
+.subhead {
+  display: block;
+  color: #1a1a1a;
   font-weight: 600;
 }
 
+.headline {
+  font-size: 34rpx;
+}
+
+.panel-title,
+.subhead {
+  font-size: 28rpx;
+}
+
+.subhead {
+  margin-top: 24rpx;
+}
+
+.figure {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 48rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.money-neutral {
+  color: #333333;
+}
+
+.meta,
+.note,
 .status,
 .empty,
 .row-detail {
   display: block;
-  margin-top: 12rpx;
+  margin-top: 8rpx;
+  color: #666666;
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.segment,
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.chips {
+  margin-top: 16rpx;
+}
+
+.choice,
+.chip,
+.filter {
+  background: #f3f4f6;
   color: #666666;
   font-size: 26rpx;
+}
+
+.choice,
+.chip {
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+}
+
+.choice.selected {
+  background: #ffffff;
+  border: 1rpx solid #1a1a1a;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.choice.disabled {
+  opacity: 0.4;
+}
+
+.filter {
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  color: #1a1a1a;
+}
+
+.chip-remove {
+  color: #1f4b73;
+}
+
+.child {
+  display: block;
+  margin-top: 12rpx;
+  color: #1f4b73;
+  font-size: 28rpx;
 }
 
 .row {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 24rpx;
-  padding: 20rpx 0;
+  padding: 16rpx 0;
   border-bottom: 1rpx solid #ececec;
+}
+
+.row.depth-1 {
+  padding-left: 32rpx;
+}
+
+.row.depth-2 {
+  padding-left: 64rpx;
+}
+
+.row.depth-3 {
+  padding-left: 96rpx;
+}
+
+.row.depth-1 .row-title,
+.row.depth-2 .row-title,
+.row.depth-3 .row-title {
+  font-weight: 400;
+  font-size: 28rpx;
 }
 
 .row-main {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.row-title {
+  color: #1a1a1a;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-all;
 }
 
 .amount {
+  flex-shrink: 0;
   font-size: 30rpx;
+  text-align: right;
+}
+
+.money-positive {
+  color: #c23a2b;
+}
+
+.money-negative {
+  color: #1f7a4c;
+}
+
+.money-zero {
+  color: #333333;
 }
 
 .error {
   color: #b42318;
+}
+
+.mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.backdrop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(26, 26, 26, 0.28);
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70vh;
+  padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-radius: 28rpx 28rpx 0 0;
+  overflow: auto;
+}
+
+.section {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.search {
+  margin-top: 16rpx;
+  padding: 12rpx 16rpx;
+  background: #f3f4f6;
+  border-radius: 12rpx;
+}
+
+.pick {
+  display: flex;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
 }

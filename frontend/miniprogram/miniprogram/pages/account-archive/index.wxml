@@ -1,0 +1,22 @@
+<view class="page">
+  <text class="status" wx:if="{{phase === 'loading'}}">正在读取归档账户</text>
+  <block wx:elif="{{phase === 'error'}}">
+    <text class="error">{{errorMessage}}</text>
+    <button bindtap="onRetry">重新加载</button>
+  </block>
+  <block wx:else>
+    <text class="toolbar-hint">归档账户仍保留余额和历史。点按账户查看流水，恢复后才能继续记账或编辑。</text>
+    <text class="empty" wx:if="{{rows.length === 0}}">暂无归档账户</text>
+    <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
+      <view class="card-main">
+        <text class="card-name">{{item.name}}</text>
+        <text class="card-kind">{{item.kindLabel}}</text>
+      </view>
+      <view class="card-side">
+        <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
+        <button class="restore" data-id="{{item.id}}" disabled="{{restoringId !== 0}}" catchtap="onRestore">恢复</button>
+      </view>
+    </view>
+    <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  </block>
+</view>

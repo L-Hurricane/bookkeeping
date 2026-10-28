@@ -116,6 +116,16 @@ describe("ledger contract", () => {
     assert.equal(tags.length, 1);
   });
 
+  it("parses a transfer entry with signed amount tone", () => {
+    const ledger = parseLedger(
+      ledgerBody([{ kind: "TRANSFER", id: 4, displayName: "转账", amount: "-12.50", businessTime: "2026-09-01T08:00:00+08:00" }]),
+    );
+    assert.equal(ledger?.items[0]?.kind, "TRANSFER");
+    const row = ledgerRows(ledger?.items ?? [])[0];
+    assert.equal(row?.typeLabel, "转账");
+    assert.equal(row?.amountToneClass, "money-negative");
+  });
+
   it("rejects invalid money, kind, summary, accountId, and month", () => {
     assert.equal(parseLedger(ledgerBody([{ ...transaction, amount: "20" }])), null);
     assert.equal(parseLedger(ledgerBody([{ ...transaction, kind: "NOTE" }])), null);

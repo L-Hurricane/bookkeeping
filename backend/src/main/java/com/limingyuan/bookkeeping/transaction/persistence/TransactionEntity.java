@@ -48,6 +48,11 @@ public class TransactionEntity {
         this.updatedAtUtc = updatedAtUtc;
     }
 
+    /** Cross-account reassignment keeps type, first saved time, and first save order. */
+    public void reassignAccount(long accountId) {
+        this.accountId = accountId;
+    }
+
     public Long getId() { return id; }
     public long getUserId() { return userId; }
     public long getAccountId() { return accountId; }

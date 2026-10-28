@@ -1,0 +1,17 @@
+<view class="page">
+  <text class="label">账户名称</text>
+  <input class="field" type="text" maxlength="64" placeholder="例如：微信、信用卡" value="{{name}}" disabled="{{submitting}}" bindinput="onNameInput" />
+  <text class="label">账户类型</text>
+  <view class="kinds {{submitting ? 'locked' : ''}}">
+    <text class="kind {{kind === 'NORMAL' ? 'active' : ''}}" data-kind="NORMAL" bindtap="onKind">普通账户</text>
+    <text class="kind {{kind === 'CREDIT' ? 'active' : ''}}" data-kind="CREDIT" bindtap="onKind">信用账户</text>
+  </view>
+  <text class="hint">普通账户负余额会提示；信用账户负值表示欠款，不按普通负余额警告。</text>
+  <text class="label">起始金额</text>
+  <input class="field" type="text" placeholder="0.00" value="{{openingBalance}}" disabled="{{submitting}}" bindinput="onOpeningBalanceInput" />
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+  <view class="actions">
+    <button class="cancel" disabled="{{submitting}}" bindtap="onCancel">取消</button>
+    <button class="save" disabled="{{submitting}}" bindtap="onSubmit">创建</button>
+  </view>
+</view>

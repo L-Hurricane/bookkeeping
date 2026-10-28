@@ -1,0 +1,18 @@
+@import "../transaction-create/index.wxss";
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8rpx;
+}
+
+.sync-hint {
+  color: #888888;
+  font-size: 24rpx;
+}
+
+.sync-action {
+  color: #333333;
+  font-size: 26rpx;
+}

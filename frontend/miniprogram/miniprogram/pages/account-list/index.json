@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "账本",
+  "usingComponents": {
+    "entry-fab": "/components/entry-fab/index"
+  }
+}

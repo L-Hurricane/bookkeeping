@@ -58,7 +58,13 @@ class StatisticsIntegrationTest {
             jdbc.sql("DELETE FROM balance_adjustments WHERE user_id = :id").param("id", id).update();
             jdbc.sql("DELETE FROM transaction_tags WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = :id)").param("id", id).update();
             jdbc.sql("DELETE FROM transactions WHERE user_id = :id").param("id", id).update();
-            jdbc.sql("DELETE FROM tags WHERE user_id = :id").param("id", id).update();
+            for (int depth = 0; depth < 3; depth += 1) {
+                jdbc.sql("""
+                        DELETE parent FROM tags parent
+                        LEFT JOIN tags child ON child.parent_id = parent.id AND child.user_id = parent.user_id
+                        WHERE parent.user_id = :id AND child.id IS NULL
+                        """).param("id", id).update();
+            }
             jdbc.sql("DELETE FROM accounts WHERE user_id = :id").param("id", id).update();
             jdbc.sql("DELETE FROM categories WHERE user_id = :id AND parent_id IS NOT NULL").param("id", id).update();
             jdbc.sql("DELETE FROM categories WHERE user_id = :id").param("id", id).update();
@@ -329,6 +335,109 @@ class StatisticsIntegrationTest {
         assertThat(restored.get(0).path("children").get(0).path("categoryName").asText()).isEqualTo("午餐");
         assertThat(restored.get(0).path("children").get(0).path("amount").asText()).isEqualTo("30.00");
         assertThat(restored).extracting(item -> item.path("kind").asText()).doesNotContain("UNCATEGORIZED");
+    }
+
+    @Test void tagAnalysisKeepsSubtreeUnionAndRequiresEveryAdditionalTag() throws Exception {
+        long travel = tag("EXPENSE", "旅游");
+        long child = tagUnder("EXPENSE", "孩子", travel);
+        long grandchild = tagUnder("EXPENSE", "孙子", child);
+        long wife = tag("EXPENSE", "妻子");
+        long food = takeout;
+        long incomeTravel = tag("INCOME", "旅游收入");
+        transact("EXPENSE", "10.00", breakfast, "2026-09-01T08:00:00+08:00", List.of(travel, child));
+        transact("EXPENSE", "4.00", lunch, "2026-09-02T08:00:00+08:00", List.of(travel, wife));
+        transact("EXPENSE", "3.00", breakfast, "2026-09-03T08:00:00+08:00", List.of(child, food));
+        transact("EXPENSE", "2.00", lunch, "2026-09-04T08:00:00+08:00", List.of(wife));
+        transact("EXPENSE", "1.00", breakfast, "2026-09-05T08:00:00+08:00", List.of(travel));
+        transact("EXPENSE", "8.00", breakfast, "2026-09-06T08:00:00+08:00", List.of());
+        transact("EXPENSE", "9.00", breakfast, "2026-09-07T08:00:00+08:00", List.of(grandchild));
+        transact("EXPENSE", "7.00", breakfast, "2026-10-01T00:00:00+08:00", List.of(travel));
+        transact("INCOME", "20.00", incomeCategory, "2026-09-08T08:00:00+08:00", List.of(incomeTravel));
+        adjust("50.00", "2026-09-15T08:00:00+08:00");
+
+        var alone = analysis(travel, null, null);
+        assertThat(alone.path("scope").asText()).isEqualTo("TREE");
+        assertThat(alone.path("amount").asText()).isEqualTo("27.00");
+        assertThat(alone.path("transactionCount").asInt()).isEqualTo(5);
+        assertThat(alone.path("scopeNet").asText()).isEqualTo("37.00");
+        assertThat(alone.path("coverage").asText()).isEqualTo("72.97");
+        assertThat(alone.path("categories").get(0).path("amount").asText()).isEqualTo("27.00");
+        assertThat(alone.path("categories").get(0).path("children").get(0).path("name").asText()).isEqualTo("早餐");
+        assertThat(alone.path("categories").get(0).path("children").get(0).path("amount").asText()).isEqualTo("23.00");
+        assertThat(alone.path("categories").get(0).path("children").get(0).path("share").asText()).isEqualTo("85.19");
+        assertThat(alone.path("categories").get(0).path("children").get(1).path("amount").asText()).isEqualTo("4.00");
+        assertThat(alone.path("items")).hasSize(5);
+
+        assertThat(analysis(travel, child + "," + grandchild, null).path("amount").asText()).isEqualTo("9.00");
+        assertThat(analysis(travel, String.valueOf(child), null).path("amount").asText()).isEqualTo("22.00");
+        assertThat(analysis(travel, String.valueOf(wife), null).path("amount").asText()).isEqualTo("4.00");
+        assertThat(analysis(travel, String.valueOf(food), null).path("amount").asText()).isEqualTo("3.00");
+        var empty = analysis(travel, wife + "," + food, null);
+        assertThat(empty.path("scope").asText()).isEqualTo("AND");
+        assertThat(empty.path("amount").asText()).isEqualTo("0.00");
+        assertThat(empty.path("transactionCount").asInt()).isZero();
+        assertThat(empty.path("items")).isEmpty();
+
+        assertThat(analysis(travel, null, "DIRECT").path("amount").asText()).isEqualTo("15.00");
+        assertThat(analysis(travel, null, "DIRECT").path("transactionCount").asInt()).isEqualTo(3);
+        var income = analysis(incomeTravel, null, null, "INCOME");
+        assertThat(income.path("amount").asText()).isEqualTo("20.00");
+        assertThat(income.path("transactionCount").asInt()).isEqualTo(1);
+
+        var union = transactions("tagIds", child + "," + wife);
+        assertThat(sumAmounts(union)).isEqualTo("28.00");
+        var unchanged = transactions("tagId", String.valueOf(travel), "tagMode", "TREE", "tagAnd", String.valueOf(wife));
+        assertThat(sumAmounts(unchanged)).isEqualTo("27.00");
+
+        mvc.perform(analysisRequest(travel, String.valueOf(wife), "DIRECT").param("type", "EXPENSE")).andExpect(status().isBadRequest());
+        mvc.perform(analysisRequest(travel, travel + "," + wife, "TREE").param("type", "EXPENSE")).andExpect(status().isBadRequest());
+        var other = newUser("phase7other");
+        mvc.perform(get("/api/v1/statistics/tag-analysis").header("Authorization", "Bearer " + other.token())
+                        .param("preset", "CUSTOM").param("from", "2026-09-01").param("to", "2026-09-30")
+                        .param("accountScope", "ACTIVE").param("type", "EXPENSE").param("tagId", String.valueOf(travel)))
+                .andExpect(status().isNotFound());
+    }
+
+    private JsonNode analysis(long tagId, String tagAnd, String tagMode) throws Exception {
+        return analysis(tagId, tagAnd, tagMode, "EXPENSE");
+    }
+
+    private JsonNode analysis(long tagId, String tagAnd, String tagMode, String type) throws Exception {
+        var result = mvc.perform(analysisRequest(tagId, tagAnd, tagMode).param("type", type))
+                .andExpect(status().isOk()).andReturn();
+        return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder analysisRequest(long tagId, String tagAnd, String tagMode) {
+        var request = get("/api/v1/statistics/tag-analysis").header("Authorization", "Bearer " + token)
+                .param("preset", "CUSTOM").param("from", "2026-09-01").param("to", "2026-09-30")
+                .param("accountScope", "ACTIVE").param("tagId", String.valueOf(tagId));
+        if (tagAnd != null) request.param("tagAnd", tagAnd);
+        if (tagMode != null) request.param("tagMode", tagMode);
+        return request;
+    }
+
+    private JsonNode transactions(String... params) throws Exception {
+        var request = get("/api/v1/statistics/transactions").header("Authorization", "Bearer " + token)
+                .param("preset", "CUSTOM").param("from", "2026-09-01").param("to", "2026-09-30")
+                .param("accountScope", "ACTIVE").param("type", "EXPENSE");
+        for (int index = 0; index < params.length; index += 2) request.param(params[index], params[index + 1]);
+        var result = mvc.perform(request).andExpect(status().isOk()).andReturn();
+        return json.readTree(result.getResponse().getContentAsString()).path("items");
+    }
+
+    private static String sumAmounts(JsonNode items) {
+        java.math.BigDecimal total = new java.math.BigDecimal("0.00");
+        for (JsonNode item : items) total = total.add(new java.math.BigDecimal(item.path("amount").asText()));
+        return total.setScale(2).toPlainString();
+    }
+
+    private long tagUnder(String type, String name, long parentId) throws Exception {
+        var result = mvc.perform(post("/api/v1/tags").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("type", type, "name", name, "parentId", parentId))))
+                .andExpect(status().isCreated()).andReturn();
+        return json.readTree(result.getResponse().getContentAsString()).path("id").asLong();
     }
 
     private void editCategory(long id, Long categoryId) throws Exception {

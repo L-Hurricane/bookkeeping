@@ -43,8 +43,9 @@ public class MonthlyAnalysisService {
     public MonthlyAnalysisView get(long accountId, String month) {
         var context = facts.build(accountId, month);
         long userId = users.userId();
-        var snapshot = store.findSuccessful(userId, context.yearMonth(), context.fingerprint())
-                .or(() -> store.findLatest(userId, context.yearMonth()));
+        long scopedAccountId = context.accountId();
+        var snapshot = store.findSuccessful(userId, scopedAccountId, context.yearMonth(), context.fingerprint())
+                .or(() -> store.findLatest(userId, scopedAccountId, context.yearMonth()));
         return assemble(context, userId, snapshot.orElse(null));
     }
 
@@ -61,10 +62,11 @@ public class MonthlyAnalysisService {
             throw new ApiFailure(409, "EMPTY_MONTH", "当前月份没有可分析收支记录");
         }
         long userId = users.userId();
-        var existing = store.findSuccessful(userId, context.yearMonth(), fingerprint);
+        long scopedAccountId = context.accountId();
+        var existing = store.findSuccessful(userId, scopedAccountId, context.yearMonth(), fingerprint);
         if (existing.isPresent()) return new MonthlyAnalysisResult("REUSED", assemble(context, userId, existing.get()));
         admission.admit();
-        return switch (store.acquire(userId, context.yearMonth(), fingerprint)) {
+        return switch (store.acquire(userId, scopedAccountId, context.yearMonth(), fingerprint)) {
             case PermitAcquisition.Reused reused -> new MonthlyAnalysisResult("REUSED", assemble(context, userId, reused.snapshot()));
             case PermitAcquisition.Busy ignored -> throw new ApiFailure(409, "IN_PROGRESS", "这个月的分析正在生成");
             case PermitAcquisition.QuotaExceeded ignored -> throw new ApiFailure(409, "QUOTA_EXCEEDED", "今日成功分析次数已用完");
@@ -99,7 +101,7 @@ public class MonthlyAnalysisService {
 
     private MonthlyAnalysisView assemble(MonthlyAnalysisContext context, long userId, AnalysisSnapshot snapshot) {
         String fingerprint = context.fingerprint();
-        var coordination = store.findCoordination(userId, context.yearMonth(), fingerprint).orElse(null);
+        var coordination = store.findCoordination(userId, context.accountId(), context.yearMonth(), fingerprint).orElse(null);
         boolean empty = context.incomeTransactionCount() == 0 && context.expenseTransactionCount() == 0;
         boolean active = coordination != null && coordination.state() == GenerationState.IN_PROGRESS
                 && coordination.leaseExpiresAt().isAfter(clock.instant());

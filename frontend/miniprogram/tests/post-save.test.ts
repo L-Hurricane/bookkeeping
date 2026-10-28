@@ -5,6 +5,7 @@ import { canApplyLedgerResult, ledgerPath, type LedgerEntry } from "../miniprogr
 import {
   LOCATE_MISS_MESSAGE,
   acceptAdjustmentCreated,
+  acceptTransferCreated,
   acceptTransactionCreated,
   applyAcceptedLocate,
   centeredScrollTop,
@@ -23,7 +24,7 @@ import {
 } from "../miniprogram/ledger/post-save";
 import type { PostSaveResult } from "../miniprogram/transaction/form";
 
-const saved: PostSaveResult = { transactionId: 4001, targetMonth: "2026-08" };
+const saved: PostSaveResult = { accountId: 1001, transactionId: 4001, targetMonth: "2026-08" };
 const home = { selectedMonth: "2026-09", pending: null, highlightKey: "" };
 
 describe("post-save handoff", () => {
@@ -111,6 +112,20 @@ describe("ledger locate", () => {
     const highlighted = startHighlight(idleHighlight(), found.locate?.key ?? "");
     assert.equal(highlighted.key, "adjustment-5001");
     assert.equal(acceptAdjustmentCreated(home, { kind: "transaction", recordId: 5001, targetMonth: "2026-08" }), home);
+  });
+
+  it("accepts a transfer locate payload", () => {
+    const payload = {
+      sourceAccountId: 1001,
+      transferId: 77,
+      fromAccountId: 1001,
+      toAccountId: 1002,
+      fromBusinessTime: "2026-08-20T12:00:00+08:00",
+      toBusinessTime: "2026-08-21T12:00:00+08:00",
+    };
+    const accepted = acceptTransferCreated(home, payload);
+    assert.deepEqual(accepted.pending, { kind: "transfer", recordId: 77, targetMonth: "2026-08" });
+    assert.equal(acceptTransferCreated(home, { ...payload, transferId: 0 }), home);
   });
 
   it("keeps the current navigation when a locate payload is invalid", () => {

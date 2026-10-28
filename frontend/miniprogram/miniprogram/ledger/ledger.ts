@@ -1,3 +1,4 @@
+import { moneyToneClass } from "../account/money-tone";
 import { canApplyLoadResult, type LoadGuard } from "../account/load-guard";
 
 const MONEY_RESPONSE_PATTERN = /^-?[0-9]+\.[0-9]{2}$/;
@@ -40,7 +41,15 @@ export interface BalanceAdjustmentEntry {
   readonly businessTime: string;
 }
 
-export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry;
+export interface TransferEntry {
+  readonly kind: "TRANSFER";
+  readonly id: number;
+  readonly displayName: string;
+  readonly amount: string;
+  readonly businessTime: string;
+}
+
+export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry | TransferEntry;
 
 export interface Ledger {
   readonly accountId: number;
@@ -53,12 +62,14 @@ export interface Ledger {
 export interface LedgerRow {
   readonly recordId: number;
   readonly key: string;
-  readonly kind: "transaction" | "adjustment";
+  readonly kind: "transaction" | "adjustment" | "transfer";
   readonly title: string;
   readonly detail: string;
   readonly typeLabel: string;
   readonly amountLabel: string;
+  readonly amountToneClass: string;
   readonly timeLabel: string;
+  readonly dayKey: string;
 }
 
 export function parseLedger(value: unknown): Ledger | null {
@@ -100,12 +111,34 @@ export function formatBusinessTime(value: string): string {
   return `${match[2]}-${match[3]} ${match[4]}:${match[5]}`;
 }
 
+export function businessDayKey(value: string): string {
+  const match = BUSINESS_TIME_PATTERN.exec(value);
+  if (match === null) {
+    return "";
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 export function formatMoneyLabel(amount: string): string {
   return `¥${amount}`;
 }
 
 export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
   return items.map((item) => {
+    if (item.kind === "TRANSFER") {
+      return {
+        recordId: item.id,
+        key: `transfer-${item.id}`,
+        kind: "transfer",
+        title: item.displayName,
+        detail: "",
+        typeLabel: "转账",
+        amountLabel: formatMoneyLabel(item.amount),
+        amountToneClass: moneyToneClass(item.amount),
+        timeLabel: formatBusinessTime(item.businessTime),
+        dayKey: businessDayKey(item.businessTime),
+      };
+    }
     if (item.kind === "BALANCE_ADJUSTMENT") {
       return {
         recordId: item.id,
@@ -115,7 +148,9 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         detail: "",
         typeLabel: "调整",
         amountLabel: formatMoneyLabel(item.amount),
+        amountToneClass: moneyToneClass(item.amount),
         timeLabel: formatBusinessTime(item.businessTime),
+        dayKey: businessDayKey(item.businessTime),
       };
     }
     const tags = item.tags.map((tag) => tag.name).join(" ");
@@ -128,7 +163,9 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
       detail: tags.length === 0 ? category : `${category} ${tags}`,
       typeLabel: item.transactionType === "INCOME" ? "收入" : "支出",
       amountLabel: formatMoneyLabel(item.amount),
+      amountToneClass: moneyToneClass(item.amount),
       timeLabel: formatBusinessTime(item.businessTime),
+      dayKey: businessDayKey(item.businessTime),
     };
   });
 }
@@ -168,6 +205,18 @@ function parseEntry(value: unknown): LedgerEntry | null {
     }
     return {
       kind: "BALANCE_ADJUSTMENT",
+      id: value.id,
+      displayName: value.displayName,
+      amount: value.amount,
+      businessTime: value.businessTime,
+    };
+  }
+  if (value.kind === "TRANSFER") {
+    if (typeof value.displayName !== "string" || value.displayName.length === 0) {
+      return null;
+    }
+    return {
+      kind: "TRANSFER",
       id: value.id,
       displayName: value.displayName,
       amount: value.amount,

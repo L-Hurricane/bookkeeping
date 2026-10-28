@@ -3,6 +3,7 @@ package com.limingyuan.bookkeeping.statistics.application;
 import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.ledger.application.LedgerOrdering;
 import com.limingyuan.bookkeeping.statistics.application.MonthlyBookkeepingFacts.CategorySlice;
 import com.limingyuan.bookkeeping.statistics.application.MonthlyBookkeepingFacts.KeyExpenseSlice;
 import com.limingyuan.bookkeeping.statistics.application.MonthlyBookkeepingFacts.UncategorizedSlice;
@@ -78,9 +79,8 @@ class JdbcMonthlyBookkeepingFactsReader implements MonthlyBookkeepingFactsReader
                 WHERE t.account_id = :accountId AND t.user_id = :userId
                   AND t.type = 'EXPENSE' AND t.amount <> 0
                   AND t.business_time >= :start AND t.business_time < :end
-                ORDER BY ABS(t.amount) DESC, t.business_time DESC, t.first_save_order DESC
-                LIMIT 5
-                """).param("accountId", accountId).param("userId", context.userId())
+                """ + " ORDER BY ABS(t.amount) DESC, " + LedgerOrdering.KEY_EXPENSE_TIEBREAK + " LIMIT 5")
+                .param("accountId", accountId).param("userId", context.userId())
                 .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
                 .query((rs, row) -> rows.add(new KeyExpenseSlice(rs.getString("type"),
                         categoryPath(rs.getString("parent_name"), rs.getString("category_name")),

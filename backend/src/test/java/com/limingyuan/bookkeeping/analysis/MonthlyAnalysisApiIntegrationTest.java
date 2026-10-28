@@ -275,7 +275,7 @@ class MonthlyAnalysisApiIntegrationTest {
     @Test void expiredLeaseIsNotActiveInProgress() throws Exception {
         transact("2026-10-02T08:00:00+08:00");
         String fingerprint = read(getAnalysis("2026-10")).path("fingerprint").asText();
-        assertThat(store.acquire(userId, "2026-10", fingerprint)).isInstanceOf(
+        assertThat(store.acquire(userId, accountId, "2026-10", fingerprint)).isInstanceOf(
                 com.limingyuan.bookkeeping.analysis.application.PermitAcquisition.Granted.class);
         jdbc.sql("UPDATE analysis_generations SET lease_expires_at_utc = '2000-01-01 00:00:00.000000' WHERE user_id = :id")
                 .param("id", userId).update();
@@ -371,13 +371,13 @@ class MonthlyAnalysisApiIntegrationTest {
     private long insertSnapshot(String fingerprint, String overview, Instant generatedAt) {
         jdbc.sql("""
                 INSERT INTO analysis_snapshots
-                    (user_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
+                    (user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure, surplus_reasons,
                      points_to_watch, provider, model, prompt_version, latency_millis, permit_date, generated_at_utc)
                 VALUES
-                    (:userId, '2026-10', :fingerprint, :overview, '支出结构', '结余', '关注',
+                    (:userId, :accountId, '2026-10', :fingerprint, :overview, '支出结构', '结余', '关注',
                      'dashscope', 'qwen3.7-flash', 'v1', 1, '2026-10-01', :generatedAt)
-                """).param("userId", userId).param("fingerprint", fingerprint).param("overview", overview)
-                .param("generatedAt", Timestamp.from(generatedAt)).update();
+                """).param("userId", userId).param("accountId", accountId).param("fingerprint", fingerprint)
+                .param("overview", overview).param("generatedAt", Timestamp.from(generatedAt)).update();
         return jdbc.sql("SELECT MAX(id) FROM analysis_snapshots WHERE user_id = :id").param("id", userId).query(Long.class).single();
     }
 

@@ -1,19 +1,14 @@
 export type CategoryType = "INCOME" | "EXPENSE";
 
-export interface CategoryChild {
-  readonly id: number;
-  readonly name: string;
-  readonly type: CategoryType;
-  readonly bookable: boolean;
-}
-
 export interface CategoryNode {
   readonly id: number;
   readonly name: string;
   readonly type: CategoryType;
   readonly bookable: boolean;
-  readonly children: readonly CategoryChild[];
+  readonly children: readonly CategoryNode[];
 }
+
+export type CategoryChild = CategoryNode;
 
 export function parseCategoryList(value: unknown): CategoryNode[] | null {
   if (!isRecord(value) || !Array.isArray(value.items)) {
@@ -33,28 +28,39 @@ export function parseCategoryList(value: unknown): CategoryNode[] | null {
 export function bookableCategoryOptions(categories: readonly CategoryNode[]): CategoryNode[] {
   const options: CategoryNode[] = [];
   for (const category of categories) {
-    const children = category.children.filter((child) => child.bookable);
-    if (category.bookable || children.length > 0) {
-      options.push({
-        id: category.id,
-        name: category.name,
-        type: category.type,
-        bookable: category.bookable,
-        children,
-      });
+    const visible = visibleCategory(category);
+    if (visible !== null) {
+      options.push(visible);
     }
   }
   return options;
 }
 
-function parseRoot(value: unknown): CategoryNode | null {
-  const fields = parseFields(value);
-  if (fields === null || !isRecord(value) || !Array.isArray(value.children)) {
+function visibleCategory(category: CategoryNode): CategoryNode | null {
+  const children = category.children
+    .map(visibleCategory)
+    .filter((child): child is CategoryNode => child !== null);
+  if (!category.bookable && children.length === 0) {
     return null;
   }
-  const children: CategoryChild[] = [];
+  return { ...category, children };
+}
+
+function parseRoot(value: unknown): CategoryNode | null {
+  return parseNode(value, 1);
+}
+
+function parseNode(value: unknown, depth: number): CategoryNode | null {
+  const fields = parseFields(value);
+  if (fields === null || depth > 3 || !isRecord(value)) {
+    return null;
+  }
+  if (!("children" in value) || !Array.isArray(value.children) || (depth === 3 && value.children.length > 0)) {
+    return null;
+  }
+  const children: CategoryNode[] = [];
   for (const child of value.children) {
-    const parsed = parseChild(child);
+    const parsed = parseNode(child, depth + 1);
     if (parsed === null) {
       return null;
     }
@@ -63,17 +69,7 @@ function parseRoot(value: unknown): CategoryNode | null {
   return { ...fields, children };
 }
 
-function parseChild(value: unknown): CategoryChild | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  if ("children" in value && (!Array.isArray(value.children) || value.children.length !== 0)) {
-    return null;
-  }
-  return parseFields(value);
-}
-
-function parseFields(value: unknown): CategoryChild | null {
+function parseFields(value: unknown): Omit<CategoryNode, "children"> | null {
   if (!isRecord(value) || !isPositiveId(value.id) || !isNonEmptyString(value.name)) {
     return null;
   }
