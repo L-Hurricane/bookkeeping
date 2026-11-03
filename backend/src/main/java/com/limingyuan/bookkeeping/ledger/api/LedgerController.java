@@ -14,7 +14,12 @@ public class LedgerController {
     public LedgerController(LedgerService ledger) { this.ledger = ledger; }
 
     @GetMapping
-    public LedgerService.Ledger query(@PathVariable long accountId, @RequestParam String month) {
-        return ledger.query(accountId, month);
+    public LedgerService.Ledger query(@PathVariable long accountId,
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false, defaultValue = "false") boolean paged) {
+        return ledger.query(accountId, month, from, to, cursor, paged);
     }
 }
