@@ -2,5 +2,7 @@
   "usingComponents": {
     "entry-fab": "/components/entry-fab/index"
   },
-  "navigationBarTitleText": "个人记账"
+  "navigationBarTitleText": "个人记账",
+  "enablePullDownRefresh": true,
+  "onReachBottomDistance": 80
 }

@@ -16,12 +16,28 @@
       <text class="balance {{balanceToneClass}}">{{balanceLabel}}</text>
       <text class="hint" wx:if="{{archiveHint}}">{{archiveHint}}</text>
     </view>
-    <view class="month">
+    <view class="filter">
+      <text class="month-label">{{monthLabel}}</text>
+      <text class="filter-action" bindtap="onChooseAll">全部时间</text>
+      <text class="filter-action" bindtap="onChooseMonth">按月</text>
+      <text class="filter-action" bindtap="onChooseRange">自定义</text>
+    </view>
+    <view class="month" wx:if="{{filterMode === 'month'}}">
       <text class="month-step" bindtap="onPreviousMonth">‹</text>
       <text class="month-label">{{monthLabel}}</text>
       <text class="month-step" bindtap="onNextMonth">›</text>
     </view>
-    <view class="summary" wx:if="{{phase === 'ready'}}">
+    <view class="range" wx:if="{{filterMode === 'range' || choosingRange}}">
+      <picker mode="date" value="{{rangeFrom}}" bindchange="onRangeFrom">
+        <text class="filter-action">{{rangeFrom || '开始日期'}}</text>
+      </picker>
+      <text>至</text>
+      <picker mode="date" value="{{rangeTo}}" bindchange="onRangeTo">
+        <text class="filter-action">{{rangeTo || '结束日期'}}</text>
+      </picker>
+    </view>
+    <text class="error" wx:if="{{rangeError}}">{{rangeError}}</text>
+    <view class="summary" wx:if="{{phase === 'ready' && showMonthSummary}}">
       <view class="summary-item">
         <text class="label">收入</text>
         <text class="figure {{incomeToneClass}}">{{incomeLabel}}</text>
@@ -48,13 +64,14 @@
       <text class="status" wx:if="{{searchLoading}}">正在搜索</text>
       <text class="locate-miss" wx:if="{{locateMiss}}">{{locateMiss}}</text>
       <text class="empty" wx:if="{{searchEmpty}}">没有匹配的交易</text>
-      <text class="empty" wx:elif="{{empty}}">本月暂无记录</text>
+      <text class="empty" wx:elif="{{empty}}">{{emptyText}}</text>
       <block wx:for="{{groups}}" wx:key="key">
+        <text class="month-heading" wx:if="{{item.monthHeading}}">{{item.monthHeading}}</text>
         <view class="day">
           <text>{{item.label}}</text>
           <text class="count">{{item.count}} 笔</text>
         </view>
-        <view id="{{row.key}}" class="row {{row.kind}} {{highlightKey === row.key ? 'post-save-highlight' : ''}}" wx:for="{{item.rows}}" wx:for-item="row" wx:key="key" data-kind="{{row.kind}}" data-id="{{row.recordId}}" bindtap="onOpenRecord">
+        <view id="{{row.key}}" class="row {{row.kind}} {{highlightKey === row.key ? 'post-save-highlight' : ''}}" wx:for="{{item.rows}}" wx:for-item="row" wx:key="key" data-kind="{{row.kind}}" data-id="{{row.recordId}}" data-day="{{row.dayKey}}" bindtap="onOpenRecord">
           <view class="row-main">
             <text class="row-title">{{row.title}}</text>
             <text class="row-detail" wx:if="{{row.detail}}">{{row.detail}}</text>
@@ -62,6 +79,14 @@
           </view>
           <text class="amount {{row.amountToneClass}}">{{row.amountLabel}}</text>
         </view>
+      </block>
+      <block wx:if="{{phase === 'ready' && !searchActive}}">
+        <text class="status" wx:if="{{loadingMore}}">正在加载</text>
+        <block wx:elif="{{moreError}}">
+          <text class="error">{{moreError}}</text>
+          <button bindtap="onRetryMore">重试</button>
+        </block>
+        <text class="status" wx:elif="{{reachedEnd && !empty}}">已加载全部记录</text>
       </block>
     </block>
   </block>

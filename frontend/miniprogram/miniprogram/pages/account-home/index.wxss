@@ -140,6 +140,27 @@
   font-weight: 600;
 }
 
+.filter,
+.range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.filter-action,
+.month-heading {
+  color: #333333;
+  font-size: 28rpx;
+}
+
+.month-heading {
+  display: block;
+  margin: 24rpx 8rpx 0;
+  font-weight: 600;
+}
+
 .summary {
   display: flex;
   justify-content: space-between;

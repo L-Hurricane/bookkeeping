@@ -9,8 +9,17 @@ import { selectedMonthDuringLogout } from "../../account/logout-view";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
 import { accountHomePath, accountListPath, accountSettingsPath, parseAccountHomeQuery } from "../../account/navigation";
+import {
+  accountLedgerEmptyText,
+  accountLedgerFilterKey,
+  accountLedgerFilterLabel,
+  appendLedgerPage,
+  isMonth,
+  isUsableDateRange,
+  type AccountLedgerFilter,
+} from "../../ledger/account-history";
 import { groupByTimeLabel } from "../../ledger/day-groups";
-import { canApplyLedgerResult, formatMoneyLabel, ledgerRows } from "../../ledger/ledger";
+import { canApplyLedgerResult, formatMoneyLabel, ledgerRows, type LedgerEntry } from "../../ledger/ledger";
 import { beijingDate, currentBeijingMonth, formatMonthLabel, monthLastDate, nextMonth, previousMonth } from "../../ledger/month";
 import {
   acceptAdjustmentCreated,
@@ -73,6 +82,12 @@ Page({
   searchRequestGeneration: 0,
   searchKeyword: "",
   selectedMonth: "",
+  filterMode: "all" as AccountLedgerFilter["mode"],
+  rangeFrom: "",
+  rangeTo: "",
+  loadedItems: [] as LedgerEntry[],
+  nextCursor: null as string | null,
+  loadingMore: false,
   accountId: 0,
   accountCreatedTime: "",
   currency: "",
@@ -96,7 +111,18 @@ Page({
     negativeBalanceHint: "",
     archived: false,
     archiveHint: "",
-    monthLabel: "",
+    monthLabel: "全部时间",
+    filterMode: "all" as "all" | "month" | "range",
+    showMonthSummary: false,
+    emptyText: "暂无记录",
+    rangeFrom: "",
+    rangeTo: "",
+    rangeError: "",
+    choosingRange: false,
+    loadingMore: false,
+    moreError: "",
+    reachedEnd: false,
+    searchActive: false,
     incomeLabel: "",
     incomeToneClass: "money-zero",
     expenseLabel: "",
@@ -131,18 +157,16 @@ Page({
     this.accountId = context.accountId;
     this.contextReady = true;
     const handoff = takeLedgerHandoff(this.accountId);
-    if (handoff !== null) {
+    if (handoff !== null && isMonth(handoff.targetMonth)) {
       this.pendingPostSave = handoff;
       this.selectedMonth = handoff.targetMonth;
+      this.filterMode = "month";
     }
   },
 
   onShow() {
     if (!this.contextReady) {
       return;
-    }
-    if (this.selectedMonth.length === 0) {
-      this.selectedMonth = currentBeijingMonth(new Date());
     }
     const shown = showOpenList(this.openList());
     this.detailReturn = shown.state.visit;
@@ -218,57 +242,59 @@ Page({
       negativeBalanceHint: this.archived || !shouldWarnNegativeBalance(account) ? "" : "余额为负，仍可继续记账",
       archived: this.archived,
       archiveHint: this.archived ? ARCHIVED_HISTORY_HINT : "",
-      monthLabel: formatMonthLabel(this.selectedMonth),
+      monthLabel: accountLedgerFilterLabel(this.historyFilter()),
       errorMessage: "",
     });
   },
 
   async loadLedger(presentation: "replace" | "background" = "replace", restoreScrollTop: number | null = null) {
-    const month = this.selectedMonth;
-    const accountId = this.accountId;
+    const filter = this.historyFilter();
+    const filterKey = accountLedgerFilterKey(filter);
     const background = presentation === "background" && this.data.phase === "ready";
     const scrollRestoreGeneration = ++this.scrollRestoreGeneration;
     const generation = beginLoad(this.loadGuard);
     if (generation === null) {
       return;
     }
+    this.nextCursor = null;
+    this.loadedItems = [];
+    this.loadingMore = false;
     if (!background) {
-      this.setData({ phase: "ledger-loading", monthLabel: formatMonthLabel(month), errorMessage: "", monthCloseLabel: "", monthCloseCaption: "", monthCloseTone: "money-zero" });
+      this.setData({
+        phase: "ledger-loading",
+        monthLabel: accountLedgerFilterLabel(filter),
+        filterMode: filter.mode,
+        showMonthSummary: filter.mode === "month",
+        emptyText: accountLedgerEmptyText(filter),
+        errorMessage: "",
+        moreError: "",
+        loadingMore: false,
+        reachedEnd: false,
+        monthCloseLabel: "",
+        monthCloseCaption: "",
+        monthCloseTone: "money-zero",
+      });
     }
-    void this.loadMonthClose(month);
+    if (filter.mode === "month") void this.loadMonthClose(filter.month);
     try {
-      const ledger = await ledgerApi.getLedger(accountId, month);
-      if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth)) {
+      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, null));
+      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter()))) {
         return;
       }
-      const settlement = settleLedger(this.pendingPostSave, "success", ledger.items);
+      this.loadedItems = ledger.items.slice();
+      this.nextCursor = ledger.nextCursor;
+      const settlement = settleLedger(this.pendingPostSave, "success", this.loadedItems);
       this.pendingPostSave = settlement.pending;
       const locate = settlement.locate;
       const explicitLocate = this.pendingPostSave !== null || locate !== null;
       const restoreTop = background && !explicitLocate ? restoreScrollTop : null;
-      const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, ledger.items, {
-        phase: "ready",
-        balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
-        balanceToneClass: moneyToneClass(ledger.currentBalance),
-        negativeBalanceHint:
-          !this.archived && this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
-            ? "余额为负，仍可继续记账"
-            : "",
-        monthLabel: formatMonthLabel(ledger.month),
-        incomeLabel: formatMoneyLabel(ledger.summary.netIncome),
-        incomeToneClass: moneyToneClass(ledger.summary.netIncome),
-        expenseLabel: formatMoneyLabel(ledger.summary.netExpense),
-        expenseToneClass: moneyToneClass(ledger.summary.netExpense),
-        surplusLabel: formatMoneyLabel(ledger.summary.surplus),
-        surplusToneClass: moneyToneClass(ledger.summary.surplus),
-        countLabel: `${ledger.summary.transactionCount} 笔收支`,
-        errorMessage: "",
+      const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, this.loadedItems, this.ledgerChrome(ledger, filter, {
         locateMiss: settlement.missMessage,
         highlightKey: locate === null ? this.highlight.key : locate.key,
-      });
+      }));
       if (locate === null) {
         this.setData(withDayGroups(ledgerView), () => {
-          if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.selectedMonth !== month) {
+          if (scrollRestoreGeneration !== this.scrollRestoreGeneration || accountLedgerFilterKey(this.historyFilter()) !== filterKey) {
             return;
           }
           this.restoreListScroll(restoreTop);
@@ -286,7 +312,7 @@ Page({
         this.armHighlightTimer(this.highlight.generation);
       });
     } catch (error) {
-      if (!canApplyLedgerResult(this.loadGuard, generation, month, this.selectedMonth) || isUnauthorized(error)) {
+      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) || isUnauthorized(error)) {
         return;
       }
       if (background && this.data.phase === "ready") {
@@ -295,6 +321,114 @@ Page({
       const errorMessage = error instanceof LedgerResponseError ? "流水数据不符合约定" : "流水读取失败，请稍后重试";
       this.setData({ phase: "ledger-error", errorMessage });
     }
+  },
+
+  async loadMore() {
+    const cursor = this.nextCursor;
+    if (cursor === null || this.loadingMore || isActiveSearchKeyword(this.searchKeyword) || this.data.phase !== "ready") {
+      return;
+    }
+    const filter = this.historyFilter();
+    const filterKey = accountLedgerFilterKey(filter);
+    const generation = this.loadGuard.generation;
+    this.loadingMore = true;
+    this.setData({ loadingMore: true, moreError: "" });
+    try {
+      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, cursor));
+      if (
+        !canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) ||
+        this.nextCursor !== cursor
+      ) {
+        return;
+      }
+      this.loadedItems = appendLedgerPage(this.loadedItems, ledger.items);
+      this.nextCursor = ledger.nextCursor;
+      const ledgerView = buildLedgerLoadSetDataPatch(this.searchKeyword, this.loadedItems, this.ledgerChrome(ledger, filter, {
+        locateMiss: this.data.locateMiss,
+        highlightKey: this.data.highlightKey,
+      }));
+      this.setData(withDayGroups(ledgerView));
+    } catch (error) {
+      if (
+        !canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) ||
+        this.nextCursor !== cursor ||
+        isUnauthorized(error)
+      ) {
+        return;
+      }
+      this.setData({ moreError: "加载失败，请重试" });
+    } finally {
+      this.loadingMore = false;
+      if (this.loadGuard.pageAlive) this.setData({ loadingMore: false });
+    }
+  },
+
+  onReachBottom() {
+    if (this.data.moreError.length > 0) return;
+    void this.loadMore();
+  },
+
+  onPullDownRefresh() {
+    void this.loadLedger().finally(() => {
+      wx.stopPullDownRefresh();
+    });
+  },
+
+  onRetryMore() {
+    void this.loadMore();
+  },
+
+  historyFilter(): AccountLedgerFilter {
+    if (this.filterMode === "month" && isMonth(this.selectedMonth)) return { mode: "month", month: this.selectedMonth };
+    if (this.filterMode === "range" && isUsableDateRange(this.rangeFrom, this.rangeTo)) {
+      return { mode: "range", from: this.rangeFrom, to: this.rangeTo };
+    }
+    return { mode: "all" };
+  },
+
+  pageQuery(filter: AccountLedgerFilter, cursor: string | null) {
+    return {
+      accountId: this.accountId,
+      month: filter.mode === "month" ? filter.month : null,
+      from: filter.mode === "range" ? filter.from : null,
+      to: filter.mode === "range" ? filter.to : null,
+      cursor,
+    };
+  },
+
+  ledgerChrome(
+    ledger: { currentBalance: string; summary: { netIncome: string; netExpense: string; surplus: string; transactionCount: number } },
+    filter: AccountLedgerFilter,
+    locate: { locateMiss: string; highlightKey: string },
+  ) {
+    const showMonthSummary = filter.mode === "month";
+    return {
+      phase: "ready" as const,
+      balanceLabel: this.currency === "CNY" ? formatMoneyLabel(ledger.currentBalance) : `${ledger.currentBalance} ${this.currency}`,
+      balanceToneClass: moneyToneClass(ledger.currentBalance),
+      negativeBalanceHint:
+        !this.archived && this.accountKind === "NORMAL" && moneyToneClass(ledger.currentBalance) === "money-negative"
+          ? "余额为负，仍可继续记账"
+          : "",
+      monthLabel: accountLedgerFilterLabel(filter),
+      filterMode: filter.mode,
+      showMonthSummary,
+      emptyText: accountLedgerEmptyText(filter),
+      incomeLabel: showMonthSummary ? formatMoneyLabel(ledger.summary.netIncome) : "",
+      incomeToneClass: showMonthSummary ? moneyToneClass(ledger.summary.netIncome) : "money-zero",
+      expenseLabel: showMonthSummary ? formatMoneyLabel(ledger.summary.netExpense) : "",
+      expenseToneClass: showMonthSummary ? moneyToneClass(ledger.summary.netExpense) : "money-zero",
+      surplusLabel: showMonthSummary ? formatMoneyLabel(ledger.summary.surplus) : "",
+      surplusToneClass: showMonthSummary ? moneyToneClass(ledger.summary.surplus) : "money-zero",
+      countLabel: showMonthSummary ? `${ledger.summary.transactionCount} 笔收支` : "",
+      errorMessage: "",
+      moreError: "",
+      loadingMore: false,
+      reachedEnd: this.nextCursor === null && !isActiveSearchKeyword(this.searchKeyword),
+      searchActive: isActiveSearchKeyword(this.searchKeyword),
+      locateMiss: locate.locateMiss,
+      highlightKey: locate.highlightKey,
+    };
   },
 
   onToggleFab() {
@@ -340,7 +474,7 @@ Page({
   },
 
   onStatistics() {
-    if (!canOpenStatistics(this.data.phase, this.loadGuard.loggingOut) || this.selectedMonth.length === 0 || !validateBusinessTime(this.accountCreatedTime)) {
+    if (!canOpenStatistics(this.data.phase, this.loadGuard.loggingOut) || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
     wx.switchTab({ url: accountStatisticsTarget(this.accountId) });
@@ -434,9 +568,12 @@ Page({
     if (!Number.isSafeInteger(recordId) || recordId <= 0 || !validateBusinessTime(this.accountCreatedTime)) {
       return;
     }
+    const day = event.currentTarget.dataset["day"];
+    const originMonth = typeof day === "string" ? day.slice(0, 7) : "";
+    if (!isMonth(originMonth)) return;
     this.detailReturn = { dirty: false, context: this.selectedMonth, scrollTop: this.pageScrollTop };
     wx.navigateTo({
-      url: transactionDetailPath(this.accountId, recordId, this.accountCreatedTime, this.selectedMonth),
+      url: transactionDetailPath(this.accountId, recordId, this.accountCreatedTime, originMonth),
       events: {
         transactionUpdated: (result: unknown) => {
           this.captureTransactionUpdate(result);
@@ -469,6 +606,7 @@ Page({
     const listed = noteSavedTransaction(this.openList(), pending?.targetMonth ?? null);
     this.detailReturn = listed.visit;
     this.selectedMonth = listed.month;
+    if (isMonth(listed.month)) this.filterMode = "month";
     if (pending === null) {
       return;
     }
@@ -528,6 +666,7 @@ Page({
       return;
     }
     this.selectedMonth = next.selectedMonth;
+    if (isMonth(next.selectedMonth)) this.filterMode = "month";
     this.pendingPostSave = next.pending;
     this.stopLocateFeedback();
     this.setData({ highlightKey: "", locateMiss: "" });
@@ -561,7 +700,7 @@ Page({
       this.searchKeyword = "";
       this.searchGeneration = nextSearchGeneration(this.searchGeneration);
       this.searchRequestGeneration = this.searchGeneration;
-      this.setData({ searchEmpty: false, searchErrorMessage: "", searchLoading: false });
+      this.setData({ searchEmpty: false, searchErrorMessage: "", searchLoading: false, searchActive: false });
       void this.loadLedger();
       return;
     }
@@ -585,7 +724,7 @@ Page({
     const generation = nextSearchGeneration(this.searchGeneration);
     this.searchGeneration = generation;
     this.searchRequestGeneration = generation;
-    this.setData({ searchLoading: true, searchErrorMessage: "", searchEmpty: false, phase: "ready" });
+    this.setData({ searchLoading: true, searchErrorMessage: "", searchEmpty: false, phase: "ready", searchActive: true, reachedEnd: false, moreError: "" });
     try {
       const result = await transactionApi.searchTransactions(accountId, keyword, this.accountCreatedTime);
       if (
@@ -605,13 +744,16 @@ Page({
       const rows = searchLedgerRows(result.items);
       this.setData({
         searchLoading: false,
+        searchActive: true,
         rows,
-        groups: groupByTimeLabel(rows),
+        groups: decorateGroups(rows),
         searchEmpty: rows.length === 0,
         empty: false,
         searchErrorMessage: "",
         highlightKey: "",
         locateMiss: "",
+        reachedEnd: false,
+        moreError: "",
       });
     } catch (error) {
       if (
@@ -643,26 +785,86 @@ Page({
   },
 
   onPreviousMonth() {
+    if (this.filterMode !== "month" || !isMonth(this.selectedMonth)) return;
     this.changeMonth(previousMonth(this.selectedMonth));
   },
 
   onNextMonth() {
+    if (this.filterMode !== "month" || !isMonth(this.selectedMonth)) return;
     this.changeMonth(nextMonth(this.selectedMonth));
+  },
+
+  onChooseAll() {
+    if (this.filterMode === "all" && !this.data.choosingRange) return;
+    this.filterMode = "all";
+    this.selectedMonth = "";
+    this.rangeFrom = "";
+    this.rangeTo = "";
+    this.resetHistoryAndLoad();
+  },
+
+  onChooseRange() {
+    this.setData({ choosingRange: true, rangeError: "" });
+  },
+
+  onChooseMonth() {
+    const month = isMonth(this.selectedMonth) ? this.selectedMonth : currentBeijingMonth(new Date());
+    this.changeMonth(month);
+  },
+
+  onRangeFrom(event: WechatMiniprogram.PickerChange) {
+    this.rangeFrom = typeof event.detail.value === "string" ? event.detail.value : "";
+    this.setData({ rangeFrom: this.rangeFrom });
+    this.applyRange();
+  },
+
+  onRangeTo(event: WechatMiniprogram.PickerChange) {
+    this.rangeTo = typeof event.detail.value === "string" ? event.detail.value : "";
+    this.setData({ rangeTo: this.rangeTo });
+    this.applyRange();
+  },
+
+  applyRange() {
+    if (!isUsableDateRange(this.rangeFrom, this.rangeTo)) {
+      if (this.rangeFrom.length > 0 && this.rangeTo.length > 0) {
+        this.setData({ rangeError: "日期范围无法使用" });
+      }
+      return;
+    }
+    this.filterMode = "range";
+    this.selectedMonth = "";
+    this.setData({ rangeError: "" });
+    this.resetHistoryAndLoad();
+  },
+
+  resetHistoryAndLoad() {
+    this.pendingPostSave = null;
+    this.detailReturn = null;
+    this.pageScrollTop = 0;
+    this.scrollRestoreGeneration += 1;
+    this.stopLocateFeedback();
+    this.setData({ highlightKey: "", locateMiss: "", rangeFrom: this.rangeFrom, rangeTo: this.rangeTo, rangeError: "", choosingRange: this.filterMode === "range" });
+    wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    void this.loadLedger();
   },
 
   changeMonth(month: string) {
     const selectedMonth = selectedMonthDuringLogout(this.loadGuard.loggingOut, this.selectedMonth, month);
     const next = changeSelectedMonth(this.locateNavigation(), selectedMonth);
-    if (next.selectedMonth === this.selectedMonth) {
+    if (next.selectedMonth === this.selectedMonth && this.filterMode === "month") {
       return;
     }
+    this.filterMode = "month";
     this.selectedMonth = next.selectedMonth;
+    this.rangeFrom = "";
+    this.rangeTo = "";
     this.pendingPostSave = next.pending;
     this.detailReturn = null;
     this.pageScrollTop = 0;
     this.scrollRestoreGeneration += 1;
     this.stopLocateFeedback();
-    this.setData({ highlightKey: "", locateMiss: "" });
+    this.setData({ highlightKey: "", locateMiss: "", rangeFrom: "", rangeTo: "", rangeError: "", choosingRange: false });
+    wx.pageScrollTo({ scrollTop: 0, duration: 0 });
     void this.loadLedger();
   },
 
@@ -752,7 +954,18 @@ Page({
 
 function withDayGroups(view: ReturnType<typeof buildLedgerLoadSetDataPatch>) {
   if (!("rows" in view)) return view;
-  return { ...view, groups: groupByTimeLabel(view.rows) };
+  return { ...view, groups: decorateGroups(view.rows) };
+}
+
+function decorateGroups(rows: ReturnType<typeof ledgerRows>) {
+  let previous = "";
+  return groupByTimeLabel(rows).map((group) => {
+    const month = group.key.slice(0, 7);
+    const valid = isMonth(month);
+    const monthHeading = valid && month !== previous ? formatMonthLabel(month) : "";
+    if (valid) previous = month;
+    return { ...group, monthHeading };
+  });
 }
 
 function readScrollMeasurement(result: unknown): { top: number; height: number; viewportHeight: number; scrollTop: number } | null {

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { beginLoad, beginLogout, createLoadGuard, endLogout } from "../miniprogram/account/load-guard";
 import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
+import { appendLedgerPage, isUsableDateRange } from "../miniprogram/ledger/account-history";
 import {
   canApplyLedgerResult,
   formatBusinessTime,
+  ledgerPagePath,
   ledgerPath,
   ledgerRows,
   parseLedger,
@@ -197,6 +199,45 @@ describe("ledger month requests", () => {
       return error instanceof ApiError && error.status === 401;
     });
     assert.equal(unauthorized, 1);
+  });
+});
+
+describe("account history pages", () => {
+  it("keeps a missing cursor and accepts an all-history page", () => {
+    const ledger = parseLedger({ ...ledgerBody([transaction]), month: null, nextCursor: "v1|cursor" });
+    assert.equal(ledger?.month, null);
+    assert.equal(ledger?.nextCursor, "v1|cursor");
+    assert.equal(parseLedger(ledgerBody([transaction]))?.nextCursor, null);
+  });
+
+  it("declares paging and binds the cursor to the query", () => {
+    assert.equal(ledgerPagePath({ accountId: 7 }), "/api/v1/accounts/7/ledger?paged=true");
+    assert.equal(
+      ledgerPagePath({ accountId: 7, month: "2024-08", cursor: "v1|7|MONTH:2024-08" }),
+      "/api/v1/accounts/7/ledger?paged=true&month=2024-08&cursor=v1%7C7%7CMONTH%3A2024-08",
+    );
+  });
+
+  it("appends the next page once and drops a repeated row", () => {
+    const first = [{ kind: "TRANSACTION", id: 1 }];
+    const second = appendLedgerPage(first, [
+      { kind: "TRANSACTION", id: 1 },
+      { kind: "TRANSFER", id: 2 },
+    ]);
+    assert.deepEqual(second, [
+      { kind: "TRANSACTION", id: 1 },
+      { kind: "TRANSFER", id: 2 },
+    ]);
+    assert.equal(appendLedgerPage(second, [{ kind: "TRANSFER", id: 2 }]).length, 2);
+  });
+
+  it("accepts a frozen date span and rejects an inverted or oversized range", () => {
+    const plusDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+    assert.equal(isUsableDateRange("2020-01-01", "2020-01-01"), true);
+    assert.equal(isUsableDateRange("2010-01-01", plusDays("2010-01-01", 3660)), true);
+    assert.equal(isUsableDateRange("2010-01-01", plusDays("2010-01-01", 3661)), false);
+    assert.equal(isUsableDateRange("2024-02-02", "2024-02-01"), false);
+    assert.equal(isUsableDateRange("2024-02-31", "2024-03-01"), false);
   });
 });
 

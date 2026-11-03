@@ -148,6 +148,13 @@ export interface LedgerLoadSetDataCommon {
   readonly errorMessage: string;
   readonly locateMiss: string;
   readonly highlightKey: string;
+  readonly filterMode?: "all" | "month" | "range";
+  readonly showMonthSummary?: boolean;
+  readonly emptyText?: string;
+  readonly moreError?: string;
+  readonly loadingMore?: boolean;
+  readonly reachedEnd?: boolean;
+  readonly searchActive?: boolean;
 }
 
 export type LedgerLoadSetDataPatch = LedgerLoadSetDataCommon | (LedgerLoadSetDataCommon & { readonly rows: LedgerRow[]; readonly empty: boolean });

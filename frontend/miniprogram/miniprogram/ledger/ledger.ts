@@ -53,10 +53,11 @@ export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry | TransferEn
 
 export interface Ledger {
   readonly accountId: number;
-  readonly month: string;
+  readonly month: string | null;
   readonly currentBalance: string;
   readonly summary: LedgerSummary;
   readonly items: readonly LedgerEntry[];
+  readonly nextCursor: string | null;
 }
 
 export interface LedgerRow {
@@ -76,7 +77,9 @@ export function parseLedger(value: unknown): Ledger | null {
   if (!isRecord(value) || !isRecord(value.summary) || !Array.isArray(value.items)) {
     return null;
   }
-  if (!isPositiveId(value.accountId) || typeof value.month !== "string" || !MONTH_PATTERN.test(value.month)) {
+  const month = parseOptionalMonth(value.month);
+  const nextCursor = parseNextCursor(value.nextCursor);
+  if (!isPositiveId(value.accountId) || month === undefined || nextCursor === undefined) {
     return null;
   }
   if (!isMoney(value.currentBalance)) {
@@ -96,10 +99,11 @@ export function parseLedger(value: unknown): Ledger | null {
   }
   return {
     accountId: value.accountId,
-    month: value.month,
+    month,
     currentBalance: value.currentBalance,
     summary,
     items,
+    nextCursor,
   };
 }
 
@@ -181,6 +185,34 @@ export function canApplyLedgerResult(
 
 export function ledgerPath(accountId: number, month: string): string {
   return `/api/v1/accounts/${accountId}/ledger?month=${month}`;
+}
+
+export interface LedgerPageQuery {
+  readonly accountId: number;
+  readonly month?: string | null;
+  readonly from?: string | null;
+  readonly to?: string | null;
+  readonly cursor?: string | null;
+}
+
+export function ledgerPagePath(query: LedgerPageQuery): string {
+  const params = ["paged=true"];
+  if (query.month) params.push(`month=${query.month}`);
+  if (query.from) params.push(`from=${query.from}`);
+  if (query.to) params.push(`to=${query.to}`);
+  if (query.cursor) params.push(`cursor=${encodeURIComponent(query.cursor)}`);
+  return `/api/v1/accounts/${query.accountId}/ledger?${params.join("&")}`;
+}
+
+function parseOptionalMonth(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" && MONTH_PATTERN.test(value) ? value : undefined;
+}
+
+function parseNextCursor(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 400 || /[\r\n]/.test(value)) return undefined;
+  return value;
 }
 
 function parseSummary(value: Record<string, unknown>): LedgerSummary | null {
