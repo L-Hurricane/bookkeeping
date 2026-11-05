@@ -1,5 +1,6 @@
 package com.limingyuan.bookkeeping.account.api;
 
+import com.limingyuan.bookkeeping.account.application.AccountGroupService;
 import com.limingyuan.bookkeeping.account.application.AccountPermanentDeletionService;
 import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.common.api.StrictStringDeserializer;
@@ -15,10 +16,13 @@ import tools.jackson.databind.annotation.JsonDeserialize;
 public class AccountController {
     private final AccountService accounts;
     private final AccountPermanentDeletionService permanentDeletion;
+    private final AccountGroupService groups;
 
-    public AccountController(AccountService accounts, AccountPermanentDeletionService permanentDeletion) {
+    public AccountController(AccountService accounts, AccountPermanentDeletionService permanentDeletion,
+            AccountGroupService groups) {
         this.accounts = accounts;
         this.permanentDeletion = permanentDeletion;
+        this.groups = groups;
     }
     public record InitializeRequest(@NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String openingBalance) { }
     public record CreateRequest(
@@ -28,6 +32,7 @@ public class AccountController {
     public record RenameRequest(@NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String name) { }
     public record PermanentDeletionRequest(
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String previewToken) { }
+    public record PlacementRequest(Long groupId, @NotNull List<Long> orderedIds) { }
     public record AccountList(List<AccountService.AccountView> items) { }
     @GetMapping
     public AccountList list(@RequestParam(required = false) String lifecycle) {
@@ -60,6 +65,12 @@ public class AccountController {
     @PatchMapping("/{accountId}")
     public AccountService.AccountView rename(@PathVariable long accountId, @Valid @RequestBody RenameRequest request) {
         return accounts.rename(accountId, request.name());
+    }
+
+    @PutMapping("/{accountId}/placement")
+    public ResponseEntity<Void> place(@PathVariable long accountId, @Valid @RequestBody PlacementRequest request) {
+        groups.place(accountId, request.groupId(), request.orderedIds());
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{accountId}/name")

@@ -24,6 +24,8 @@ public class AccountEntity {
     @Column(name = "created_time", nullable = false, columnDefinition = "DATETIME(0)") private LocalDateTime createdTime;
     @Column(name = "last_first_save_order", nullable = false) private long lastFirstSaveOrder;
     @Column(name = "updated_at_utc", nullable = false, columnDefinition = "DATETIME(6)") private LocalDateTime updatedAtUtc;
+    @Column(name = "group_id") private Long groupId;
+    @Column(name = "display_order") private Long displayOrder;
     protected AccountEntity() { }
 
     /** Legacy initialize path: fixed name 「微信」, kind NORMAL. */
@@ -53,6 +55,21 @@ public class AccountEntity {
     public LocalDateTime getCreatedTime() { return createdTime; }
     public long getLastFirstSaveOrder() { return lastFirstSaveOrder; }
     public LocalDateTime getUpdatedAtUtc() { return updatedAtUtc; }
+    public Long getGroupId() { return groupId; }
+    public Long getDisplayOrder() { return displayOrder; }
+
+    /** Membership and explicit order. A null group is the virtual ungrouped partition. */
+    public void place(Long groupId, Long displayOrder, LocalDateTime updatedAtUtc) {
+        this.groupId = groupId;
+        this.displayOrder = displayOrder;
+        this.updatedAtUtc = updatedAtUtc;
+    }
+
+    public void clearGroup(LocalDateTime updatedAtUtc) {
+        this.groupId = null;
+        this.displayOrder = null;
+        this.updatedAtUtc = updatedAtUtc;
+    }
 
     public void rename(String name, LocalDateTime updatedAtUtc) {
         this.name = AccountNames.required(name);
