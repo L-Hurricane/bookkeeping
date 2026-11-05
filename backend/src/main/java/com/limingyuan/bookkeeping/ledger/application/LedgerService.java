@@ -111,7 +111,7 @@ public class LedgerService {
                     UNION ALL
                     SELECT 'TRANSFER', t.id, NULL,
                            CASE WHEN t.from_account_id = :accountId THEN -t.amount ELSE t.amount END,
-                           NULL, NULL, NULL,
+                           t.name, NULL, NULL,
                            CASE WHEN t.from_account_id = :accountId THEN t.from_business_time ELSE t.to_business_time END,
                            t.first_save_order, t.first_saved_at_utc
                     FROM transfers t
@@ -151,6 +151,8 @@ public class LedgerService {
 
     private List<Row> namedRows(long accountId, Window window, String keyword, AccountLedgerCursor cursor, Integer limit) {
         String txTime = window.start() == null ? "" : " AND t.business_time >= :start AND t.business_time < :end";
+        String fromTime = window.start() == null ? "" : " AND t.from_business_time >= :start AND t.from_business_time < :end";
+        String toTime = window.start() == null ? "" : " AND t.to_business_time >= :start AND t.to_business_time < :end";
         var sql = new StringBuilder("""
                 SELECT kind, id, transaction_type, amount, name, category_id, category_name, business_time,
                        first_save_order, first_saved_at_utc
@@ -164,8 +166,22 @@ public class LedgerService {
                       AND t.name IS NOT NULL AND t.name <> ''
                       AND t.name LIKE :pattern ESCAPE '!'
                       %s
+                    UNION ALL
+                    SELECT 'TRANSFER', t.id, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN -t.amount ELSE t.amount END,
+                           t.name, NULL, NULL,
+                           CASE WHEN t.from_account_id = :accountId THEN t.from_business_time ELSE t.to_business_time END,
+                           t.first_save_order, t.first_saved_at_utc
+                    FROM transfers t
+                    WHERE t.user_id = :userId
+                      AND t.name IS NOT NULL AND t.name <> ''
+                      AND t.name LIKE :pattern ESCAPE '!'
+                      AND (
+                        (t.from_account_id = :accountId%s)
+                        OR (t.to_account_id = :accountId%s)
+                      )
                 ) entries
-                """.formatted(txTime));
+                """.formatted(txTime, fromTime, toTime));
         appendCursor(sql, cursor, limit);
         var query = jdbc.sql(sql.toString()).param("accountId", accountId).param("userId", context.userId())
                 .param("pattern", likeContains(keyword));
@@ -239,7 +255,8 @@ public class LedgerService {
                 items.add(new LedgerItem(row.kind(), row.id(), null, "余额调整", Money.format(row.amount()), null, null,
                         TIME.format(row.businessTime().atZone(BEIJING))));
             } else if ("TRANSFER".equals(row.kind())) {
-                items.add(new LedgerItem(row.kind(), row.id(), null, "转账", Money.format(row.amount()), null, null,
+                String title = row.name() != null && !row.name().isBlank() ? row.name() : "转账";
+                items.add(new LedgerItem(row.kind(), row.id(), null, title, Money.format(row.amount()), null, null,
                         TIME.format(row.businessTime().atZone(BEIJING))));
             } else {
                 items.add(new LedgerItem(row.kind(), row.id(), row.transactionType(), displayName(row.name(), row.categoryName()),

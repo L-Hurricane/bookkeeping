@@ -22,6 +22,8 @@
   <text class="amount-label">转账金额</text>
   <input class="amount" type="text" value="{{amount}}" disabled="{{formLocked}}" bindinput="onAmount" />
   <text class="error" wx:if="{{amountError}}">{{amountError}}</text>
+  <text class="label">名称（选填）</text>
+  <input class="field" type="text" placeholder="可不填" value="{{name}}" disabled="{{formLocked}}" bindinput="onName" />
   <text class="label">转出时间</text>
   <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenFromTime">{{fromTimeText}} ></view>
   <text class="label">转入时间</text>

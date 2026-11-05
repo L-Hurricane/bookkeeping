@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.transfer;
 
 import com.limingyuan.bookkeeping.account.application.CurrentBalance;
+import com.limingyuan.bookkeeping.transfer.application.TransferRequestHash;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
@@ -216,6 +217,99 @@ class TransferIntegrationTest {
         assertThat(storedAmount(hidden)).isEqualByComparingTo("2.00");
     }
 
+    @Test void optionalNameIsSharedEditedAndSearchedWithoutChangingMoney() throws Exception {
+        long from = account("现金", "80.00");
+        long to = account("银行卡", "20.00");
+        var created = mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "named-1").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "15.00", "2026-03-01T08:00:00+08:00", "2026-04-02T09:00:00+08:00", "  孩子教育储备  ")))
+                .andExpect(status().isCreated()).andReturn();
+        var view = json.readTree(created.getResponse().getContentAsString());
+        long id = view.path("id").asLong();
+        long order = view.path("firstSaveOrder").asLong();
+        assertThat(view.path("name").asText()).isEqualTo("孩子教育储备");
+        assertThat(balance(from)).isEqualTo("65.00");
+        assertThat(balance(to)).isEqualTo("35.00");
+        mvc.perform(get("/api/v1/accounts/" + from + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-03").param("paged", "true").param("name", "教育"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.transactionCount").value(0))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].kind").value("TRANSFER"))
+                .andExpect(jsonPath("$.items[0].displayName").value("孩子教育储备"))
+                .andExpect(jsonPath("$.items[0].amount").value("-15.00"));
+        mvc.perform(get("/api/v1/accounts/" + to + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-04").param("paged", "true").param("name", "教育"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].displayName").value("孩子教育储备"))
+                .andExpect(jsonPath("$.items[0].amount").value("15.00"));
+        mvc.perform(get("/api/v1/accounts/" + to + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-03").param("paged", "true").param("name", "教育"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/v1/accounts/" + from + "/transactions/search").header("Authorization", "Bearer " + token)
+                        .param("name", "教育"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+
+        var edited = mvc.perform(put("/api/v1/transfers/" + id).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "15.00", "2026-03-01T08:00:00+08:00", "2026-04-02T09:00:00+08:00", "教育备用")))
+                .andExpect(status().isOk()).andReturn();
+        var editedView = json.readTree(edited.getResponse().getContentAsString());
+        assertThat(editedView.path("id").asLong()).isEqualTo(id);
+        assertThat(editedView.path("firstSaveOrder").asLong()).isEqualTo(order);
+        assertThat(editedView.path("name").asText()).isEqualTo("教育备用");
+        assertThat(storedOrder(id)).isEqualTo(order);
+        assertThat(balance(from)).isEqualTo("65.00");
+        assertThat(jdbc.sql("SELECT name FROM transfers WHERE id = :id").param("id", id).query(String.class).single()).isEqualTo("教育备用");
+        mvc.perform(get("/api/v1/accounts/" + to + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-04").param("paged", "true").param("name", "备用"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(id))
+                .andExpect(jsonPath("$.items[0].displayName").value("教育备用"));
+
+        var replay = mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "named-1").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "15.00", "2026-03-01T08:00:00+08:00", "2026-04-02T09:00:00+08:00", "孩子教育储备")))
+                .andExpect(status().isOk()).andExpect(header().string("Idempotent-Replay", "true")).andReturn();
+        assertThat(json.readTree(replay.getResponse().getContentAsString()).path("name").asText()).isEqualTo("教育备用");
+        mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "named-1").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "15.00", "2026-03-01T08:00:00+08:00", "2026-04-02T09:00:00+08:00", "教育备用")))
+                .andExpect(status().isConflict());
+
+        var blank = transfer("blank-name", from, to, "1.00", "2026-03-02T08:00:00+08:00", "2026-03-02T08:00:00+08:00", 201);
+        assertThat(blank.path("name").isMissingNode() || blank.path("name").isNull()).isTrue();
+        mvc.perform(get("/api/v1/accounts/" + from + "/ledger").header("Authorization", "Bearer " + token).param("month", "2026-03"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id == " + blank.path("id").asLong() + ")].displayName").value("转账"));
+        mvc.perform(get("/api/v1/accounts/" + from + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2026-03").param("paged", "true").param("name", "转账"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.kind == 'TRANSFER')]").isEmpty());
+
+        byte[] historical = TransferRequestHash.sha256(from, to, "1.00", "2026-03-02T08:00:00+08:00", "2026-03-02T08:00:00+08:00");
+        int rewritten = jdbc.sql("""
+                UPDATE idempotency_records SET request_hash = :hash
+                WHERE user_id = :userId AND scope = 'CREATE_TRANSFER' AND operation_id = 'blank-name'
+                """).param("hash", historical).param("userId", userId).update();
+        assertThat(rewritten).isEqualTo(1);
+        mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "blank-name").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "1.00", "2026-03-02T08:00:00+08:00", "2026-03-02T08:00:00+08:00")))
+                .andExpect(status().isOk()).andExpect(header().string("Idempotent-Replay", "true"));
+        mvc.perform(post("/api/v1/transfers").header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", "blank-name").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(from, to, "1.00", "2026-03-02T08:00:00+08:00", "2026-03-02T08:00:00+08:00", "补上的名称")))
+                .andExpect(status().isConflict());
+
+        var other = newUser();
+        mvc.perform(get("/api/v1/transfers/" + id).header("Authorization", "Bearer " + other.token())).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/accounts/" + from + "/ledger").header("Authorization", "Bearer " + other.token())
+                        .param("paged", "true").param("name", "教育")).andExpect(status().isNotFound());
+    }
+
     @Test void oppositeTransfersLockInAccountIdOrderAndBothCommit() throws Exception {
         long from = account("现金", "50.00");
         long to = account("银行卡", "50.00");
@@ -279,8 +373,15 @@ class TransferIntegrationTest {
     }
 
     private String body(long from, long to, String amount, String fromTime, String toTime) {
-        return "{\"fromAccountId\":" + from + ",\"toAccountId\":" + to + ",\"amount\":\"" + amount
-                + "\",\"fromBusinessTime\":\"" + fromTime + "\",\"toBusinessTime\":\"" + toTime + "\"}";
+        return body(from, to, amount, fromTime, toTime, null);
+    }
+
+    private String body(long from, long to, String amount, String fromTime, String toTime, String name) {
+        var json = new StringBuilder("{\"fromAccountId\":").append(from).append(",\"toAccountId\":").append(to)
+                .append(",\"amount\":\"").append(amount).append("\",\"fromBusinessTime\":\"").append(fromTime)
+                .append("\",\"toBusinessTime\":\"").append(toTime).append('"');
+        if (name != null) json.append(",\"name\":\"").append(name).append('"');
+        return json.append('}').toString();
     }
 
     private String balance(long accountId) throws Exception {

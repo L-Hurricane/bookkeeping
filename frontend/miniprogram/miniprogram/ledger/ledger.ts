@@ -135,7 +135,7 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         key: `transfer-${item.id}`,
         kind: "transfer",
         title: item.displayName,
-        detail: "",
+        detail: item.amount.startsWith("-") ? "转出" : "转入",
         typeLabel: "转账",
         amountLabel: formatMoneyLabel(item.amount),
         amountToneClass: moneyToneClass(item.amount),

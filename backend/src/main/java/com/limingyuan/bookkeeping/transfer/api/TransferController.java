@@ -19,7 +19,8 @@ public class TransferController {
             @NotNull Long toAccountId,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String amount,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String fromBusinessTime,
-            @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String toBusinessTime) { }
+            @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String toBusinessTime,
+            @JsonDeserialize(using = StrictStringDeserializer.class) String name) { }
 
     @PostMapping
     public ResponseEntity<TransferService.TransferView> create(@RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -49,6 +50,6 @@ public class TransferController {
 
     private static TransferService.Draft draft(TransferRequest request) {
         return new TransferService.Draft(request.fromAccountId(), request.toAccountId(), request.amount(),
-                request.fromBusinessTime(), request.toBusinessTime());
+                request.fromBusinessTime(), request.toBusinessTime(), request.name());
     }
 }

@@ -11,6 +11,7 @@ export interface TransferSnapshot {
   readonly amount: string;
   readonly fromBusinessTime: string;
   readonly toBusinessTime: string;
+  readonly name: string | null;
 }
 
 export type TransferPhase = "editing" | "submitting" | "uncertain" | "conflict" | "success";
@@ -34,6 +35,8 @@ export const TRANSFER_CONFLICT_MESSAGE = "保存请求发生冲突，请重新�
 export const SAME_ACCOUNT_MESSAGE = "请选择两个不同的账户";
 export const NON_POSITIVE_AMOUNT_MESSAGE = "请输入大于 0 的金额";
 export const TRANSFER_NOT_FOUND_MESSAGE = "转账不存在或已删除";
+export const TRANSFER_NAME_LIMIT = 255;
+export const TRANSFER_NAME_LIMIT_MESSAGE = "名称最长 255 个字符";
 
 export function editingTransfer(): TransferSaveState {
   return { phase: "editing", attempt: null, error: "", postSave: null };
@@ -47,12 +50,20 @@ export function canSaveTransfer(phase: TransferPhase, preparing: boolean, snapsh
   return phase === "editing" && !preparing && snapshotReady;
 }
 
+export function canonicalTransferName(raw: string): { readonly ok: true; readonly name: string | null } | { readonly ok: false; readonly message: string } {
+  const name = raw.trim();
+  if (name.length === 0) return { ok: true, name: null };
+  if (name.length > TRANSFER_NAME_LIMIT) return { ok: false, message: TRANSFER_NAME_LIMIT_MESSAGE };
+  return { ok: true, name };
+}
+
 export function buildTransferSnapshot(
   fromAccountId: number,
   toAccountId: number,
   amountRaw: string,
   fromBusinessTime: string,
   toBusinessTime: string,
+  nameRaw = "",
 ): { readonly ok: true; readonly value: TransferSnapshot } | { readonly ok: false; readonly message: string } {
   if (!Number.isSafeInteger(fromAccountId) || fromAccountId <= 0 || !Number.isSafeInteger(toAccountId) || toAccountId <= 0) {
     return { ok: false, message: "请检查填写内容" };
@@ -70,9 +81,11 @@ export function buildTransferSnapshot(
   if (!validateBusinessTime(fromBusinessTime) || !validateBusinessTime(toBusinessTime)) {
     return { ok: false, message: "请输入有效的日期和时间" };
   }
+  const name = canonicalTransferName(nameRaw);
+  if (!name.ok) return name;
   return {
     ok: true,
-    value: { fromAccountId, toAccountId, amount, fromBusinessTime, toBusinessTime },
+    value: { fromAccountId, toAccountId, amount, fromBusinessTime, toBusinessTime, name: name.name },
   };
 }
 
@@ -83,6 +96,7 @@ export function transferRequestBody(snapshot: TransferSnapshot): TransferRequest
     amount: snapshot.amount,
     fromBusinessTime: snapshot.fromBusinessTime,
     toBusinessTime: snapshot.toBusinessTime,
+    ...(snapshot.name === null ? {} : { name: snapshot.name }),
   };
 }
 

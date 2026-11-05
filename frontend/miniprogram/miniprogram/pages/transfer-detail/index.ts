@@ -54,6 +54,7 @@ Page({
   fromAccountLabel: "",
   toAccountLabel: "",
   amount: "",
+  name: "",
   times: initialTransferTimes("2026-01-01T00:00:00+08:00"),
   save: editingTransfer(),
   deletePhase: "idle" as TransferDeletePhase,
@@ -75,6 +76,7 @@ Page({
     fromSelectorOpen: false,
     toSelectorOpen: false,
     amount: "",
+    name: "",
     amountError: "",
     fromTimeText: "",
     toTimeText: "",
@@ -145,6 +147,7 @@ Page({
       this.fromAccountLabel = accountName(fromAccount, transfer.fromAccountId);
       this.toAccountLabel = accountName(toAccount, transfer.toAccountId);
       this.amount = transfer.amount;
+      this.name = transfer.name ?? "";
       this.times = {
         fromBusinessTime: transfer.fromBusinessTime,
         toBusinessTime: transfer.toBusinessTime,
@@ -235,6 +238,15 @@ Page({
       return;
     }
     this.amount = event.detail.value;
+    this.setData({ actionError: "" });
+    this.publish();
+  },
+
+  onName(event: WechatMiniprogram.Input) {
+    if (!this.canEditFields()) {
+      return;
+    }
+    this.name = event.detail.value;
     this.setData({ actionError: "" });
     this.publish();
   },
@@ -348,6 +360,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     if (!built.ok) {
       this.setData({ actionError: built.message });
@@ -361,6 +374,7 @@ Page({
         return;
       }
       this.transfer = updated;
+      this.name = updated.name ?? "";
       this.save = {
         phase: "success",
         attempt: null,
@@ -479,6 +493,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     const access = transferDetailAccess(this.deletePhase);
     const formLocked = this.readOnly || transferFormLocked(this.save.phase, false);
@@ -489,6 +504,7 @@ Page({
       fromAccountText: fromText,
       toAccountText: toText,
       amount: this.amount,
+      name: this.name,
       amountError:
         !this.readOnly && this.amount.trim().length > 0 && positiveTransferAmount(this.amount) === null
           ? "请输入大于 0 的金额"

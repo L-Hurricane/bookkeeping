@@ -74,6 +74,7 @@ function matchesSnapshot(transfer: TransferView, snapshot: TransferSnapshot): bo
     transfer.toAccountId === snapshot.toAccountId &&
     transfer.amount === snapshot.amount &&
     transfer.fromBusinessTime === snapshot.fromBusinessTime &&
-    transfer.toBusinessTime === snapshot.toBusinessTime
+    transfer.toBusinessTime === snapshot.toBusinessTime &&
+    transfer.name === snapshot.name
   );
 }

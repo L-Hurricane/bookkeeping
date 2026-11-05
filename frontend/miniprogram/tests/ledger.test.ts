@@ -125,6 +125,8 @@ describe("ledger contract", () => {
     assert.equal(ledger?.items[0]?.kind, "TRANSFER");
     const row = ledgerRows(ledger?.items ?? [])[0];
     assert.equal(row?.typeLabel, "转账");
+    assert.equal(row?.title, "转账");
+    assert.equal(row?.detail, "转出");
     assert.equal(row?.amountToneClass, "money-negative");
   });
 

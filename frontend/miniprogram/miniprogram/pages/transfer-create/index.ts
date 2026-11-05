@@ -48,6 +48,7 @@ Page({
   fromAccountId: 0,
   toAccountId: 0,
   amount: "",
+  name: "",
   times: initialTransferTimes(currentBeijingBusinessTime(new Date())),
   save: editingTransfer(),
   preparing: false,
@@ -66,6 +67,7 @@ Page({
     fromSelectorOpen: false,
     toSelectorOpen: false,
     amount: "",
+    name: "",
     amountError: "",
     fromTimeText: "",
     toTimeText: "",
@@ -202,6 +204,15 @@ Page({
     this.publish();
   },
 
+  onName(event: WechatMiniprogram.Input) {
+    if (!this.canEditFields()) {
+      return;
+    }
+    this.name = event.detail.value;
+    this.clearSaveError();
+    this.publish();
+  },
+
   onOpenFromTime() {
     this.openTimeEditor("from");
   },
@@ -310,6 +321,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     if (!built.ok) {
       this.setData({ submitError: built.message, amountError: built.message.includes("金额") ? built.message : "" });
@@ -453,6 +465,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     const amountError =
       this.amount.trim().length > 0 && positiveTransferAmount(this.amount) === null ? "请输入大于 0 的金额" : "";
@@ -461,6 +474,7 @@ Page({
       fromAccountText: accountLabel(from, "请选择转出账户"),
       toAccountText: accountLabel(to, "请选择转入账户"),
       amount: this.amount,
+      name: this.name,
       amountError,
       fromTimeText: businessTimeDisplay(this.times.fromBusinessTime) ?? "",
       toTimeText: businessTimeDisplay(this.times.toBusinessTime) ?? "",

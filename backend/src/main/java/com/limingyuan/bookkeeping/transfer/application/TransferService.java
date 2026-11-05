@@ -51,21 +51,21 @@ public class TransferService {
     }
 
     public record TransferView(long id, long fromAccountId, long toAccountId, String amount, String fromBusinessTime,
-            String toBusinessTime, long firstSaveOrder) { }
-    public record Draft(long fromAccountId, long toAccountId, String amount, String fromBusinessTime, String toBusinessTime) { }
+            String toBusinessTime, long firstSaveOrder, String name) { }
+    public record Draft(long fromAccountId, long toAccountId, String amount, String fromBusinessTime,
+            String toBusinessTime, String name) { }
     public record CreateOutcome(int status, TransferView body, boolean replay) { }
 
     public CreateOutcome create(String operationId, Draft draft) {
         long userId = context.userId();
         String key = operationKey(operationId);
         var fields = fields(draft);
-        byte[] hash = hash(fields);
         try {
-            return transaction.execute(status -> createOnce(userId, key, fields, hash));
+            return transaction.execute(status -> createOnce(userId, key, fields));
         } catch (DataIntegrityViolationException ex) {
             var winner = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
             if (winner == null) throw ex;
-            return transaction.execute(status -> outcome(winner, hash));
+            return transaction.execute(status -> outcome(winner, fields));
         }
     }
 
@@ -90,16 +90,16 @@ public class TransferService {
         throw stillMoving();
     }
 
-    private CreateOutcome createOnce(long userId, String key, Parsed fields, byte[] hash) {
+    private CreateOutcome createOnce(long userId, String key, Parsed fields) {
         var locked = accounts.lockOwnedInIdOrder(List.of(fields.fromAccountId(), fields.toAccountId()));
         var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
-        if (existing != null) return outcome(existing, hash);
+        if (existing != null) return outcome(existing, fields);
         for (var account : locked) accounts.rejectIfArchived(account);
         long order = accounts.assignSharedFirstSaveOrder(fields.fromAccountId(), fields.toAccountId());
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         var saved = transfers.saveAndFlush(new TransferEntity(userId, fields.fromAccountId(), fields.toAccountId(),
-                fields.amount(), fields.fromBusinessTime(), fields.toBusinessTime(), now, order));
-        idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, hash, "CREATED", saved.getId(), now));
+                fields.amount(), fields.fromBusinessTime(), fields.toBusinessTime(), now, order, fields.name()));
+        idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, hashV2(fields), "CREATED", saved.getId(), now));
         return new CreateOutcome(201, view(saved), false);
     }
 
@@ -118,7 +118,7 @@ public class TransferService {
         requireActive(locked, current.getFromAccountId(), current.getToAccountId(), fields.fromAccountId(), fields.toAccountId());
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         current.revise(fields.fromAccountId(), fields.toAccountId(), fields.amount(), fields.fromBusinessTime(),
-                fields.toBusinessTime(), now);
+                fields.toBusinessTime(), fields.name(), now);
         transfers.saveAndFlush(current);
         return view(current);
     }
@@ -145,8 +145,10 @@ public class TransferService {
         }
     }
 
-    private CreateOutcome outcome(IdempotencyRecord record, byte[] hash) {
-        if (!record.sameRequest(hash)) {
+    private CreateOutcome outcome(IdempotencyRecord record, Parsed fields) {
+        boolean sameV2 = record.sameRequest(hashV2(fields));
+        boolean historicalBlank = fields.name() == null && record.sameRequest(hashV1(fields));
+        if (!sameV2 && !historicalBlank) {
             throw new ApiFailure(409, "IDEMPOTENCY_CONFLICT", "同一个 Idempotency-Key 已用于不同的创建请求");
         }
         if (record.getResourceId() == null) {
@@ -164,16 +166,21 @@ public class TransferService {
     private TransferView view(TransferEntity entity) {
         return new TransferView(entity.getId(), entity.getFromAccountId(), entity.getToAccountId(),
                 Money.format(entity.getAmount()), format(entity.getFromBusinessTime()), format(entity.getToBusinessTime()),
-                entity.getFirstSaveOrder());
+                entity.getFirstSaveOrder(), entity.getName());
     }
 
     private static String format(LocalDateTime time) {
         return TIME.format(time.atZone(BEIJING));
     }
 
-    private byte[] hash(Parsed fields) {
+    private byte[] hashV1(Parsed fields) {
         return TransferRequestHash.sha256(fields.fromAccountId(), fields.toAccountId(), Money.format(fields.amount()),
                 format(fields.fromBusinessTime()), format(fields.toBusinessTime()));
+    }
+
+    private byte[] hashV2(Parsed fields) {
+        return TransferRequestHash.sha256V2(fields.fromAccountId(), fields.toAccountId(), Money.format(fields.amount()),
+                format(fields.fromBusinessTime()), format(fields.toBusinessTime()), fields.name());
     }
 
     private Parsed fields(Draft draft) {
@@ -190,7 +197,15 @@ public class TransferService {
                     List.of(new ApiErrors.Detail("amount", "MUST_BE_POSITIVE")));
         }
         return new Parsed(draft.fromAccountId(), draft.toAccountId(), amount, businessTime(draft.fromBusinessTime()),
-                businessTime(draft.toBusinessTime()));
+                businessTime(draft.toBusinessTime()), canonicalName(draft.name()));
+    }
+
+    private static String canonicalName(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.length() > 255) throw new ApiFailure(400, "VALIDATION_FAILED", "名称最长 255 个字符");
+        return trimmed;
     }
 
     private static String operationKey(String raw) {
@@ -221,5 +236,5 @@ public class TransferService {
     }
 
     private record Parsed(long fromAccountId, long toAccountId, BigDecimal amount, LocalDateTime fromBusinessTime,
-            LocalDateTime toBusinessTime) { }
+            LocalDateTime toBusinessTime, String name) { }
 }
