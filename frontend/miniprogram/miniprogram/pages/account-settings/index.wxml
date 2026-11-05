@@ -16,6 +16,13 @@
   <text class="label">账户名称</text>
   <input class="field" type="text" maxlength="64" value="{{name}}" disabled="{{submitting}}" bindinput="onNameInput" />
   <text class="hint">更名不影响已有交易与余额。</text>
+  <block wx:if="{{lifecycle === 'ACTIVE'}}">
+    <text class="label">所属分组</text>
+    <view class="choice" wx:for="{{groupChoices}}" wx:key="groupKey" data-group="{{item.groupKey}}" bindtap="onSelectGroup">
+      <text>{{item.selected ? '●' : '○'}} {{item.name}}</text>
+    </view>
+  </block>
+  <text class="hint" wx:else>所属分组：{{groupLabel}}。恢复后可以修改分组。</text>
   <text class="hint" wx:if="{{lifecycle === 'ARCHIVED'}}">已归档。余额和历史保持不变，继续记账或编辑前需要先恢复。</text>
   <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
   <view class="actions">

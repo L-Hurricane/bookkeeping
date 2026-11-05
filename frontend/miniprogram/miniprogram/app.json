@@ -9,6 +9,7 @@
     "pages/account-home/index",
     "pages/account-create/index",
     "pages/account-settings/index",
+    "pages/account-group-manage/index",
     "pages/category-manage/index",
     "pages/tag-manage/index",
     "pages/account-permanent-deletion/index",

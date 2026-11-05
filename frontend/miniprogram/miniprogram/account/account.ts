@@ -12,6 +12,8 @@ export interface Account {
   readonly currentBalance: string;
   readonly createdTime: string;
   readonly lifecycle: AccountLifecycle;
+  readonly groupId: number | null;
+  readonly displayOrder: number | null;
 }
 
 export type AccountStartupRoute =
@@ -44,7 +46,12 @@ export function parseAccount(value: unknown): Account | null {
   if (!isMoneyResponse(openingBalance) || !isMoneyResponse(currentBalance) || !isCreatedTime(createdTime)) {
     return null;
   }
-  return { id, name, kind, currency, openingBalance, currentBalance, createdTime, lifecycle };
+  const groupId = optionalPositiveId(value.groupId);
+  const displayOrder = optionalPositiveId(value.displayOrder);
+  if (groupId === undefined || displayOrder === undefined) {
+    return null;
+  }
+  return { id, name, kind, currency, openingBalance, currentBalance, createdTime, lifecycle, groupId, displayOrder };
 }
 
 export function parseAccountList(value: unknown): Account[] | null {
@@ -157,6 +164,16 @@ function isAccountLifecycle(value: unknown): value is AccountLifecycle {
 
 function isNegativeMoney(value: string): boolean {
   return value.startsWith("-") && !/^[-]?0+(?:\.0+)?$/.test(value);
+}
+
+function optionalPositiveId(value: unknown): number | null | undefined {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return undefined;
+  }
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

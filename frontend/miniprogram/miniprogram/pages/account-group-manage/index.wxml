@@ -1,0 +1,25 @@
+<view class="page" wx:if="{{phase === 'loading'}}">
+  <text class="status">正在读取分组</text>
+</view>
+<view class="page" wx:elif="{{phase === 'error'}}">
+  <text class="error">{{errorMessage}}</text>
+  <button bindtap="onRetry">重新加载</button>
+</view>
+<view class="page" wx:else>
+  <text class="label">新分组名称</text>
+  <input class="field" type="text" maxlength="64" value="{{name}}" disabled="{{submitting}}" bindinput="onNameInput" />
+  <button disabled="{{submitting}}" bindtap="onCreate">新建分组</button>
+  <text class="empty" wx:if="{{groups.length === 0}}">还没有自定义分组</text>
+  <view class="card drop-target" wx:for="{{groups}}" wx:key="id" data-key="group:{{item.id}}">
+    <view class="card-main">
+      <text class="card-name">{{item.name}}</text>
+      <text class="card-kind">正常 {{item.activeCount}} · 归档 {{item.archivedCount}}</text>
+    </view>
+    <view class="card-side">
+      <text class="handle" data-kind="group" data-id="{{item.id}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+      <button data-id="{{item.id}}" disabled="{{submitting}}" catchtap="onRename">重命名</button>
+      <button data-id="{{item.id}}" disabled="{{submitting}}" catchtap="onDelete">删除</button>
+    </view>
+  </view>
+  <text class="error" wx:if="{{errorMessage}}">{{errorMessage}}</text>
+</view>

@@ -112,3 +112,34 @@
 .error {
   color: #b42318;
 }
+
+.section {
+  margin-bottom: 20rpx;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.section-title {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.section-subtotal,
+.handle {
+  font-size: 28rpx;
+}
+
+.handle {
+  padding: 8rpx 16rpx;
+  color: #1f4b73;
+}
+
+.member {
+  margin-left: 24rpx;
+}

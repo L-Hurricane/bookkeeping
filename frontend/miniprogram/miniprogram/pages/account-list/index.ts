@@ -4,6 +4,15 @@ import {
   routeActiveAccounts,
   type Account,
 } from "../../account/account";
+import {
+  hitKey,
+  indexFromDelta,
+  planAccountDrop,
+  planGroupDrop,
+  planHome,
+  type DropRect,
+  type HomeSectionPlan,
+} from "../../account/grouping";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
 import { entryChooserPath, type EntryKind } from "../../entry/fab";
@@ -12,6 +21,7 @@ import { formatMoneyLabel } from "../../ledger/ledger";
 import {
   accountArchivePath,
   accountCreatePath,
+  accountGroupManagePath,
   accountHomePath,
   accountListReloadMode,
   archiveArrivalFeedback,
@@ -31,16 +41,35 @@ interface AccountRow {
   readonly balanceToneClass: string;
 }
 
+interface SectionView {
+  readonly key: string;
+  readonly groupId: number | null;
+  readonly title: string;
+  readonly showSubtotal: boolean;
+  readonly subtotalLabel: string;
+  readonly expanded: boolean;
+  readonly accounts: AccountRow[];
+  readonly archivedIds: number[];
+}
+
+const ROW_HEIGHT = 72;
+
 Page({
   loadGuard: createLoadGuard(),
   leaveToLogin: false,
   archiveNoticeAccountId: null as number | null,
   accounts: [] as Account[],
+  sectionPlans: [] as HomeSectionPlan[],
+  collapsedKeys: [] as string[],
   summaryGeneration: 0,
+  drag: null as null | { kind: "group" | "account"; id: number; sectionKey: string; startY: number; startIndex: number },
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
     rows: [] as AccountRow[],
+    grouped: false,
+    sections: [] as SectionView[],
+    sorting: false,
     hasArchived: false,
     errorMessage: "",
     refreshError: "",
@@ -89,11 +118,11 @@ Page({
       this.setData({ refreshError: "", logoutErrorMessage: "" });
     }
     try {
-      const items = await accountApi.listAccounts();
-      if (!canApplyLoadResult(this.loadGuard, generation)) {
-        return;
-      }
-      const archived = items.length === 0 ? await accountApi.listAccounts("ARCHIVED") : [];
+      const [items, groups, archived] = await Promise.all([
+        accountApi.listAccounts(),
+        accountApi.listGroups(),
+        accountApi.listAccounts("ARCHIVED"),
+      ]);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
@@ -106,10 +135,15 @@ Page({
         this.failLoad(blocking, route.message);
         return;
       }
+      const home = planHome(groups, route.accounts, archived);
       this.accounts = [...route.accounts];
+      this.sectionPlans = [...home.sections];
       this.setData({
         phase: "ready",
-        rows: route.accounts.map(toRow),
+        grouped: home.grouped,
+        rows: home.grouped ? [] : route.accounts.map(toRow),
+        sections: home.sections.map((section) => toSection(section, this.accounts, this.collapsedKeys)),
+        sorting: home.grouped ? this.data.sorting : false,
         hasArchived: archived.length > 0,
         errorMessage: "",
         refreshError: "",
@@ -149,8 +183,108 @@ Page({
     void this.loadAccounts();
   },
 
-  onOpenAccount(event: WechatMiniprogram.BaseEvent) {
+  onOpenGroups() {
     if (this.loadGuard.loggingOut) {
+      return;
+    }
+    wx.navigateTo({ url: accountGroupManagePath() });
+  },
+
+  onToggleSort() {
+    if (!this.data.grouped || this.loadGuard.loggingOut) {
+      return;
+    }
+    this.setData({ sorting: !this.data.sorting });
+  },
+
+  onToggleSection(event: WechatMiniprogram.BaseEvent) {
+    if (this.data.sorting) {
+      return;
+    }
+    const key = String(event.currentTarget.dataset["key"] ?? "");
+    if (key.length === 0) {
+      return;
+    }
+    this.collapsedKeys = this.collapsedKeys.includes(key)
+      ? this.collapsedKeys.filter((item) => item !== key)
+      : [...this.collapsedKeys, key];
+    this.setData({
+      sections: this.sectionPlans.map((section) => toSection(section, this.accounts, this.collapsedKeys)),
+    });
+  },
+
+  onDragStart(event: WechatMiniprogram.TouchEvent) {
+    if (!this.data.sorting) {
+      return;
+    }
+    const touch = event.touches[0];
+    if (touch === undefined) {
+      return;
+    }
+    const kind = event.currentTarget.dataset["kind"] === "group" ? "group" : "account";
+    const id = Number(event.currentTarget.dataset["id"]);
+    const sectionKey = String(event.currentTarget.dataset["section"] ?? "");
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return;
+    }
+    const section = this.sectionPlans.find((item) => item.key === sectionKey);
+    const startIndex = kind === "group"
+      ? this.sectionPlans.filter((item) => item.groupId !== null).findIndex((item) => item.groupId === id)
+      : section?.accountIds.indexOf(id) ?? -1;
+    if (startIndex < 0) {
+      return;
+    }
+    this.drag = { kind, id, sectionKey, startY: touch.clientY, startIndex };
+  },
+
+  onDragMove() {
+    if (this.drag === null) {
+      return;
+    }
+  },
+
+  async onDragEnd(event: WechatMiniprogram.TouchEvent) {
+    const drag = this.drag;
+    this.drag = null;
+    const touch = event.changedTouches[0];
+    if (drag === null || touch === undefined) {
+      return;
+    }
+    const rects = await measureDropTargets(this);
+    const targetKey = hitKey(rects, touch.clientY);
+    try {
+      if (drag.kind === "group") {
+        const groupIds = this.sectionPlans.flatMap((section) => section.groupId === null ? [] : [section.groupId]);
+        const toIndex = indexFromDelta(drag.startIndex, touch.clientY - drag.startY, ROW_HEIGHT, groupIds.length);
+        const next = planGroupDrop(groupIds, drag.id, toIndex);
+        if (next === null) {
+          return;
+        }
+        await accountApi.reorderGroups(next);
+      } else {
+        const toKey = targetKey ?? drag.sectionKey;
+        const target = this.sectionPlans.find((section) => section.key === toKey);
+        const toIndex = toKey === drag.sectionKey
+          ? indexFromDelta(drag.startIndex, touch.clientY - drag.startY, ROW_HEIGHT, target?.accountIds.length ?? 0)
+          : 0;
+        const placement = planAccountDrop(this.sectionPlans, drag.id, drag.sectionKey, toKey, toIndex);
+        if (placement === null) {
+          return;
+        }
+        await accountApi.placeAccount(drag.id, placement.groupId, placement.orderedIds);
+      }
+      await this.loadAccounts();
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        return;
+      }
+      await this.loadAccounts();
+      this.setData({ refreshError: "排序没有保存，已恢复为服务器上的顺序" });
+    }
+  },
+
+  onOpenAccount(event: WechatMiniprogram.BaseEvent) {
+    if (this.loadGuard.loggingOut || this.data.sorting) {
       return;
     }
     const accountId = Number(event.currentTarget.dataset["id"]);
@@ -215,6 +349,38 @@ Page({
   },
 
 });
+
+function toSection(section: HomeSectionPlan, accounts: readonly Account[], collapsedKeys: readonly string[]): SectionView {
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  return {
+    key: section.key,
+    groupId: section.groupId,
+    title: section.title,
+    showSubtotal: section.subtotal !== null,
+    subtotalLabel: section.subtotal === null ? "" : formatMoneyLabel(section.subtotal),
+    expanded: !collapsedKeys.includes(section.key),
+    accounts: section.accountIds.flatMap((id) => {
+      const account = byId.get(id);
+      return account === undefined ? [] : [toRow(account)];
+    }),
+    archivedIds: [...section.archivedIds],
+  };
+}
+
+function measureDropTargets(page: WechatMiniprogram.Page.TrivialInstance): Promise<DropRect[]> {
+  return new Promise((resolve) => {
+    wx.createSelectorQuery().in(page).selectAll(".drop-target").boundingClientRect().exec((result) => {
+      const rects = Array.isArray(result?.[0]) ? result[0] : [];
+      resolve(rects.flatMap((rect) => {
+        const key = String(rect.dataset?.["key"] ?? "");
+        if (key.length === 0 || typeof rect.top !== "number" || typeof rect.bottom !== "number") {
+          return [];
+        }
+        return [{ key, top: rect.top, bottom: rect.bottom }];
+      }));
+    });
+  });
+}
 
 function toRow(account: Account): AccountRow {
   return {

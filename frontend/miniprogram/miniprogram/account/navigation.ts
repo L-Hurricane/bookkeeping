@@ -48,6 +48,10 @@ export function accountArchivePath(): string {
   return "/pages/account-archive/index";
 }
 
+export function accountGroupManagePath(): string {
+  return "/pages/account-group-manage/index";
+}
+
 export function accountHomePath(accountId: number): string {
   return `/pages/account-home/index?accountId=${accountId}`;
 }

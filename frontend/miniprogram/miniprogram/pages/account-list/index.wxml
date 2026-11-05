@@ -6,6 +6,8 @@
   </block>
   <block wx:else>
     <view class="toolbar">
+      <text class="tool" bindtap="onOpenGroups">管理分组</text>
+      <text class="tool" wx:if="{{grouped}}" bindtap="onToggleSort">{{sorting ? '完成排序' : '排序'}}</text>
       <text class="tool" bindtap="onCreateAccount">创建账户</text>
       <text class="tool" bindtap="onOpenArchive">归档账户</text>
       <text class="tool" bindtap="onOpenAll">全部交易</text>
@@ -27,14 +29,38 @@
     <text class="error" wx:if="{{summaryError}}">{{summaryError}}</text>
     <text class="error" wx:if="{{refreshError}}">{{refreshError}}</text>
     <button wx:if="{{refreshError}}" bindtap="onRetry">重新加载</button>
-    <text class="empty" wx:if="{{rows.length === 0 && hasArchived}}">没有正常账户</text>
-    <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
-      <view class="card-main">
-        <text class="card-name">{{item.name}}</text>
-        <text class="card-kind">{{item.kindLabel}}</text>
+    <text class="empty" wx:if="{{!grouped && rows.length === 0 && hasArchived}}">没有正常账户</text>
+    <block wx:if="{{!grouped}}">
+      <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
+        <view class="card-main">
+          <text class="card-name">{{item.name}}</text>
+          <text class="card-kind">{{item.kindLabel}}</text>
+        </view>
+        <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
       </view>
-      <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>
-    </view>
+    </block>
+    <block wx:else>
+      <view class="section drop-target" wx:for="{{sections}}" wx:key="key" data-key="{{item.key}}">
+        <view class="section-head" data-key="{{item.key}}" bindtap="onToggleSection">
+          <text class="section-title">{{item.expanded ? '▾' : '▸'}} {{item.title}}</text>
+          <text class="section-subtotal" wx:if="{{item.showSubtotal}}">{{item.subtotalLabel}}</text>
+          <text wx:if="{{sorting && item.groupId}}" class="handle" data-kind="group" data-id="{{item.groupId}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+        </view>
+        <block wx:if="{{item.expanded}}">
+          <view class="card member" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onOpenAccount">
+            <view class="card-main">
+              <text class="card-name">{{account.name}}</text>
+              <text class="card-kind">{{account.kindLabel}}</text>
+            </view>
+            <view class="card-side">
+              <text class="card-balance {{account.balanceToneClass}}">{{account.balanceLabel}}</text>
+              <text wx:if="{{sorting}}" class="handle" data-kind="account" data-id="{{account.id}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+            </view>
+          </view>
+          <text class="empty" wx:if="{{item.accounts.length === 0}}">组内暂无正常账户</text>
+        </block>
+      </view>
+    </block>
   </block>
   <entry-fab wx:if="{{rows.length > 0 && !loggingOut}}" above-tab="{{true}}" open="{{fabOpen}}" bind:toggle="onToggleFab" bind:expense="onFabExpense" bind:income="onFabIncome" bind:transfer="onFabTransfer" />
 </view>

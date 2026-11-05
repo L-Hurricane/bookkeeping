@@ -1,5 +1,6 @@
 import { ARCHIVE_CONFIRM, RESTORE_CONFIRM } from "../../account/archive-copy";
 import { accountKindLabel, type Account } from "../../account/account";
+import { appendPlacement, groupNameFor, planHome, type AccountGroup } from "../../account/grouping";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { accountListAfterArchivePath, accountPermanentDeletionPath, parseAccountSettingsQuery } from "../../account/navigation";
 import { ApiError } from "../../http/client";
@@ -11,12 +12,17 @@ Page({
   loadGuard: createLoadGuard(),
   accountId: 0,
   account: null as Account | null,
+  groups: [] as AccountGroup[],
+  activeAccounts: [] as Account[],
+  archivedAccounts: [] as Account[],
 
   data: {
     phase: "loading" as "invalid" | "loading" | "ready" | "error",
     kindLabel: "",
     name: "",
     lifecycle: "ACTIVE" as Account["lifecycle"],
+    groupLabel: "未分组",
+    groupChoices: [] as GroupChoice[],
     submitting: false,
     errorMessage: "",
   },
@@ -42,7 +48,12 @@ Page({
     }
     this.setData({ phase: "loading", errorMessage: "" });
     try {
-      const account = await accountApi.loadAccount(this.accountId);
+      const [account, groups, active, archived] = await Promise.all([
+        accountApi.loadAccount(this.accountId),
+        accountApi.listGroups(),
+        accountApi.listAccounts(),
+        accountApi.listAccounts("ARCHIVED"),
+      ]);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
@@ -51,11 +62,16 @@ Page({
         return;
       }
       this.account = account;
+      this.groups = groups;
+      this.activeAccounts = active;
+      this.archivedAccounts = archived;
       this.setData({
         phase: "ready",
         kindLabel: accountKindLabel(account.kind),
         name: account.name,
         lifecycle: account.lifecycle,
+        groupLabel: groupNameFor(account, groups),
+        groupChoices: groupChoices(groups, account.groupId),
         errorMessage: "",
       });
     } catch (error) {
@@ -81,6 +97,14 @@ Page({
     this.setData({ name: event.detail.value, errorMessage: "" });
   },
 
+  onSelectGroup(event: WechatMiniprogram.BaseEvent) {
+    const groupKey = String(event.currentTarget.dataset["group"] ?? "");
+    this.setData({
+      groupChoices: this.data.groupChoices.map((choice) => ({ ...choice, selected: choice.groupKey === groupKey })),
+      errorMessage: "",
+    });
+  },
+
   async onSave() {
     if (this.data.submitting || this.data.phase !== "ready") {
       return;
@@ -95,9 +119,32 @@ Page({
       return;
     }
     this.setData({ submitting: true, errorMessage: "" });
+    const current = this.account;
+    if (current === null) {
+      this.setData({ submitting: false, errorMessage: "账户读取失败，请稍后重试" });
+      return;
+    }
     try {
-      const account = await accountApi.renameAccount(this.accountId, name);
-      this.account = account;
+      const selected = this.data.groupChoices.find((choice) => choice.selected);
+      const nextGroupId = selected === undefined ? current.groupId : selected.groupId;
+      let account = current;
+      if (name !== account.name) {
+        account = await accountApi.renameAccount(this.accountId, name);
+        this.account = account;
+      }
+      if (account.lifecycle === "ACTIVE" && nextGroupId !== account.groupId) {
+        const home = planHome(this.groups, this.activeAccounts, this.archivedAccounts);
+        const section = home.sections.find((item) => item.groupId === nextGroupId) ?? {
+          key: nextGroupId === null ? "ungrouped" : `group:${nextGroupId}`,
+          groupId: nextGroupId,
+          title: "",
+          subtotal: null,
+          accountIds: [],
+          archivedIds: this.archivedAccounts.filter((item) => item.groupId === nextGroupId).map((item) => item.id),
+        };
+        const placement = appendPlacement(section, this.accountId);
+        await accountApi.placeAccount(this.accountId, placement.groupId, placement.orderedIds);
+      }
       this.setData({ submitting: false, name: account.name, lifecycle: account.lifecycle });
       wx.showToast({ title: "已保存", icon: "success" });
       setTimeout(() => {
@@ -183,6 +230,25 @@ function ask(title: string, content: string, confirmText: string): Promise<boole
       fail: () => resolve(false),
     });
   });
+}
+
+interface GroupChoice {
+  readonly groupKey: string;
+  readonly groupId: number | null;
+  readonly name: string;
+  readonly selected: boolean;
+}
+
+function groupChoices(groups: readonly AccountGroup[], selectedId: number | null): GroupChoice[] {
+  return [
+    { groupKey: "none", groupId: null, name: "未分组", selected: selectedId === null },
+    ...groups.map((group) => ({
+      groupKey: `group:${group.id}`,
+      groupId: group.id,
+      name: group.name,
+      selected: group.id === selectedId,
+    })),
+  ];
 }
 
 function renameFailureMessage(error: unknown): string {
