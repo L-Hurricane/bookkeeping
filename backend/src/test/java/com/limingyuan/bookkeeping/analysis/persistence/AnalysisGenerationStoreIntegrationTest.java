@@ -312,11 +312,11 @@ class AnalysisGenerationStoreIntegrationTest {
         long accountId = accountOf(userId);
         jdbc.sql("""
                 INSERT INTO analysis_snapshots
-                    (user_id, account_id, analysis_month, context_fingerprint, monthly_overview, expense_structure,
-                     surplus_reasons, points_to_watch, provider, model, prompt_version, latency_millis, permit_date,
-                     generated_at_utc)
+                    (user_id, account_id, report_scope, period_kind, analysis_month, context_fingerprint,
+                     monthly_overview, expense_structure, surplus_reasons, points_to_watch, provider, model,
+                     prompt_version, latency_millis, permit_date, generated_at_utc)
                 VALUES
-                    (:userId, NULL, :month, :fingerprint, '遗留报告', '支出', '结余', '关注',
+                    (:userId, NULL, 'LEGACY', 'MONTH', :month, :fingerprint, '遗留报告', '支出', '结余', '关注',
                      'dashscope', 'qwen3.7-flash', 'v1', 1, '2026-10-01', '2026-10-01 00:00:00.000000')
                 """).param("userId", userId).param("month", MONTH).param("fingerprint", fingerprint("legacy")).update();
         assertThat(jdbc.sql("SELECT COUNT(*) FROM analysis_snapshots WHERE user_id = :id AND account_id IS NULL")
