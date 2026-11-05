@@ -192,6 +192,7 @@ export interface LedgerPageQuery {
   readonly month?: string | null;
   readonly from?: string | null;
   readonly to?: string | null;
+  readonly name?: string | null;
   readonly cursor?: string | null;
 }
 
@@ -200,6 +201,7 @@ export function ledgerPagePath(query: LedgerPageQuery): string {
   if (query.month) params.push(`month=${query.month}`);
   if (query.from) params.push(`from=${query.from}`);
   if (query.to) params.push(`to=${query.to}`);
+  if (query.name) params.push(`name=${encodeURIComponent(query.name)}`);
   if (query.cursor) params.push(`cursor=${encodeURIComponent(query.cursor)}`);
   return `/api/v1/accounts/${query.accountId}/ledger?${params.join("&")}`;
 }

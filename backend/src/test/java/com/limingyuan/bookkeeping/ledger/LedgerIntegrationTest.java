@@ -297,6 +297,115 @@ class LedgerIntegrationTest {
         assertThat(rangeSeen).hasSizeGreaterThan(50);
     }
 
+    @Test void nameSearchPagesInsideTheActiveAccountAndTimeFilter() throws Exception {
+        insertNamed("检索样本", 49, LocalDateTime.of(2024, 3, 2, 0, 0), 810000);
+        LocalDateTime tied = LocalDateTime.of(2024, 3, 1, 0, 0);
+        LocalDateTime saved = LocalDateTime.of(2024, 3, 1, 0, 0, 0, 111111000);
+        long lower = insertNamedOne("检索样本", tied, saved, 770001);
+        long higher = insertNamedOne("检索样本", tied, saved, 770001);
+        insertNamed("检索样本", 5, LocalDateTime.of(2024, 4, 2, 9, 0), 820000);
+        insertNamedOne("其他名称", LocalDateTime.of(2024, 3, 15, 8, 0), saved, 830001);
+        insertAdjustment("3.00", LocalDateTime.of(2024, 3, 20, 8, 0), saved, 830002);
+        long otherAccount = account("搜索对手", "0.00");
+        insertTransfer(accountId, otherAccount, LocalDateTime.of(2024, 3, 18, 8, 0), LocalDateTime.of(2024, 3, 18, 9, 0), saved, 830003);
+        insertNamedOne("100%_检索", LocalDateTime.of(2024, 5, 1, 8, 0), saved, 840001);
+        insertNamedOne("100X_检索", LocalDateTime.of(2024, 5, 1, 9, 0), saved, 840002);
+        var outsider = newUser("search-outsider");
+        long outsiderAccount = initialize(outsider.token());
+        jdbc.sql("UPDATE accounts SET created_time = '2020-01-01 00:00:00' WHERE id = :id").param("id", outsiderAccount).update();
+        long outsiderCategory = categoryId(outsider.token(), "EXPENSE", "早餐");
+        mvc.perform(post("/api/v1/accounts/" + outsiderAccount + "/transactions").header("Authorization", "Bearer " + outsider.token())
+                        .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("type", "EXPENSE", "amount", "1.00", "name", "检索样本",
+                                "categoryId", outsiderCategory, "tagIds", List.of(), "businessTime", "2024-03-03T08:00:00+08:00"))))
+                .andExpect(status().isCreated());
+
+        var march = namedPage("2024-03", null, null, "检索样本", null);
+        var marchNext = namedPage("2024-03", null, null, "检索样本", march.path("nextCursor").asText());
+        var marchRetry = namedPage("2024-03", null, null, "检索样本", march.path("nextCursor").asText());
+        assertThat(march.path("items")).hasSize(50);
+        assertThat(march.path("month").asText()).isEqualTo("2024-03");
+        assertThat(march.path("summary").path("transactionCount").asInt()).isEqualTo(52);
+        assertThat(march.path("items").get(49).path("id").asLong()).isEqualTo(higher);
+        assertThat(marchNext.path("items")).hasSize(1);
+        assertThat(marchNext.path("items").get(0).path("id").asLong()).isEqualTo(lower);
+        assertThat(absent(marchNext.path("nextCursor"))).isTrue();
+        assertThat(ids(marchRetry)).containsExactlyElementsOf(ids(marchNext));
+        assertThat(names(march)).allMatch(name -> name.contains("检索样本"));
+        assertThat(names(marchNext)).containsExactly("检索样本");
+        assertThat(kinds(march)).containsOnly("TRANSACTION");
+
+        var april = namedPage(null, "2024-04-01", "2024-04-30", "检索样本", null);
+        assertThat(april.path("items")).hasSize(5);
+        assertThat(absent(april.path("month"))).isTrue();
+        april.path("items").forEach(item -> assertThat(item.path("businessTime").asText()).startsWith("2024-04-"));
+        var marchDay = namedPage(null, "2024-03-01", "2024-03-01", "检索样本", null);
+        assertThat(ids(marchDay)).containsExactly(higher, lower);
+
+        var history = new ArrayList<Long>();
+        String cursor = null;
+        int pages = 0;
+        do {
+            var body = namedPage(null, null, null, "检索样本", cursor);
+            assertThat(absent(body.path("month"))).isTrue();
+            body.path("items").forEach(item -> {
+                assertThat(item.path("kind").asText()).isEqualTo("TRANSACTION");
+                assertThat(item.path("displayName").asText()).contains("检索样本");
+                history.add(item.path("id").asLong());
+            });
+            cursor = absent(body.path("nextCursor")) ? null : body.path("nextCursor").asText();
+            pages++;
+        } while (cursor != null);
+        assertThat(pages).isGreaterThan(1);
+        assertThat(history).hasSize(56);
+        assertThat(new LinkedHashSet<>(history)).hasSize(56);
+
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("paged", "true").param("month", "2024-04").param("name", "检索样本")
+                        .param("cursor", march.path("nextCursor").asText()))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("paged", "true").param("month", "2024-03").param("name", "其他名称")
+                        .param("cursor", march.path("nextCursor").asText()))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("paged", "true").param("month", "2024-03").param("cursor", march.path("nextCursor").asText()))
+                .andExpect(status().isBadRequest());
+
+        var legacyNamed = mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token)
+                        .param("month", "2024-03").param("name", "检索样本"))
+                .andExpect(status().isOk()).andReturn();
+        var legacyNamedBody = json.readTree(legacyNamed.getResponse().getContentAsString());
+        assertThat(legacyNamedBody.path("items")).hasSize(51);
+        assertThat(absent(legacyNamedBody.path("nextCursor"))).isTrue();
+        var legacyMonth = ledger("2024-03");
+        assertThat(legacyMonth.path("items")).hasSize(54);
+        assertThat(absent(legacyMonth.path("nextCursor"))).isTrue();
+        assertThat(kinds(legacyMonth)).contains("BALANCE_ADJUSTMENT", "TRANSFER", "TRANSACTION");
+
+        var literal = namedPage(null, null, null, "100%_检索", null);
+        assertThat(literal.path("items")).hasSize(1);
+        assertThat(literal.path("items").get(0).path("displayName").asText()).isEqualTo("100%_检索");
+        var legacySearch = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/search")
+                        .header("Authorization", "Bearer " + token).param("name", "检索样本"))
+                .andExpect(status().isOk()).andReturn();
+        var legacySearchBody = json.readTree(legacySearch.getResponse().getContentAsString());
+        assertThat(legacySearchBody.path("items")).hasSize(56);
+        assertThat(legacySearchBody.path("nextCursor").isMissingNode()).isTrue();
+        var escapedSearch = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/search")
+                        .header("Authorization", "Bearer " + token).param("name", "100%_检索"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(escapedSearch.getResponse().getContentAsString()).path("items")).hasSize(1);
+
+        mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + outsider.token())
+                        .param("paged", "true").param("name", "检索样本"))
+                .andExpect(status().isNotFound());
+        var outsiderHit = mvc.perform(get("/api/v1/accounts/" + outsiderAccount + "/ledger")
+                        .header("Authorization", "Bearer " + outsider.token()).param("paged", "true").param("name", "检索样本"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(outsiderHit.getResponse().getContentAsString()).path("items")).hasSize(1);
+    }
+
     private JsonNode ledger(String month) throws Exception {
         var result = mvc.perform(get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token).param("month", month))
                 .andExpect(status().isOk()).andReturn();
@@ -339,7 +448,11 @@ class LedgerIntegrationTest {
     }
 
     private long categoryId(String type, String name) throws Exception {
-        var result = mvc.perform(get("/api/v1/categories").header("Authorization", "Bearer " + token).param("type", type))
+        return categoryId(token, type, name);
+    }
+
+    private long categoryId(String bearer, String type, String name) throws Exception {
+        var result = mvc.perform(get("/api/v1/categories").header("Authorization", "Bearer " + bearer).param("type", type))
                 .andExpect(status().isOk()).andReturn();
         for (var root : json.readTree(result.getResponse().getContentAsString()).path("items")) {
             if (root.path("name").asText().equals(name)) return root.path("id").asLong();
@@ -356,13 +469,34 @@ class LedgerIntegrationTest {
     }
 
     private JsonNode page(String month, String from, String to, String cursor) throws Exception {
+        return page(month, from, to, null, cursor);
+    }
+
+    private JsonNode namedPage(String month, String from, String to, String name, String cursor) throws Exception {
+        return page(month, from, to, name, cursor);
+    }
+
+    private JsonNode page(String month, String from, String to, String name, String cursor) throws Exception {
         var request = get("/api/v1/accounts/" + accountId + "/ledger").header("Authorization", "Bearer " + token).param("paged", "true");
         if (month != null) request.param("month", month);
         if (from != null) request.param("from", from);
         if (to != null) request.param("to", to);
+        if (name != null) request.param("name", name);
         if (cursor != null) request.param("cursor", cursor);
         var result = mvc.perform(request).andExpect(status().isOk()).andReturn();
         return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    private static List<String> names(JsonNode ledger) {
+        var names = new ArrayList<String>();
+        ledger.path("items").forEach(item -> names.add(item.path("displayName").asText()));
+        return names;
+    }
+
+    private static List<String> kinds(JsonNode ledger) {
+        var kinds = new ArrayList<String>();
+        ledger.path("items").forEach(item -> kinds.add(item.path("kind").asText()));
+        return kinds;
     }
 
     private static boolean absent(JsonNode node) {
@@ -401,6 +535,33 @@ class LedgerIntegrationTest {
                     first_saved_at_utc, first_save_order, updated_at_utc)
                 VALUES %s
                 """.formatted(values)).update();
+    }
+
+    private void insertNamed(String name, int count, LocalDateTime start, long firstOrder) {
+        var stamp = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss");
+        var saved = "2020-01-01 00:00:00.000000";
+        var values = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            if (i > 0) values.append(',');
+            values.append("(%d,%d,'EXPENSE',1.00,%d,'%s','%s','%s',%d,'%s')".formatted(userId, accountId, expenseCategory, name,
+                    start.plusMinutes(i).format(stamp), saved, firstOrder + i, saved));
+        }
+        jdbc.sql("""
+                INSERT INTO transactions (user_id, account_id, type, amount, category_id, name, business_time,
+                    first_saved_at_utc, first_save_order, updated_at_utc)
+                VALUES %s
+                """.formatted(values)).update();
+    }
+
+    private long insertNamedOne(String name, LocalDateTime business, LocalDateTime saved, long order) {
+        var keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbc.sql("""
+                INSERT INTO transactions (user_id, account_id, type, amount, category_id, name, business_time,
+                    first_saved_at_utc, first_save_order, updated_at_utc)
+                VALUES (:userId, :accountId, 'EXPENSE', 1.00, :category, :name, :business, :saved, :orderNo, :saved)
+                """).param("userId", userId).param("accountId", accountId).param("category", expenseCategory).param("name", name)
+                .param("business", business).param("saved", saved).param("orderNo", order).update(keys, "id");
+        return keys.getKey().longValue();
     }
 
     private long insertTransaction(String type, String amount, long category, LocalDateTime business, LocalDateTime saved, long order) {

@@ -80,7 +80,7 @@
           <text class="amount {{row.amountToneClass}}">{{row.amountLabel}}</text>
         </view>
       </block>
-      <block wx:if="{{phase === 'ready' && !searchActive}}">
+      <block wx:if="{{phase === 'ready'}}">
         <text class="status" wx:if="{{loadingMore}}">正在加载</text>
         <block wx:elif="{{moreError}}">
           <text class="error">{{moreError}}</text>

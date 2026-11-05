@@ -18,8 +18,9 @@ public class LedgerController {
             @RequestParam(required = false) String month,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
+            @RequestParam(required = false) String name,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "false") boolean paged) {
-        return ledger.query(accountId, month, from, to, cursor, paged);
+        return ledger.query(accountId, month, from, to, name, cursor, paged);
     }
 }

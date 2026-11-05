@@ -216,6 +216,10 @@ describe("account history pages", () => {
       ledgerPagePath({ accountId: 7, month: "2024-08", cursor: "v1|7|MONTH:2024-08" }),
       "/api/v1/accounts/7/ledger?paged=true&month=2024-08&cursor=v1%7C7%7CMONTH%3A2024-08",
     );
+    assert.equal(
+      ledgerPagePath({ accountId: 7, from: "2024-08-01", to: "2024-08-31", name: "牛奶 面包", cursor: "v1|7|RANGE" }),
+      "/api/v1/accounts/7/ledger?paged=true&from=2024-08-01&to=2024-08-31&name=%E7%89%9B%E5%A5%B6%20%E9%9D%A2%E5%8C%85&cursor=v1%7C7%7CRANGE",
+    );
   });
 
   it("appends the next page once and drops a repeated row", () => {

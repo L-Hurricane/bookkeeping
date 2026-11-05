@@ -163,23 +163,25 @@ export function buildLedgerLoadSetDataPatch(
   searchKeyword: string,
   ledgerItems: readonly LedgerEntry[],
   common: LedgerLoadSetDataCommon,
-): LedgerLoadSetDataPatch {
-  if (isActiveSearchKeyword(searchKeyword)) {
-    return common;
-  }
+): LedgerLoadSetDataCommon & { readonly rows: LedgerRow[]; readonly empty: boolean; readonly searchEmpty: boolean } {
+  const active = isActiveSearchKeyword(searchKeyword);
+  const rows = ledgerRows(ledgerItems);
   return {
     ...common,
-    rows: ledgerRows(ledgerItems),
-    empty: ledgerItems.length === 0,
+    rows,
+    empty: !active && rows.length === 0,
+    searchEmpty: active && rows.length === 0,
+    searchActive: active,
   };
 }
 
 export function shouldPreserveSearchRowsOnLedgerLoad(searchKeyword: string): boolean {
-  return isActiveSearchKeyword(searchKeyword);
+  trimSearchKeyword(searchKeyword);
+  return false;
 }
 
 export function shouldRunSearchOnMonthChange(searchKeyword: string): boolean {
-  return !isActiveSearchKeyword(searchKeyword);
+  return isActiveSearchKeyword(searchKeyword);
 }
 
 export function searchTransactionsPath(accountId: number, keyword: string): string {

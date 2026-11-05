@@ -40,20 +40,14 @@ import {
   type LedgerLocateIntent,
   type LocatedTransaction,
 } from "../../ledger/post-save";
-import { accountApi, ledgerApi, ledgerStatisticsApi, transactionApi } from "../../services/runtime";
-import { TransactionSearchResponseError } from "../../services/transaction";
+import { accountApi, ledgerApi, ledgerStatisticsApi } from "../../services/runtime";
 import {
-  canApplySearchResult,
   createSearchDebounce,
   invalidateSearchOnInputChange,
   isActiveSearchKeyword,
   nextSearchGeneration,
-  SEARCH_CONTRACT_ERROR,
   SEARCH_DEBOUNCE_MS,
-  SEARCH_LOAD_ERROR,
-  searchLedgerRows,
   buildLedgerLoadSetDataPatch,
-  shouldRefreshSearchOnListShow,
   shouldRunDebouncedSearch,
   trimSearchKeyword,
 } from "../../transaction/transaction-search";
@@ -170,22 +164,15 @@ Page({
     }
     const shown = showOpenList(this.openList());
     this.detailReturn = shown.state.visit;
-    const refreshSearch = shouldRefreshSearchOnListShow(shown.show, this.searchKeyword);
     if (shown.show.refresh === "keep") {
       return;
     }
     if (shown.show.refresh === "background-refresh") {
       void this.loadLedger("background", shown.show.scrollTop);
-      if (refreshSearch) {
-        void this.runSearch(this.searchKeyword);
-      }
       return;
     }
     if (shown.show.scope === "ledger") {
       void this.loadLedger("replace");
-      if (refreshSearch) {
-        void this.runSearch(this.searchKeyword);
-      }
       return;
     }
     void this.loadAccount();
@@ -249,7 +236,8 @@ Page({
 
   async loadLedger(presentation: "replace" | "background" = "replace", restoreScrollTop: number | null = null) {
     const filter = this.historyFilter();
-    const filterKey = accountLedgerFilterKey(filter);
+    const keyword = this.activeKeyword();
+    const filterKey = this.listKey(filter, keyword);
     const background = presentation === "background" && this.data.phase === "ready";
     const scrollRestoreGeneration = ++this.scrollRestoreGeneration;
     const generation = beginLoad(this.loadGuard);
@@ -277,8 +265,8 @@ Page({
     }
     if (filter.mode === "month") void this.loadMonthClose(filter.month);
     try {
-      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, null));
-      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter()))) {
+      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, null, keyword));
+      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey())) {
         return;
       }
       this.loadedItems = ledger.items.slice();
@@ -294,7 +282,7 @@ Page({
       }));
       if (locate === null) {
         this.setData(withDayGroups(ledgerView), () => {
-          if (scrollRestoreGeneration !== this.scrollRestoreGeneration || accountLedgerFilterKey(this.historyFilter()) !== filterKey) {
+          if (scrollRestoreGeneration !== this.scrollRestoreGeneration || this.currentListKey() !== filterKey) {
             return;
           }
           this.restoreListScroll(restoreTop);
@@ -312,7 +300,7 @@ Page({
         this.armHighlightTimer(this.highlight.generation);
       });
     } catch (error) {
-      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) || isUnauthorized(error)) {
+      if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey()) || isUnauthorized(error)) {
         return;
       }
       if (background && this.data.phase === "ready") {
@@ -325,18 +313,19 @@ Page({
 
   async loadMore() {
     const cursor = this.nextCursor;
-    if (cursor === null || this.loadingMore || isActiveSearchKeyword(this.searchKeyword) || this.data.phase !== "ready") {
+    if (cursor === null || this.loadingMore || this.data.phase !== "ready") {
       return;
     }
     const filter = this.historyFilter();
-    const filterKey = accountLedgerFilterKey(filter);
+    const keyword = this.activeKeyword();
+    const filterKey = this.listKey(filter, keyword);
     const generation = this.loadGuard.generation;
     this.loadingMore = true;
     this.setData({ loadingMore: true, moreError: "" });
     try {
-      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, cursor));
+      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, cursor, keyword));
       if (
-        !canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) ||
+        !canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey()) ||
         this.nextCursor !== cursor
       ) {
         return;
@@ -350,7 +339,7 @@ Page({
       this.setData(withDayGroups(ledgerView));
     } catch (error) {
       if (
-        !canApplyLedgerResult(this.loadGuard, generation, filterKey, accountLedgerFilterKey(this.historyFilter())) ||
+        !canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey()) ||
         this.nextCursor !== cursor ||
         isUnauthorized(error)
       ) {
@@ -386,12 +375,25 @@ Page({
     return { mode: "all" };
   },
 
-  pageQuery(filter: AccountLedgerFilter, cursor: string | null) {
+  activeKeyword(): string {
+    return isActiveSearchKeyword(this.searchKeyword) ? this.searchKeyword : "";
+  },
+
+  listKey(filter: AccountLedgerFilter, keyword: string): string {
+    return `${accountLedgerFilterKey(filter)}\n${keyword}`;
+  },
+
+  currentListKey(): string {
+    return this.listKey(this.historyFilter(), this.activeKeyword());
+  },
+
+  pageQuery(filter: AccountLedgerFilter, cursor: string | null, keyword: string) {
     return {
       accountId: this.accountId,
       month: filter.mode === "month" ? filter.month : null,
       from: filter.mode === "range" ? filter.from : null,
       to: filter.mode === "range" ? filter.to : null,
+      name: keyword.length > 0 ? keyword : null,
       cursor,
     };
   },
@@ -424,7 +426,7 @@ Page({
       errorMessage: "",
       moreError: "",
       loadingMore: false,
-      reachedEnd: this.nextCursor === null && !isActiveSearchKeyword(this.searchKeyword),
+      reachedEnd: this.nextCursor === null,
       searchActive: isActiveSearchKeyword(this.searchKeyword),
       locateMiss: locate.locateMiss,
       highlightKey: locate.highlightKey,
@@ -700,6 +702,7 @@ Page({
       this.searchKeyword = "";
       this.searchGeneration = nextSearchGeneration(this.searchGeneration);
       this.searchRequestGeneration = this.searchGeneration;
+      this.resetListScroll();
       this.setData({ searchEmpty: false, searchErrorMessage: "", searchLoading: false, searchActive: false });
       void this.loadLedger();
       return;
@@ -720,60 +723,12 @@ Page({
   },
 
   async runSearch(keyword: string) {
-    const accountId = this.accountId;
-    const generation = nextSearchGeneration(this.searchGeneration);
-    this.searchGeneration = generation;
-    this.searchRequestGeneration = generation;
-    this.setData({ searchLoading: true, searchErrorMessage: "", searchEmpty: false, phase: "ready", searchActive: true, reachedEnd: false, moreError: "" });
-    try {
-      const result = await transactionApi.searchTransactions(accountId, keyword, this.accountCreatedTime);
-      if (
-        !canApplySearchResult(
-          this.loadGuard,
-          generation,
-          accountId,
-          this.accountId,
-          keyword,
-          this.data.searchInput,
-          this.searchGeneration,
-          this.searchKeyword,
-        )
-      ) {
-        return;
-      }
-      const rows = searchLedgerRows(result.items);
-      this.setData({
-        searchLoading: false,
-        searchActive: true,
-        rows,
-        groups: decorateGroups(rows),
-        searchEmpty: rows.length === 0,
-        empty: false,
-        searchErrorMessage: "",
-        highlightKey: "",
-        locateMiss: "",
-        reachedEnd: false,
-        moreError: "",
-      });
-    } catch (error) {
-      if (
-        !canApplySearchResult(
-          this.loadGuard,
-          generation,
-          accountId,
-          this.accountId,
-          keyword,
-          this.data.searchInput,
-          this.searchGeneration,
-          this.searchKeyword,
-        ) ||
-        isUnauthorized(error)
-      ) {
-        return;
-      }
-      const searchErrorMessage = error instanceof TransactionSearchResponseError ? SEARCH_CONTRACT_ERROR : SEARCH_LOAD_ERROR;
-      this.setData({ searchLoading: false, searchErrorMessage });
-    }
+    this.searchKeyword = keyword;
+    this.searchGeneration = nextSearchGeneration(this.searchGeneration);
+    this.searchRequestGeneration = this.searchGeneration;
+    this.resetListScroll();
+    this.setData({ searchLoading: false, searchErrorMessage: "", searchEmpty: false, searchActive: true, reachedEnd: false, moreError: "" });
+    await this.loadLedger();
   },
 
   resetSearchState() {
@@ -835,6 +790,12 @@ Page({
     this.selectedMonth = "";
     this.setData({ rangeError: "" });
     this.resetHistoryAndLoad();
+  },
+
+  resetListScroll() {
+    this.pageScrollTop = 0;
+    this.scrollRestoreGeneration += 1;
+    wx.pageScrollTo({ scrollTop: 0, duration: 0 });
   },
 
   resetHistoryAndLoad() {
