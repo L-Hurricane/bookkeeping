@@ -1,5 +1,5 @@
 import { ApiError } from "../../http/client";
-import { deletionConfirm, manageRows, normalizedName, parentChoices, type NamedNode, type ParentChoice } from "../../manage/tree";
+import { deletionConfirm, manageRows, measuredRows, normalizedName, parentChoices, rowHitId, type NamedNode, type ParentChoice } from "../../manage/tree";
 import { isUnauthorized } from "../../services/ledger";
 import { tagApi } from "../../services/runtime";
 
@@ -68,19 +68,27 @@ Page({
       this.openParents(this.dragId);
       return;
     }
-    wx.createSelectorQuery().in(this).selectAll(".row").boundingClientRect((rects) => {
-      const boxes = Array.isArray(rects) ? rects : [];
-      const hit = boxes.findIndex((box) => this.dragY >= box.top && this.dragY <= box.bottom);
-      const target = this.data.rows[hit];
-      if (target === undefined || target.id === this.dragId) return;
-      const choices = parentChoices(this.nodes, this.dragId);
-      if (!choices.some((choice) => choice.id === target.id)) {
-        this.setData({ selectedId: this.dragId, errorMessage: "不能移动到这个上级" });
+    const dragId = this.dragId;
+    const dragY = this.dragY;
+    this.createSelectorQuery().selectAll(".row").boundingClientRect().exec((result) => {
+      const measured = measuredRows(result);
+      const targetId = rowHitId(measured, dragY);
+      if (measured.length === 0) {
+        this.setData({ selectedId: dragId, errorMessage: "没有识别到拖动位置，请重试" });
         return;
       }
-      this.setData({ selectedId: this.dragId, errorMessage: "" });
-      void this.run(() => tagApi.moveTag(this.dragId, "EXPENSE", target.id));
-    }).exec();
+      if (targetId === null || targetId === dragId) {
+        this.setData({ selectedId: dragId, errorMessage: "" });
+        return;
+      }
+      const choices = parentChoices(this.nodes, dragId);
+      if (!choices.some((choice) => choice.id === targetId)) {
+        this.setData({ selectedId: dragId, errorMessage: "不能移动到这个上级" });
+        return;
+      }
+      this.setData({ selectedId: dragId, errorMessage: "" });
+      void this.run(() => tagApi.moveTag(dragId, "EXPENSE", targetId));
+    });
   },
 
   openParents(id: number) {

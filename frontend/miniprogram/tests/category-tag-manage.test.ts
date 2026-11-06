@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { parseCategoryList, type CategoryNode } from "../miniprogram/category/category";
-import { deletionConfirm, keptSelection, manageRows, normalizedName, parentChoices } from "../miniprogram/manage/tree";
+import { deletionConfirm, keptSelection, manageRows, measuredRows, normalizedName, parentChoices, rowHitId } from "../miniprogram/manage/tree";
 import { createCategoryApi } from "../miniprogram/services/category";
 import { createTagApi } from "../miniprogram/services/tag";
 import { flattenTagTree, parseTagTree } from "../miniprogram/tag/tag";
@@ -70,6 +71,31 @@ describe("three-level category and shared tag selection", () => {
     assert.equal(normalizedName("   "), null);
     assert.equal(deletionConfirm("分类", "公司", 2), "删除「公司」后，2 笔交易会变为未分类。交易、金额和余额保持不变。");
     assert.equal(deletionConfirm("标签", "外卖", 2), "删除「外卖」后，会移除它在 2 笔交易上的关联。交易本身保持不变。");
+  });
+
+  it("resolves a drag by the measured row under the finger", () => {
+    const rows = measuredRows([[
+      { dataset: { id: "11" }, top: 0, bottom: 40 },
+      { dataset: { id: 12 }, top: 40, bottom: 80 },
+      { dataset: {}, top: 80, bottom: 120 },
+    ]]);
+    assert.deepEqual(rows, [
+      { id: 11, top: 0, bottom: 40 },
+      { id: 12, top: 40, bottom: 80 },
+    ]);
+    assert.equal(rowHitId(rows, 50), 12);
+    assert.equal(rowHitId(rows, 80), 12);
+    assert.equal(rowHitId(rows, 81), null);
+    assert.deepEqual(measuredRows(undefined), []);
+  });
+
+  it("keeps category and tag drag on the page query that returns rectangles", () => {
+    for (const page of ["category-manage", "tag-manage"]) {
+      const source = readFileSync(new URL(`../miniprogram/pages/${page}/index.ts`, import.meta.url), "utf8");
+      assert.equal(source.includes("createSelectorQuery().selectAll(\".row\").boundingClientRect().exec"), true);
+      assert.equal(source.includes("boundingClientRect(("), false);
+      assert.equal(source.includes(".in(this)"), false);
+    }
   });
 
   it("sends category and tag management requests", async () => {

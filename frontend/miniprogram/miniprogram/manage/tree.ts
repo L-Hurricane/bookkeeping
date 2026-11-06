@@ -53,6 +53,36 @@ export function keptSelection(original: readonly number[]): number[] {
   return [...original];
 }
 
+export interface MeasuredRow {
+  readonly id: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/** Viewport coordinates, same space as a touch clientY. A miss returns null. */
+export function rowHitId(rows: readonly MeasuredRow[], y: number): number | null {
+  const hit = rows.find((row) => y >= row.top && y <= row.bottom);
+  return hit === undefined ? null : hit.id;
+}
+
+/** Reads the first `selectAll` result from `SelectorQuery.exec`. */
+export function measuredRows(result: unknown): MeasuredRow[] {
+  const rects = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : [];
+  return rects.flatMap((rect) => {
+    if (rect === null || typeof rect !== "object") {
+      return [];
+    }
+    const record = rect as { dataset?: { id?: unknown }; top?: unknown; bottom?: unknown };
+    const id = Number(record.dataset?.id);
+    const top = Number(record.top);
+    const bottom = Number(record.bottom);
+    if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(top) || !Number.isFinite(bottom)) {
+      return [];
+    }
+    return [{ id, top, bottom }];
+  });
+}
+
 function appendRows(rows: ManageRow[], nodes: readonly NamedNode[], depth: number): void {
   for (const node of nodes) {
     rows.push({ id: node.id, name: node.name, depth, hasChildren: node.children.length > 0 });
