@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { beginLoad, beginLogout, createLoadGuard, endLogout } from "../miniprogram/account/load-guard";
 import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
@@ -244,6 +245,21 @@ describe("account history pages", () => {
     assert.equal(isUsableDateRange("2010-01-01", plusDays("2010-01-01", 3661)), false);
     assert.equal(isUsableDateRange("2024-02-02", "2024-02-01"), false);
     assert.equal(isUsableDateRange("2024-02-31", "2024-03-01"), false);
+  });
+});
+
+describe("account ledger surface", () => {
+  it("names the month filter 月份 and keeps horizontal room inside every ledger card", () => {
+    const markup = readFileSync(new URL("../miniprogram/pages/account-home/index.wxml", import.meta.url), "utf8");
+    const style = readFileSync(new URL("../miniprogram/pages/account-home/index.wxss", import.meta.url), "utf8");
+    assert.equal(markup.includes(">月份<"), true);
+    assert.equal(markup.includes(">按月<"), false);
+    assert.equal(markup.includes(">全部时间<"), true);
+    assert.equal(markup.includes(">自定义<"), true);
+    assert.equal((markup.match(/class="row /g) ?? []).length, 1);
+    assert.match(style, /\.row \{[^}]*padding: 20rpx 24rpx;/s);
+    assert.match(style, /\.row-title \{[^}]*word-break: break-all;/s);
+    assert.match(style, /\.amount \{[^}]*text-align: right;/s);
   });
 });
 

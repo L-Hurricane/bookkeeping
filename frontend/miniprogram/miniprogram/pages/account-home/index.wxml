@@ -19,7 +19,7 @@
     <view class="filter">
       <text class="month-label">{{monthLabel}}</text>
       <text class="filter-action" bindtap="onChooseAll">全部时间</text>
-      <text class="filter-action" bindtap="onChooseMonth">按月</text>
+      <text class="filter-action" bindtap="onChooseMonth">月份</text>
       <text class="filter-action" bindtap="onChooseRange">自定义</text>
     </view>
     <view class="month" wx:if="{{filterMode === 'month'}}">
