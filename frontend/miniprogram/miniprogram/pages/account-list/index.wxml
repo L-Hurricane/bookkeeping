@@ -41,20 +41,20 @@
     </block>
     <block wx:else>
       <view class="section drop-target" wx:for="{{sections}}" wx:key="key" data-key="{{item.key}}">
-        <view class="section-head" data-key="{{item.key}}" bindtap="onToggleSection">
+        <view class="section-head {{sorting && draggingKey === 'group:' + item.groupId ? 'dragging' : ''}}" data-key="{{item.key}}" bindtap="onToggleSection" style="{{sorting && draggingKey === 'group:' + item.groupId ? 'transform: translateY(' + dragOffset + 'px);' : ''}}">
           <text class="section-title">{{item.expanded ? '▾' : '▸'}} {{item.title}}</text>
           <text class="section-subtotal" wx:if="{{item.showSubtotal}}">{{item.subtotalLabel}}</text>
-          <text wx:if="{{sorting && item.groupId}}" class="handle" data-kind="group" data-id="{{item.groupId}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+          <text wx:if="{{sorting && item.groupId}}" class="handle" data-kind="group" data-id="{{item.groupId}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">⋮⋮</text>
         </view>
         <block wx:if="{{item.expanded}}">
-          <view class="card member" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onOpenAccount">
+          <view class="card member {{sorting && draggingKey === 'account:' + account.id ? 'dragging' : ''}}" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onOpenAccount" style="{{sorting && draggingKey === 'account:' + account.id ? 'transform: translateY(' + dragOffset + 'px);' : ''}}">
             <view class="card-main">
               <text class="card-name">{{account.name}}</text>
               <text class="card-kind">{{account.kindLabel}}</text>
             </view>
             <view class="card-side">
               <text class="card-balance {{account.balanceToneClass}}">{{account.balanceLabel}}</text>
-              <text wx:if="{{sorting}}" class="handle" data-kind="account" data-id="{{account.id}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+              <text wx:if="{{sorting}}" class="handle" data-kind="account" data-id="{{account.id}}" data-section="{{item.key}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">⋮⋮</text>
             </view>
           </view>
           <text class="empty" wx:if="{{item.accounts.length === 0}}">组内暂无正常账户</text>

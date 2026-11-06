@@ -66,6 +66,7 @@
   padding: 28rpx 24rpx;
   background: #ffffff;
   border-radius: 16rpx;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
 .card-main,
@@ -122,6 +123,7 @@
   align-items: center;
   gap: 16rpx;
   margin-bottom: 12rpx;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
 .section-title {
@@ -138,6 +140,15 @@
 .handle {
   padding: 8rpx 16rpx;
   color: #1f4b73;
+  letter-spacing: -2rpx;
+}
+
+.dragging {
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: 0 8rpx 24rpx rgba(17, 17, 17, 0.12);
+  transition: none;
 }
 
 .member {

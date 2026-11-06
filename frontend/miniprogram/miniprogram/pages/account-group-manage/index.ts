@@ -22,6 +22,8 @@ Page({
     name: "",
     submitting: false,
     errorMessage: "",
+    draggingId: 0,
+    dragOffset: 0,
   },
 
   onShow() {
@@ -175,15 +177,22 @@ Page({
       return;
     }
     this.drag = { id, startY: touch.clientY, startIndex };
+    this.setData({ draggingId: id, dragOffset: 0 });
   },
 
-  onDragMove() {
-    return;
+  onDragMove(event: WechatMiniprogram.TouchEvent) {
+    const drag = this.drag;
+    const touch = event.touches[0];
+    if (drag === null || touch === undefined) {
+      return;
+    }
+    this.setData({ dragOffset: touch.clientY - drag.startY });
   },
 
   async onDragEnd(event: WechatMiniprogram.TouchEvent) {
     const drag = this.drag;
     this.drag = null;
+    this.setData({ draggingId: 0, dragOffset: 0 });
     const touch = event.changedTouches[0];
     if (drag === null || touch === undefined || this.data.submitting) {
       return;

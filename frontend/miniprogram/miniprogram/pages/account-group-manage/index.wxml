@@ -10,13 +10,13 @@
   <input class="field" type="text" maxlength="64" value="{{name}}" disabled="{{submitting}}" bindinput="onNameInput" />
   <button disabled="{{submitting}}" bindtap="onCreate">新建分组</button>
   <text class="empty" wx:if="{{groups.length === 0}}">还没有自定义分组</text>
-  <view class="card drop-target" wx:for="{{groups}}" wx:key="id" data-key="group:{{item.id}}">
+  <view class="card drop-target {{draggingId === item.id ? 'dragging' : ''}}" wx:for="{{groups}}" wx:key="id" data-key="group:{{item.id}}" style="{{draggingId === item.id ? 'transform: translateY(' + dragOffset + 'px);' : ''}}">
     <view class="card-main">
       <text class="card-name">{{item.name}}</text>
       <text class="card-kind">正常 {{item.activeCount}} · 归档 {{item.archivedCount}}</text>
     </view>
     <view class="card-side">
-      <text class="handle" data-kind="group" data-id="{{item.id}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">手柄</text>
+      <text class="handle" data-kind="group" data-id="{{item.id}}" catchtouchstart="onDragStart" catchtouchmove="onDragMove" catchtouchend="onDragEnd">⋮⋮</text>
       <button data-id="{{item.id}}" disabled="{{submitting}}" catchtap="onRename">重命名</button>
       <button data-id="{{item.id}}" disabled="{{submitting}}" catchtap="onDelete">删除</button>
     </view>

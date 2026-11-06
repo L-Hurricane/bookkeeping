@@ -29,6 +29,14 @@
   padding: 24rpx;
   background: #ffffff;
   border-radius: 16rpx;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.dragging {
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 8rpx 24rpx rgba(17, 17, 17, 0.12);
+  transition: none;
 }
 
 .card-name {
@@ -45,6 +53,7 @@
 
 .handle {
   color: #1f4b73;
+  letter-spacing: -2rpx;
 }
 
 .error {

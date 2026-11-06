@@ -70,6 +70,8 @@ Page({
     grouped: false,
     sections: [] as SectionView[],
     sorting: false,
+    draggingKey: "",
+    dragOffset: 0,
     hasArchived: false,
     errorMessage: "",
     refreshError: "",
@@ -194,7 +196,8 @@ Page({
     if (!this.data.grouped || this.loadGuard.loggingOut) {
       return;
     }
-    this.setData({ sorting: !this.data.sorting });
+    this.drag = null;
+    this.setData({ sorting: !this.data.sorting, draggingKey: "", dragOffset: 0 });
   },
 
   onToggleSection(event: WechatMiniprogram.BaseEvent) {
@@ -235,17 +238,22 @@ Page({
       return;
     }
     this.drag = { kind, id, sectionKey, startY: touch.clientY, startIndex };
+    this.setData({ draggingKey: `${kind}:${id}`, dragOffset: 0 });
   },
 
-  onDragMove() {
-    if (this.drag === null) {
+  onDragMove(event: WechatMiniprogram.TouchEvent) {
+    const drag = this.drag;
+    const touch = event.touches[0];
+    if (drag === null || touch === undefined) {
       return;
     }
+    this.setData({ dragOffset: touch.clientY - drag.startY });
   },
 
   async onDragEnd(event: WechatMiniprogram.TouchEvent) {
     const drag = this.drag;
     this.drag = null;
+    this.setData({ draggingKey: "", dragOffset: 0 });
     const touch = event.changedTouches[0];
     if (drag === null || touch === undefined) {
       return;

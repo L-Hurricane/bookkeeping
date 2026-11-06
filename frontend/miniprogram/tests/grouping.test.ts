@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { Account } from "../miniprogram/account/account";
 import {
@@ -84,5 +85,16 @@ describe("account grouping", () => {
     assert.equal(indexFromDelta(0, 80, 72, 3), 1);
     assert.equal(hitKey([{ key: "group:7", top: 0, bottom: 40 }, { key: "group:8", top: 40, bottom: 80 }], 40), "group:8");
     assert.equal(hitKey([{ key: "group:7", top: 0, bottom: 40 }], 40), null);
+  });
+
+  it("uses the same grip mark as category rows and follows the finger", () => {
+    for (const page of ["account-list", "account-group-manage"]) {
+      const markup = readFileSync(new URL(`../miniprogram/pages/${page}/index.wxml`, import.meta.url), "utf8");
+      const script = readFileSync(new URL(`../miniprogram/pages/${page}/index.ts`, import.meta.url), "utf8");
+      assert.equal(markup.includes("手柄"), false);
+      assert.equal(markup.includes("⋮⋮"), true);
+      assert.equal(markup.includes("translateY"), true);
+      assert.equal(script.includes("dragOffset"), true);
+    }
   });
 });
