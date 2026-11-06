@@ -132,6 +132,16 @@ describe("ledger contract", () => {
   });
 
   it("rejects invalid money, kind, summary, accountId, and month", () => {
+    assert.equal(parseLedger(ledgerBody([{
+      ...transaction,
+      id: 3,
+      businessTime: "1991-07-15T12:00:00+09:00",
+    }, transaction])), null);
+    assert.notEqual(parseLedger(ledgerBody([{
+      ...transaction,
+      id: 3,
+      businessTime: "1991-07-15T12:00:00+08:00",
+    }, transaction])), null);
     assert.equal(parseLedger(ledgerBody([{ ...transaction, amount: "20" }])), null);
     assert.equal(parseLedger(ledgerBody([{ ...transaction, kind: "NOTE" }])), null);
     assert.equal(parseLedger({ ...ledgerBody([transaction]), summary: { ...summary, surplus: "184.5" } }), null);

@@ -70,6 +70,40 @@ class LedgerIntegrationTest {
         }
     }
 
+    @Test void historicalBusinessTimeStaysOnTheStoredClockWithPlusEight() throws Exception {
+        transact("EXPENSE", "12.00", "夏令时", "1991-07-15T12:00:00+08:00", List.of());
+        transact("EXPENSE", "8.00", "近年", "2026-11-01T09:30:00+08:00", List.of());
+        // Imported history stores a DATETIME local clock. This row is that shape.
+        jdbc.sql("""
+                INSERT INTO transactions
+                    (user_id, account_id, type, amount, name, category_id, business_time,
+                     first_saved_at_utc, first_save_order, updated_at_utc)
+                VALUES
+                    (:userId, :accountId, 'EXPENSE', 3.00, '时区空隙', :categoryId, '1986-05-04 02:30:00',
+                     '2026-01-01 00:00:00.000000', 900001, '2026-01-01 00:00:00.000000')
+                """)
+                .param("userId", userId).param("accountId", accountId).param("categoryId", expenseCategory).update();
+        var body = page(null, null, null, null);
+        assertThat(body.path("month").isMissingNode() || body.path("month").isNull()).isTrue();
+        var times = new ArrayList<String>();
+        body.path("items").forEach(item -> times.add(item.path("businessTime").asText()));
+        assertThat(times).containsExactly(
+                "2026-11-01T09:30:00+08:00",
+                "1991-07-15T12:00:00+08:00",
+                "1986-05-04T02:30:00+08:00");
+        assertThat(absent(body.path("nextCursor"))).isTrue();
+
+        var july = page("1991-07", null, null, null);
+        assertThat(july.path("month").asText()).isEqualTo("1991-07");
+        var julyTimes = new ArrayList<String>();
+        july.path("items").forEach(item -> julyTimes.add(item.path("businessTime").asText()));
+        assertThat(julyTimes).containsExactly("1991-07-15T12:00:00+08:00");
+
+        var empty = page(null, "1990-01-01", "1990-01-31", null);
+        assertThat(empty.path("items")).isEmpty();
+        assertThat(empty.path("currentBalance").asText()).isEqualTo(body.path("currentBalance").asText());
+    }
+
     @Test void emptyMonthStillReturnsCurrentBalance() throws Exception {
         transact("INCOME", "10.00", null, "2099-01-01T00:00:00+08:00", List.of());
         var ledger = ledger("2026-09");

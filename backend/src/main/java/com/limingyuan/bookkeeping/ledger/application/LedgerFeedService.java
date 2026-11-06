@@ -1,5 +1,6 @@
 package com.limingyuan.bookkeeping.ledger.application;
 
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
@@ -7,8 +8,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,8 +18,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class LedgerFeedService {
     private static final int PAGE_SIZE = 50;
-    private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
 
     private final JdbcClient jdbc;
     private final TrustedUserContext context;
@@ -253,8 +250,8 @@ public class LedgerFeedService {
             String title = displayName != null && !displayName.isBlank() ? displayName
                     : "TRANSACTION".equals(kind) ? categoryName : "TRANSFER".equals(kind) ? "转账" : "余额调整";
             return new View(kind, id, transactionType, title, Money.format(amount),
-                    TIME.format(businessTime.atZone(BEIJING)), accountId, accountName,
-                    TIME.format(accountCreatedTime.atZone(BEIJING)));
+                    ApiTime.format(businessTime), accountId, accountName,
+                    ApiTime.format(accountCreatedTime));
         }
     }
 

@@ -4,6 +4,7 @@ import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.account.application.CurrentBalance;
 import com.limingyuan.bookkeeping.adjustment.persistence.BalanceAdjustmentEntity;
 import com.limingyuan.bookkeeping.adjustment.persistence.BalanceAdjustmentRepository;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRecord;
@@ -130,7 +131,7 @@ public class AdjustmentService {
 
     private AdjustmentView view(BalanceAdjustmentEntity saved) {
         return new AdjustmentView(saved.getId(), Money.format(saved.getAdjustmentAmount()),
-                TIME.format(saved.getBusinessTime().atZone(BEIJING)), saved.getRemark());
+                ApiTime.format(saved.getBusinessTime()), saved.getRemark());
     }
 
     private static String operationKey(String raw) {

@@ -2,6 +2,7 @@ package com.limingyuan.bookkeeping.ledger.application;
 
 import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.account.application.CurrentBalance;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
@@ -12,8 +13,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -27,8 +26,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class LedgerService {
     static final int PAGE_SIZE = 50;
-    private static final ZoneId BEIJING = ZoneId.of("Asia/Shanghai");
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ssXXX");
     private static final Summary NO_MONTH_SUMMARY = new Summary(0, "0.00", "0.00", "0.00");
     private final JdbcClient jdbc;
     private final AccountService accounts;
@@ -253,16 +250,16 @@ public class LedgerService {
         for (var row : rows) {
             if ("BALANCE_ADJUSTMENT".equals(row.kind())) {
                 items.add(new LedgerItem(row.kind(), row.id(), null, "余额调整", Money.format(row.amount()), null, null,
-                        TIME.format(row.businessTime().atZone(BEIJING))));
+                        ApiTime.format(row.businessTime())));
             } else if ("TRANSFER".equals(row.kind())) {
                 String title = row.name() != null && !row.name().isBlank() ? row.name() : "转账";
                 items.add(new LedgerItem(row.kind(), row.id(), null, title, Money.format(row.amount()), null, null,
-                        TIME.format(row.businessTime().atZone(BEIJING))));
+                        ApiTime.format(row.businessTime())));
             } else {
                 items.add(new LedgerItem(row.kind(), row.id(), row.transactionType(), displayName(row.name(), row.categoryName()),
                         Money.format(row.amount()),
                         row.categoryId() == null ? null : new CategoryRef(row.categoryId(), row.categoryName()),
-                        tags.getOrDefault(row.id(), List.of()), TIME.format(row.businessTime().atZone(BEIJING))));
+                        tags.getOrDefault(row.id(), List.of()), ApiTime.format(row.businessTime())));
             }
         }
         return items;

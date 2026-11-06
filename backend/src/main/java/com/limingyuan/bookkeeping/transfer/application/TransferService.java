@@ -2,6 +2,7 @@ package com.limingyuan.bookkeeping.transfer.application;
 
 import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.account.persistence.AccountEntity;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
@@ -165,7 +166,8 @@ public class TransferService {
 
     private TransferView view(TransferEntity entity) {
         return new TransferView(entity.getId(), entity.getFromAccountId(), entity.getToAccountId(),
-                Money.format(entity.getAmount()), format(entity.getFromBusinessTime()), format(entity.getToBusinessTime()),
+                Money.format(entity.getAmount()), ApiTime.format(entity.getFromBusinessTime()),
+                ApiTime.format(entity.getToBusinessTime()),
                 entity.getFirstSaveOrder(), entity.getName());
     }
 

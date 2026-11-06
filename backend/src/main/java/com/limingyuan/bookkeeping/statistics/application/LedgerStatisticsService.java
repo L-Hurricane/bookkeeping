@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.statistics.application;
 
 import com.limingyuan.bookkeeping.account.application.CurrentBalance;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
@@ -10,7 +11,6 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LedgerStatisticsService {
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     private static final BigDecimal ZERO = new BigDecimal("0.00");
 
     private final JdbcClient jdbc;
@@ -436,7 +435,7 @@ public class LedgerStatisticsService {
     }
 
     private static String beijing(LocalDateTime time) {
-        return TIME.format(time.atZone(StatisticsPeriod.BEIJING));
+        return ApiTime.format(time);
     }
 
     private static String blankToNull(String name) {

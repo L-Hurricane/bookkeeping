@@ -4,6 +4,7 @@ import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.category.application.CategoryService;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRecord;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRepository;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
@@ -220,7 +221,7 @@ public class TransactionService {
                             TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
                             displayName(rs.getString("name"), categoryName),
                             storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
-                            List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+                            List.of(), ApiTime.format(rs.getObject("business_time", LocalDateTime.class)));
                 }).list();
         var items = new ArrayList<TransactionListItem>();
         for (var row : rows) items.add(withTags(row));
@@ -261,7 +262,7 @@ public class TransactionService {
                 TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
                 displayName(rs.getString("name"), categoryName),
                 storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
-                List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+                List.of(), ApiTime.format(rs.getObject("business_time", LocalDateTime.class)));
         }).list();
         var items = new ArrayList<TransactionListItem>();
         // Phase 6 Ledger / read-model follow-up: tag names are loaded once per row. Leave this in Phase 4A.
@@ -311,7 +312,7 @@ public class TransactionService {
         return new TransactionView(entity.getId(), entity.getAccountId(), entity.getType(), Money.format(entity.getAmount()),
                 entity.getName(), displayName(entity.getName(), categoryName),
                 entity.getCategoryId() == null ? null : new CategoryRef(entity.getCategoryId(), categoryName),
-                tagRefs, TIME.format(entity.getBusinessTime().atZone(BEIJING)), entity.getRemark());
+                tagRefs, ApiTime.format(entity.getBusinessTime()), entity.getRemark());
     }
 
     private static String displayName(String name, String categoryName) {
