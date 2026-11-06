@@ -65,6 +65,32 @@ export function rowHitId(rows: readonly MeasuredRow[], y: number): number | null
   return hit === undefined ? null : hit.id;
 }
 
+export type ParentDrop =
+  | { readonly status: "unmeasured" }
+  | { readonly status: "unchanged" }
+  | { readonly status: "rejected" }
+  | { readonly status: "move"; readonly parentId: number };
+
+/** Drop onto a measured row. Only a legal parent becomes a move. */
+export function planParentDrop(
+  nodes: readonly NamedNode[],
+  dragId: number,
+  measured: readonly MeasuredRow[],
+  y: number,
+): ParentDrop {
+  if (measured.length === 0) {
+    return { status: "unmeasured" };
+  }
+  const targetId = rowHitId(measured, y);
+  if (targetId === null || targetId === dragId) {
+    return { status: "unchanged" };
+  }
+  if (!parentChoices(nodes, dragId).some((choice) => choice.id === targetId)) {
+    return { status: "rejected" };
+  }
+  return { status: "move", parentId: targetId };
+}
+
 /** Reads the first `selectAll` result from `SelectorQuery.exec`. */
 export function measuredRows(result: unknown): MeasuredRow[] {
   const rects = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : [];

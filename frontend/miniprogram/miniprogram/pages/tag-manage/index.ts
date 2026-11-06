@@ -1,5 +1,5 @@
 import { ApiError } from "../../http/client";
-import { deletionConfirm, manageRows, measuredRows, normalizedName, parentChoices, rowHitId, type NamedNode, type ParentChoice } from "../../manage/tree";
+import { deletionConfirm, manageRows, measuredRows, normalizedName, parentChoices, planParentDrop, type NamedNode, type ParentChoice } from "../../manage/tree";
 import { isUnauthorized } from "../../services/ledger";
 import { tagApi } from "../../services/runtime";
 
@@ -71,23 +71,21 @@ Page({
     const dragId = this.dragId;
     const dragY = this.dragY;
     this.createSelectorQuery().selectAll(".row").boundingClientRect().exec((result) => {
-      const measured = measuredRows(result);
-      const targetId = rowHitId(measured, dragY);
-      if (measured.length === 0) {
+      const decision = planParentDrop(this.nodes, dragId, measuredRows(result), dragY);
+      if (decision.status === "unmeasured") {
         this.setData({ selectedId: dragId, errorMessage: "没有识别到拖动位置，请重试" });
         return;
       }
-      if (targetId === null || targetId === dragId) {
-        this.setData({ selectedId: dragId, errorMessage: "" });
-        return;
-      }
-      const choices = parentChoices(this.nodes, dragId);
-      if (!choices.some((choice) => choice.id === targetId)) {
+      if (decision.status === "rejected") {
         this.setData({ selectedId: dragId, errorMessage: "不能移动到这个上级" });
         return;
       }
+      if (decision.status !== "move") {
+        this.setData({ selectedId: dragId, errorMessage: "" });
+        return;
+      }
       this.setData({ selectedId: dragId, errorMessage: "" });
-      void this.run(() => tagApi.moveTag(dragId, "EXPENSE", targetId));
+      void this.run(() => tagApi.moveTag(dragId, "EXPENSE", decision.parentId));
     });
   },
 
