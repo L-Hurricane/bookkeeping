@@ -305,12 +305,12 @@ public class TransactionService {
         return jdbc.sql("""
                 SELECT id, name FROM tags WHERE user_id = :userId AND id IN (:ids) ORDER BY id
                 """).param("userId", context.userId()).param("ids", ids)
-                .query((rs, row) -> new TagRef(rs.getLong("id"), rs.getString("name"))).list().stream()
-                .filter(tag -> tag.id() > 0 && TagNames.reportable(tag.name())).toList();
+                .query((rs, row) -> new TagRef(rs.getLong("id"), TagNames.display(rs.getString("name")))).list().stream()
+                .filter(tag -> tag.id() > 0).toList();
     }
 
     private TransactionView detail(TransactionEntity entity, String categoryName, List<TagService.OwnedTag> ownedTags) {
-        var tagRefs = ownedTags.stream().map(tag -> new TagRef(tag.id(), tag.name())).toList();
+        var tagRefs = ownedTags.stream().map(tag -> new TagRef(tag.id(), TagNames.display(tag.name()))).toList();
         return new TransactionView(entity.getId(), entity.getAccountId(), entity.getType(), Money.format(entity.getAmount()),
                 entity.getName(), displayName(entity.getName(), categoryName),
                 entity.getCategoryId() == null ? null : new CategoryRef(entity.getCategoryId(), categoryName),

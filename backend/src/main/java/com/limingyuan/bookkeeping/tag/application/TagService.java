@@ -69,7 +69,7 @@ public class TagService {
                 }
                 var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
                 var created = tags.saveAndFlush(new TagEntity(userId, name, parentId, now));
-                return new TagView(created.getId(), created.getName(), type, List.of());
+                return new TagView(created.getId(), TagNames.display(created.getName()), type, List.of());
             });
         } catch (DataIntegrityViolationException ex) {
             if (tags.existsByUserIdAndName(userId, name)) throw conflict();
@@ -149,6 +149,9 @@ public class TagService {
         try {
             return TagNames.required(rawName);
         } catch (IllegalArgumentException ex) {
+            if ("Tag display marker is not a stored name".equals(ex.getMessage())) {
+                throw new ApiFailure(400, "VALIDATION_FAILED", "这个名称只用于显示空名称标签，不能保存");
+            }
             throw new ApiFailure(400, "VALIDATION_FAILED", "标签名称去除首尾空白后不能为空，且最长 100 个字符");
         }
     }
@@ -160,7 +163,7 @@ public class TagService {
     private TagView view(TagEntity tag, TagType type, java.util.Map<Long, List<TagEntity>> byParent) {
         var children = byParent.getOrDefault(tag.getId(), List.of()).stream()
                 .map(child -> view(child, type, byParent)).toList();
-        return new TagView(tag.getId(), tag.getName(), type, children);
+        return new TagView(tag.getId(), TagNames.display(tag.getName()), type, children);
     }
 
     private TagView persistedView(TagEntity tag, TagType type) {

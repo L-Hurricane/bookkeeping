@@ -4,6 +4,7 @@ import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
@@ -137,7 +138,7 @@ public class StatisticsService {
                 ORDER BY g.id
                 """).param("accountId", accountId).param("userId", context.userId()).param("type", type)
                 .param("start", month.atDay(1).atStartOfDay()).param("end", month.plusMonths(1).atDay(1).atStartOfDay())
-                .query((rs, row) -> items.add(new TagItem(rs.getLong("id"), rs.getString("name"), rs.getInt("transaction_count"),
+                .query((rs, row) -> items.add(new TagItem(rs.getLong("id"), TagNames.display(rs.getString("name")), rs.getInt("transaction_count"),
                         Money.format(rs.getBigDecimal("amount"))))).list();
         var untagged = jdbc.sql("""
                 SELECT COUNT(*) AS transaction_count, COALESCE(SUM(amount), 0) AS amount

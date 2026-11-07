@@ -278,10 +278,9 @@ public class LedgerService {
                 ORDER BY tt.transaction_id, g.id
                 """).param("ids", ids).query((rs, row) -> {
             long tagId = rs.getLong("id");
-            String tagName = rs.getString("name");
-            if (tagId > 0 && TagNames.reportable(tagName)) {
+            if (tagId > 0) {
                 grouped.computeIfAbsent(rs.getLong("transaction_id"), key -> new ArrayList<>())
-                        .add(new TagRef(tagId, tagName));
+                        .add(new TagRef(tagId, TagNames.display(rs.getString("name"))));
             }
             return null;
         }).list();

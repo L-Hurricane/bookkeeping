@@ -151,10 +151,8 @@ public class LedgerStatisticsService {
     }
 
     private TransactionItem item(Row row, String flow, List<CategoryRollup.Node> categories, List<TagRef> rowTags) {
-        List<TagRef> visibleTags = rowTags.stream()
-                .filter(tag -> tag.id() > 0 && TagNames.reportable(tag.name())).toList();
         return new TransactionItem(row.id(), row.accountId(), beijing(row.accountCreatedTime()), flow,
-                money(signed(row)), blankToNull(row.name()), categoryRef(categories, row.categoryId()), visibleTags,
+                money(signed(row)), blankToNull(row.name()), categoryRef(categories, row.categoryId()), rowTags,
                 beijing(row.businessTime()));
     }
 
@@ -323,8 +321,11 @@ public class LedgerStatisticsService {
                 ORDER BY tg.id
                 """).param("userId", context.userId()).param("ids", ids)
                 .query((rs, number) -> {
-                    tags.computeIfAbsent(rs.getLong("transaction_id"), ignored -> new ArrayList<>())
-                            .add(new TagRef(rs.getLong("tag_id"), rs.getString("name")));
+                    long tagId = rs.getLong("tag_id");
+                    if (tagId > 0) {
+                        tags.computeIfAbsent(rs.getLong("transaction_id"), ignored -> new ArrayList<>())
+                                .add(new TagRef(tagId, TagNames.display(rs.getString("name"))));
+                    }
                     return null;
                 }).list();
         return tags;
@@ -343,7 +344,7 @@ public class LedgerStatisticsService {
         return jdbc.sql("""
                 SELECT id, parent_id, name FROM tags WHERE user_id = :userId ORDER BY id
                 """).param("userId", context.userId())
-                .query((rs, number) -> new TagRollup.Node(rs.getLong("id"), nullableLong(rs, "parent_id"), rs.getString("name")))
+                .query((rs, number) -> new TagRollup.Node(rs.getLong("id"), nullableLong(rs, "parent_id"), TagNames.display(rs.getString("name"))))
                 .list();
     }
 

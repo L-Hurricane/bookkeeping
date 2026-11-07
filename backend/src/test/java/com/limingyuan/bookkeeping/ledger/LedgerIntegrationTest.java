@@ -1,6 +1,7 @@
 package com.limingyuan.bookkeeping.ledger;
 
 import com.limingyuan.bookkeeping.common.Money;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import com.limingyuan.bookkeeping.identity.application.OpaqueTokens;
 import com.limingyuan.bookkeeping.identity.application.UserBootstrap;
 import com.limingyuan.bookkeeping.identity.persistence.UserRepository;
@@ -129,18 +130,22 @@ class LedgerIntegrationTest {
         link(aprilBlank, blankTag);
         link(octoberSpace, spaceTag);
 
+        String marker = TagNames.UNNAMED_DISPLAY;
         var april = page("2026-04", null, null, null);
         assertThat(april.path("month").asText()).isEqualTo("2026-04");
         assertThat(ids(april)).containsExactly(aprilBlank);
         assertThat(item(april, aprilBlank).path("kind").asText()).isEqualTo("TRANSACTION");
-        assertThat(item(april, aprilBlank).path("tags")).isEmpty();
+        assertThat(tagIds(item(april, aprilBlank))).containsExactly(blankTag);
+        assertThat(tagNames(item(april, aprilBlank))).containsExactly(marker);
         assertThat(april.path("summary").path("transactionCount").asInt()).isEqualTo(1);
 
         var january = page("2025-01", null, null, null);
         assertThat(january.path("month").asText()).isEqualTo("2025-01");
         assertThat(ids(january)).containsExactly(januaryMixed, januaryBlank);
-        assertThat(tagNames(item(january, januaryBlank))).isEmpty();
-        assertThat(tagNames(item(january, januaryMixed))).containsExactly("外卖");
+        assertThat(tagIds(item(january, januaryBlank))).containsExactly(blankTag);
+        assertThat(tagNames(item(january, januaryBlank))).containsExactly(marker);
+        assertThat(tagIds(item(january, januaryMixed))).containsExactly(expenseTag, blankTag);
+        assertThat(tagNames(item(january, januaryMixed))).containsExactly("外卖", marker);
 
         var october = page("2026-10", null, null, null);
         assertThat(october.path("month").asText()).isEqualTo("2026-10");
@@ -156,18 +161,17 @@ class LedgerIntegrationTest {
         assertThat(ids(allTime)).containsExactly(octoberSpace, octoberTagged, octoberPlain, aprilBlank, januaryMixed, januaryBlank);
         assertNoBlankTagName(allTime);
 
-        var detail = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + januaryMixed)
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk()).andReturn();
-        assertThat(tagNames(json.readTree(detail.getResponse().getContentAsString()))).containsExactly("外卖");
+        var detail = readTransaction(januaryMixed);
+        assertThat(tagIds(detail)).containsExactly(expenseTag, blankTag);
+        assertThat(tagNames(detail)).containsExactly("外卖", marker);
 
         var listed = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions")
                         .header("Authorization", "Bearer " + token).param("month", "2025-01").param("type", "EXPENSE"))
                 .andExpect(status().isOk()).andReturn();
         var listedBody = json.readTree(listed.getResponse().getContentAsString());
         assertThat(ids(listedBody)).containsExactly(januaryMixed, januaryBlank);
-        assertThat(tagNames(item(listedBody, januaryMixed))).containsExactly("外卖");
-        assertThat(tagNames(item(listedBody, januaryBlank))).isEmpty();
+        assertThat(tagNames(item(listedBody, januaryMixed))).containsExactly("外卖", marker);
+        assertThat(tagNames(item(listedBody, januaryBlank))).containsExactly(marker);
 
         var byBlankTag = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions")
                         .header("Authorization", "Bearer " + token).param("month", "2026-04").param("tagId", String.valueOf(blankTag)))
@@ -184,7 +188,8 @@ class LedgerIntegrationTest {
                 .andExpect(status().isOk()).andReturn();
         var searchedItems = json.readTree(searched.getResponse().getContentAsString());
         assertThat(ids(searchedItems)).containsExactly(aprilBlank);
-        assertThat(tagNames(item(searchedItems, aprilBlank))).isEmpty();
+        assertThat(tagIds(item(searchedItems, aprilBlank))).containsExactly(blankTag);
+        assertThat(tagNames(item(searchedItems, aprilBlank))).containsExactly(marker);
 
         var statistics = mvc.perform(get("/api/v1/statistics/transactions").header("Authorization", "Bearer " + token)
                         .param("preset", "CUSTOM").param("from", "2025-01-01").param("to", "2025-01-31")
@@ -193,16 +198,72 @@ class LedgerIntegrationTest {
                 .andExpect(status().isOk()).andReturn();
         var statisticsItems = json.readTree(statistics.getResponse().getContentAsString());
         assertThat(ids(statisticsItems)).containsExactlyInAnyOrder(januaryBlank, januaryMixed);
-        assertThat(tagNames(item(statisticsItems, januaryMixed))).containsExactly("外卖");
-        assertThat(tagNames(item(statisticsItems, januaryBlank))).isEmpty();
+        assertThat(tagIds(item(statisticsItems, januaryMixed))).containsExactly(expenseTag, blankTag);
+        assertThat(tagNames(item(statisticsItems, januaryBlank))).containsExactly(marker);
         assertNoBlankTagName(statisticsItems);
+
+        var tagStatistics = mvc.perform(get("/api/v1/accounts/" + accountId + "/statistics/tags")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-04").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        var tagStatisticItems = json.readTree(tagStatistics.getResponse().getContentAsString()).path("items");
+        assertThat(tagStatisticItems).hasSize(1);
+        assertThat(tagStatisticItems.get(0).path("tagId").asLong()).isEqualTo(blankTag);
+        assertThat(tagStatisticItems.get(0).path("tagName").asText()).isEqualTo(marker);
+        assertThat(tagStatisticItems.get(0).path("transactionCount").asInt()).isEqualTo(1);
+        assertThat(tagStatisticItems.get(0).path("amount").asText()).isEqualTo("6.00");
+
+        var octoberStatistics = mvc.perform(get("/api/v1/accounts/" + accountId + "/statistics/tags")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-10").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        var octoberTagNames = new ArrayList<String>();
+        json.readTree(octoberStatistics.getResponse().getContentAsString()).path("items")
+                .forEach(item -> octoberTagNames.add(item.path("tagName").asText()));
+        assertThat(octoberTagNames).containsExactly("外卖", " ", "无标签");
 
         var storedTags = mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + token).param("type", "EXPENSE"))
                 .andExpect(status().isOk()).andReturn();
+        var stored = json.readTree(storedTags.getResponse().getContentAsString()).path("items");
         var storedNames = new ArrayList<String>();
-        json.readTree(storedTags.getResponse().getContentAsString()).path("items")
-                .forEach(tag -> storedNames.add(tag.path("name").asText()));
-        assertThat(storedNames).contains("", " ", "外卖");
+        Long listedBlankId = null;
+        for (JsonNode tag : stored) {
+            storedNames.add(tag.path("name").asText());
+            if (tag.path("id").asLong() == blankTag) listedBlankId = tag.path("id").asLong();
+        }
+        assertThat(storedNames).contains(marker, " ", "外卖").doesNotContain("");
+        assertThat(listedBlankId).isEqualTo(blankTag);
+
+        var beforeEdit = readTransaction(aprilBlank);
+        assertThat(tagIds(beforeEdit)).containsExactly(blankTag);
+        var edit = new LinkedHashMap<String, Object>();
+        edit.put("amount", beforeEdit.path("amount").asText());
+        edit.put("name", beforeEdit.path("name").asText());
+        edit.put("categoryId", beforeEdit.path("category").path("id").asLong());
+        edit.put("tagIds", tagIds(beforeEdit));
+        edit.put("businessTime", beforeEdit.path("businessTime").asText());
+        edit.put("remark", "只改备注");
+        var edited = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + aprilBlank)
+                        .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(edit)))
+                .andExpect(status().isOk()).andReturn();
+        var editedBody = json.readTree(edited.getResponse().getContentAsString());
+        assertThat(editedBody.path("remark").asText()).isEqualTo("只改备注");
+        assertThat(editedBody.path("amount").asText()).isEqualTo("6.00");
+        assertThat(tagIds(editedBody)).containsExactly(blankTag);
+        assertThat(tagNames(editedBody)).containsExactly(marker);
+        assertThat(linkedTagIds(aprilBlank)).containsExactly(blankTag);
+        assertThat(storedTagName(blankTag)).isEmpty();
+
+        mvc.perform(post("/api/v1/tags/" + blankTag + "/rename").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("type", "EXPENSE", "name", marker))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mvc.perform(post("/api/v1/tags").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("type", "EXPENSE", "name", marker))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        assertThat(storedTagName(blankTag)).isEmpty();
+        assertThat(linkedTagIds(aprilBlank)).containsExactly(blankTag);
+        assertThat(linkedTagIds(januaryMixed)).containsExactly(expenseTag, blankTag);
     }
 
     @Test void emptyMonthStillReturnsCurrentBalance() throws Exception {
@@ -647,6 +708,28 @@ class LedgerIntegrationTest {
         var names = new ArrayList<String>();
         item.path("tags").forEach(tag -> names.add(tag.path("name").asText()));
         return names;
+    }
+
+    private static List<Long> tagIds(JsonNode item) {
+        var ids = new ArrayList<Long>();
+        item.path("tags").forEach(tag -> ids.add(tag.path("id").asLong()));
+        return ids;
+    }
+
+    private JsonNode readTransaction(long transactionId) throws Exception {
+        var result = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + transactionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        return json.readTree(result.getResponse().getContentAsString());
+    }
+
+    private List<Long> linkedTagIds(long transactionId) {
+        return jdbc.sql("SELECT tag_id FROM transaction_tags WHERE transaction_id = :id ORDER BY tag_id")
+                .param("id", transactionId).query(Long.class).list();
+    }
+
+    private String storedTagName(long tagId) {
+        return jdbc.sql("SELECT name FROM tags WHERE id = :id").param("id", tagId).query(String.class).single();
     }
 
     private static void assertNoBlankTagName(JsonNode body) {

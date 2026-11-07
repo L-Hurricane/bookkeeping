@@ -89,6 +89,23 @@ describe("transaction detail", () => {
 });
 
 describe("transaction edit", () => {
+  it("keeps a display-only blank tag id when another field is edited", () => {
+    const form = editFormFromTransaction({
+      ...transaction,
+      tags: [{ id: 4797, name: "（未命名标签）" }, { id: 301, name: "外卖" }],
+    });
+    const edited: CreateTransactionForm = { ...form, remark: "只改备注" };
+    const built = buildUpdateTransactionSnapshot(edited, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(built.ok, true);
+    if (!built.ok) {
+      return;
+    }
+    const body = updateTransactionRequestBody(built.value);
+    assert.deepEqual(body.tagIds, [301, 4797]);
+    assert.equal(body.remark, "只改备注");
+    assert.equal("tags" in body, false);
+  });
+
   it("fills the form from the transaction and keeps type out of the request", () => {
     const form = editFormFromTransaction(transaction);
     assert.equal(form.type, "EXPENSE");
