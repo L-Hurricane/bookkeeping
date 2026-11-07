@@ -5,6 +5,7 @@ import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -150,8 +151,10 @@ public class LedgerStatisticsService {
     }
 
     private TransactionItem item(Row row, String flow, List<CategoryRollup.Node> categories, List<TagRef> rowTags) {
+        List<TagRef> visibleTags = rowTags.stream()
+                .filter(tag -> tag.id() > 0 && TagNames.reportable(tag.name())).toList();
         return new TransactionItem(row.id(), row.accountId(), beijing(row.accountCreatedTime()), flow,
-                money(signed(row)), blankToNull(row.name()), categoryRef(categories, row.categoryId()), rowTags,
+                money(signed(row)), blankToNull(row.name()), categoryRef(categories, row.categoryId()), visibleTags,
                 beijing(row.businessTime()));
     }
 

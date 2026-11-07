@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -102,6 +103,106 @@ class LedgerIntegrationTest {
         var empty = page(null, "1990-01-01", "1990-01-31", null);
         assertThat(empty.path("items")).isEmpty();
         assertThat(empty.path("currentBalance").asText()).isEqualTo(body.path("currentBalance").asText());
+    }
+
+    @Test void blankStoredTagNameDoesNotRejectTheTransactionPage() throws Exception {
+        mvc.perform(post("/api/v1/tags").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("type", "EXPENSE", "name", ""))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> jdbc.sql("""
+                INSERT INTO tags (user_id, name, created_at_utc)
+                VALUES (:userId, NULL, '2020-01-01 00:00:00.000000')
+                """).param("userId", userId).update())
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        long blankTag = insertTag("");
+        long spaceTag = insertTag(" ");
+        long octoberPlain = transact("EXPENSE", "1.00", "十月普通", "2026-10-02T08:00:00+08:00", List.of());
+        long octoberTagged = transact("EXPENSE", "2.00", "十月外卖", "2026-10-03T08:00:00+08:00", List.of(expenseTag));
+        long octoberSpace = transact("EXPENSE", "3.00", "十月空格", "2026-10-04T08:00:00+08:00", List.of());
+        long januaryBlank = transact("EXPENSE", "4.00", "一月空名", "2025-01-05T08:00:00+08:00", List.of());
+        long januaryMixed = transact("EXPENSE", "5.00", "一月混合", "2025-01-06T08:00:00+08:00", List.of(expenseTag));
+        long aprilBlank = transact("EXPENSE", "6.00", "四月空名", "2026-04-07T08:00:00+08:00", List.of());
+        link(januaryBlank, blankTag);
+        link(januaryMixed, blankTag);
+        link(aprilBlank, blankTag);
+        link(octoberSpace, spaceTag);
+
+        var april = page("2026-04", null, null, null);
+        assertThat(april.path("month").asText()).isEqualTo("2026-04");
+        assertThat(ids(april)).containsExactly(aprilBlank);
+        assertThat(item(april, aprilBlank).path("kind").asText()).isEqualTo("TRANSACTION");
+        assertThat(item(april, aprilBlank).path("tags")).isEmpty();
+        assertThat(april.path("summary").path("transactionCount").asInt()).isEqualTo(1);
+
+        var january = page("2025-01", null, null, null);
+        assertThat(january.path("month").asText()).isEqualTo("2025-01");
+        assertThat(ids(january)).containsExactly(januaryMixed, januaryBlank);
+        assertThat(tagNames(item(january, januaryBlank))).isEmpty();
+        assertThat(tagNames(item(january, januaryMixed))).containsExactly("外卖");
+
+        var october = page("2026-10", null, null, null);
+        assertThat(october.path("month").asText()).isEqualTo("2026-10");
+        assertThat(ids(october)).containsExactly(octoberSpace, octoberTagged, octoberPlain);
+        assertThat(tagNames(item(october, octoberPlain))).isEmpty();
+        assertThat(tagNames(item(october, octoberTagged))).containsExactly("外卖");
+        assertThat(tagNames(item(october, octoberSpace))).containsExactly(" ");
+        assertThat(ids(october)).doesNotContain(januaryBlank, aprilBlank);
+
+        var allTime = page(null, null, null, null);
+        assertThat(allTime.path("month").isMissingNode() || allTime.path("month").isNull()).isTrue();
+        assertThat(absent(allTime.path("nextCursor"))).isTrue();
+        assertThat(ids(allTime)).containsExactly(octoberSpace, octoberTagged, octoberPlain, aprilBlank, januaryMixed, januaryBlank);
+        assertNoBlankTagName(allTime);
+
+        var detail = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + januaryMixed)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(tagNames(json.readTree(detail.getResponse().getContentAsString()))).containsExactly("外卖");
+
+        var listed = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions")
+                        .header("Authorization", "Bearer " + token).param("month", "2025-01").param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        var listedBody = json.readTree(listed.getResponse().getContentAsString());
+        assertThat(ids(listedBody)).containsExactly(januaryMixed, januaryBlank);
+        assertThat(tagNames(item(listedBody, januaryMixed))).containsExactly("外卖");
+        assertThat(tagNames(item(listedBody, januaryBlank))).isEmpty();
+
+        var byBlankTag = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-04").param("tagId", String.valueOf(blankTag)))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(ids(json.readTree(byBlankTag.getResponse().getContentAsString()))).containsExactly(aprilBlank);
+
+        var untagged = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions")
+                        .header("Authorization", "Bearer " + token).param("month", "2026-04").param("untaggedOnly", "true"))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(untagged.getResponse().getContentAsString()).path("items")).isEmpty();
+
+        var searched = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/search")
+                        .header("Authorization", "Bearer " + token).param("name", "四月空名"))
+                .andExpect(status().isOk()).andReturn();
+        var searchedItems = json.readTree(searched.getResponse().getContentAsString());
+        assertThat(ids(searchedItems)).containsExactly(aprilBlank);
+        assertThat(tagNames(item(searchedItems, aprilBlank))).isEmpty();
+
+        var statistics = mvc.perform(get("/api/v1/statistics/transactions").header("Authorization", "Bearer " + token)
+                        .param("preset", "CUSTOM").param("from", "2025-01-01").param("to", "2025-01-31")
+                        .param("accountScope", "ACTIVE").param("type", "EXPENSE")
+                        .param("tagId", String.valueOf(blankTag)).param("tagMode", "DIRECT"))
+                .andExpect(status().isOk()).andReturn();
+        var statisticsItems = json.readTree(statistics.getResponse().getContentAsString());
+        assertThat(ids(statisticsItems)).containsExactlyInAnyOrder(januaryBlank, januaryMixed);
+        assertThat(tagNames(item(statisticsItems, januaryMixed))).containsExactly("外卖");
+        assertThat(tagNames(item(statisticsItems, januaryBlank))).isEmpty();
+        assertNoBlankTagName(statisticsItems);
+
+        var storedTags = mvc.perform(get("/api/v1/tags").header("Authorization", "Bearer " + token).param("type", "EXPENSE"))
+                .andExpect(status().isOk()).andReturn();
+        var storedNames = new ArrayList<String>();
+        json.readTree(storedTags.getResponse().getContentAsString()).path("items")
+                .forEach(tag -> storedNames.add(tag.path("name").asText()));
+        assertThat(storedNames).contains("", " ", "外卖");
     }
 
     @Test void emptyMonthStillReturnsCurrentBalance() throws Exception {
@@ -535,6 +636,35 @@ class LedgerIntegrationTest {
 
     private static boolean absent(JsonNode node) {
         return node == null || node.isNull() || node.isMissingNode();
+    }
+
+    private static JsonNode item(JsonNode body, long id) {
+        for (JsonNode item : body.path("items")) if (item.path("id").asLong() == id) return item;
+        throw new AssertionError(id);
+    }
+
+    private static List<String> tagNames(JsonNode item) {
+        var names = new ArrayList<String>();
+        item.path("tags").forEach(tag -> names.add(tag.path("name").asText()));
+        return names;
+    }
+
+    private static void assertNoBlankTagName(JsonNode body) {
+        body.path("items").forEach(item -> item.path("tags").forEach(tag -> assertThat(tag.path("name").asText()).isNotEmpty()));
+    }
+
+    private long insertTag(String name) {
+        var keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbc.sql("""
+                INSERT INTO tags (user_id, name, created_at_utc)
+                VALUES (:userId, :name, '2020-01-01 00:00:00.000000')
+                """).param("userId", userId).param("name", name).update(keys, "id");
+        return keys.getKey().longValue();
+    }
+
+    private void link(long transactionId, long tagId) {
+        jdbc.sql("INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (:transactionId, :tagId)")
+                .param("transactionId", transactionId).param("tagId", tagId).update();
     }
 
     private void insertTransactions(int count, LocalDateTime start, long firstOrder) {

@@ -13,4 +13,9 @@ public final class TagNames {
         if (name.length() > MAX_LENGTH) throw new IllegalArgumentException("Tag name is too long");
         return name;
     }
+
+    /** A stored name the transaction response can repeat. Whitespace stays; null and "" cannot. */
+    public static boolean reportable(String name) {
+        return name != null && !name.isEmpty();
+    }
 }

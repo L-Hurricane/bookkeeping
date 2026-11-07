@@ -6,6 +6,7 @@ import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -276,8 +277,12 @@ public class LedgerService {
                 WHERE tt.transaction_id IN (:ids)
                 ORDER BY tt.transaction_id, g.id
                 """).param("ids", ids).query((rs, row) -> {
-            grouped.computeIfAbsent(rs.getLong("transaction_id"), key -> new ArrayList<>())
-                    .add(new TagRef(rs.getLong("id"), rs.getString("name")));
+            long tagId = rs.getLong("id");
+            String tagName = rs.getString("name");
+            if (tagId > 0 && TagNames.reportable(tagName)) {
+                grouped.computeIfAbsent(rs.getLong("transaction_id"), key -> new ArrayList<>())
+                        .add(new TagRef(tagId, tagName));
+            }
             return null;
         }).list();
         return grouped;

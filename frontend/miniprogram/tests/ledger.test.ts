@@ -119,6 +119,17 @@ describe("ledger contract", () => {
     assert.equal(tags.length, 1);
   });
 
+  it("rejects an illegal tag id or an empty tag name", () => {
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 0, name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: -1, name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9 }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: "" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: null }] }])), null);
+    const spaced = parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: " " }] }]));
+    assert.equal(spaced?.items[0]?.kind, "TRANSACTION");
+  });
+
   it("parses a transfer entry with signed amount tone", () => {
     const ledger = parseLedger(
       ledgerBody([{ kind: "TRANSFER", id: 4, displayName: "转账", amount: "-12.50", businessTime: "2026-09-01T08:00:00+08:00" }]),

@@ -11,6 +11,7 @@ import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
 import com.limingyuan.bookkeeping.ledger.application.LedgerOrdering;
 import com.limingyuan.bookkeeping.tag.application.TagService;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import com.limingyuan.bookkeeping.transaction.domain.TransactionType;
 import com.limingyuan.bookkeeping.transaction.persistence.*;
 import java.math.BigDecimal;
@@ -304,7 +305,8 @@ public class TransactionService {
         return jdbc.sql("""
                 SELECT id, name FROM tags WHERE user_id = :userId AND id IN (:ids) ORDER BY id
                 """).param("userId", context.userId()).param("ids", ids)
-                .query((rs, row) -> new TagRef(rs.getLong("id"), rs.getString("name"))).list();
+                .query((rs, row) -> new TagRef(rs.getLong("id"), rs.getString("name"))).list().stream()
+                .filter(tag -> tag.id() > 0 && TagNames.reportable(tag.name())).toList();
     }
 
     private TransactionView detail(TransactionEntity entity, String categoryName, List<TagService.OwnedTag> ownedTags) {
