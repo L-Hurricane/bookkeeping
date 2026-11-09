@@ -79,15 +79,15 @@ public class AcceptanceDataSeeder {
             long income = bookable("INCOME", "其他收入", null);
             var tx = transactions;
             tx.create(accountId, "accept-ledger-tx-a", "EXPENSE",
-                    new TransactionService.Draft("10.00", "八月支出", expense, List.of(), "2026-08-31T23:59:00+08:00", null));
+                    new TransactionService.Draft("10.00", "八月支出", expense, List.of(), "2026-08-31T23:59:00+08:00", null, null));
             tx.create(accountId, "accept-ledger-tx-b", "EXPENSE",
-                    new TransactionService.Draft("35.50", "九月支出", expense, List.of(), "2026-09-05T09:00:00+08:00", null));
+                    new TransactionService.Draft("35.50", "九月支出", expense, List.of(), "2026-09-05T09:00:00+08:00", null, null));
             tx.create(accountId, "accept-ledger-tx-c", "INCOME",
-                    new TransactionService.Draft("200.00", "九月收入", income, List.of(), "2026-09-05T09:00:00+08:00", null));
+                    new TransactionService.Draft("200.00", "九月收入", income, List.of(), "2026-09-05T09:00:00+08:00", null, null));
             tx.create(accountId, "accept-ledger-tx-d", "EXPENSE",
-                    new TransactionService.Draft("-20.00", "未分类支出", null, List.of(), "2026-09-12T20:00:00+08:00", null));
+                    new TransactionService.Draft("-20.00", "未分类支出", null, List.of(), "2026-09-12T20:00:00+08:00", null, null));
             tx.create(accountId, "accept-ledger-tx-e", "INCOME",
-                    new TransactionService.Draft("88.00", "十月收入", income, List.of(), "2026-10-01T00:00:00+08:00", null));
+                    new TransactionService.Draft("88.00", "十月收入", income, List.of(), "2026-10-01T00:00:00+08:00", null, null));
             adjustments.create(accountId, "accept-ledger-adj-f",
                     new AdjustmentService.Draft("1300.00", "2026-09-20T12:00:00+08:00", null));
         });

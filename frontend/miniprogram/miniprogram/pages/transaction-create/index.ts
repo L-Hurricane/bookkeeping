@@ -112,6 +112,7 @@ Page({
     type: "EXPENSE" as TransactionType,
     amount: "",
     name: "",
+    counterpartyName: "",
     remark: "",
     categoryText: "未分类",
     amountError: "",
@@ -234,6 +235,14 @@ Page({
     }
     this.form = { ...this.form, name: event.detail.value };
     this.setData({ name: event.detail.value, submitError: "" });
+  },
+
+  onCounterpartyInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
+    this.form = { ...this.form, counterpartyName: event.detail.value };
+    this.setData({ counterpartyName: event.detail.value, submitError: "" });
   },
 
   onRemarkInput(event: WechatMiniprogram.Input) {
@@ -856,6 +865,7 @@ Page({
       type,
       amount: this.form.amount,
       name: this.form.name,
+      counterpartyName: this.form.counterpartyName ?? "",
       remark: this.form.remark,
       categoryText: categoryLabel(categories.items, this.form.categoryId),
       categoryPhase: categories.phase,

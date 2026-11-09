@@ -25,6 +25,7 @@ export interface TransactionView {
   readonly tags: readonly TagRef[];
   readonly businessTime: string;
   readonly remark: string | null;
+  readonly counterpartyName?: string | null;
 }
 
 export function parseTransactionResponse(value: unknown): TransactionView | null {
@@ -40,8 +41,9 @@ export function parseTransactionResponse(value: unknown): TransactionView | null
   const name = optionalText(value.name);
   const displayName = optionalText(value.displayName);
   const remark = optionalText(value.remark);
+  const counterpartyName = optionalText(value.counterpartyName);
   const category = parseCategoryRef(value.category);
-  if (name === undefined || displayName === undefined || remark === undefined || category === undefined) {
+  if (name === undefined || displayName === undefined || remark === undefined || counterpartyName === undefined || category === undefined) {
     return null;
   }
   const tags: TagRef[] = [];
@@ -63,6 +65,7 @@ export function parseTransactionResponse(value: unknown): TransactionView | null
     tags,
     businessTime: value.businessTime,
     remark,
+    counterpartyName,
   };
 }
 

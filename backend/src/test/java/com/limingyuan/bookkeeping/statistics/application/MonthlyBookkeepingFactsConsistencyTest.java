@@ -97,7 +97,7 @@ class MonthlyBookkeepingFactsConsistencyTest {
         outer.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         outer.executeWithoutResult(status -> {
             asUser(() -> transactions.create(accountId, UUID.randomUUID().toString(), "EXPENSE",
-                    new TransactionService.Draft("9.00", "未提交", shopping, List.of(), "2026-09-16T08:00:00+08:00", null)));
+                    new TransactionService.Draft("9.00", "未提交", shopping, List.of(), "2026-09-16T08:00:00+08:00", null, null)));
             var seen = asUser(() -> facts.build(accountId, "2026-09"));
             assertThat(seen.expenseTransactionCount()).isZero();
             assertThat(seen.netExpense()).isEqualTo("0.00");
@@ -110,7 +110,7 @@ class MonthlyBookkeepingFactsConsistencyTest {
         var writer = new TransactionTemplate(transactionManager);
         writer.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         writer.executeWithoutResult(status -> asUser(() -> transactions.create(accountId, UUID.randomUUID().toString(), "EXPENSE",
-                new TransactionService.Draft("1.00", "已提交", shopping, List.of(), "2026-09-15T08:00:00+08:00", null))));
+                new TransactionService.Draft("1.00", "已提交", shopping, List.of(), "2026-09-15T08:00:00+08:00", null, null))));
     }
 
     private long expenseCount() {

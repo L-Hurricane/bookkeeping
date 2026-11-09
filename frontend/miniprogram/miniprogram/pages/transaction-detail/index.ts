@@ -135,8 +135,11 @@ Page({
     tagNamesLabel: "—",
     businessTimeLabel: "",
     remarkLabel: "",
+    counterpartyLabel: "",
+    showCounterparty: false,
     amount: "",
     name: "",
+    counterpartyName: "",
     remark: "",
     amountError: "",
     accountText: "选择账户",
@@ -364,6 +367,14 @@ Page({
     }
     this.form = { ...this.form, remark: event.detail.value };
     this.setData({ remark: event.detail.value, submitError: "" });
+  },
+
+  onCounterpartyInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
+    this.form = { ...this.form, counterpartyName: event.detail.value };
+    this.setData({ counterpartyName: event.detail.value, submitError: "" });
   },
 
   onOpenCategories() {
@@ -963,6 +974,8 @@ Page({
       businessTimeLabel: view.businessTimeLabel,
       remarkLabel: view.remarkLabel,
       showRemark: view.remarkLabel !== "—",
+      counterpartyLabel: view.counterpartyLabel,
+      showCounterparty: this.transaction.type === "EXPENSE" && view.counterpartyLabel !== "—",
       accountName: this.accountName,
       deleteLocked: false,
       deleteHint: "",
@@ -992,6 +1005,7 @@ Page({
       typeLabel: this.form.type === "INCOME" ? "收入" : "支出",
       amount: this.form.amount,
       name: this.form.name,
+      counterpartyName: this.form.counterpartyName ?? "",
       remark: this.form.remark,
       categoryText: editCategoryText(this.categories.items, this.form.categoryId, this.transaction?.category ?? null),
       categoryPhase: this.categories.phase,

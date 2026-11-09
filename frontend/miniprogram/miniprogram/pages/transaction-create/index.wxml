@@ -25,6 +25,10 @@
   <text class="error" wx:if="{{accountError && accountPhase === 'ready'}}">{{accountError}}</text>
   <text class="label">名称</text>
   <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
+  <block wx:if="{{type === 'EXPENSE'}}">
+    <text class="label">交易对方</text>
+    <input class="field" type="text" value="{{counterpartyName}}" disabled="{{formLocked}}" bindinput="onCounterpartyInput" />
+  </block>
   </view>
   <view class="group">
   <text class="label">分类</text>

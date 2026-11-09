@@ -46,6 +46,10 @@
     <text class="label">交易时间</text>
     <text>{{businessTimeLabel}}</text>
   </view>
+  <view class="fact" wx:if="{{showCounterparty}}">
+    <text class="label">交易对方</text>
+    <text>{{counterpartyLabel}}</text>
+  </view>
   <view class="fact" wx:if="{{showRemark}}">
     <text class="label">备注</text>
     <text>{{remarkLabel}}</text>
@@ -103,6 +107,10 @@
     <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTime">{{businessTimeText}} ></view>
     <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
     <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
+    <block wx:if="{{typeLabel === '支出'}}">
+      <text class="label">交易对方</text>
+      <input class="field" type="text" value="{{counterpartyName}}" disabled="{{formLocked}}" bindinput="onCounterpartyInput" />
+    </block>
     <text class="label">备注</text>
     <input class="field" type="text" value="{{remark}}" disabled="{{formLocked}}" bindinput="onRemarkInput" />
   </view>

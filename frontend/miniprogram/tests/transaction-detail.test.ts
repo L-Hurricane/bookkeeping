@@ -6,6 +6,7 @@ import { saveSession } from "../miniprogram/session/session";
 import { TransactionResponseError, createTransactionApi, transactionResourcePath } from "../miniprogram/services/transaction";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import type { Tag } from "../miniprogram/tag/tag";
+import { parseTransactionResponse } from "../miniprogram/transaction/transaction";
 import {
   abandonEditSession,
   applyCreateTagToEditSession,
@@ -85,6 +86,11 @@ describe("transaction detail", () => {
     assert.equal(empty.categoryLabel, "未分类");
     assert.equal(empty.tagsLabel, "—");
     assert.equal(empty.remarkLabel, "—");
+    assert.equal(empty.counterpartyLabel, "—");
+    const named = transactionDetailView({ ...transaction, counterpartyName: "商店" });
+    assert.equal(named.counterpartyLabel, "商店");
+    assert.equal(parseTransactionResponse(responseBody())?.counterpartyName, null);
+    assert.equal(parseTransactionResponse({ ...responseBody(), counterpartyName: " 商店 " })?.counterpartyName, " 商店 ");
   });
 });
 
@@ -104,6 +110,28 @@ describe("transaction edit", () => {
     assert.deepEqual(body.tagIds, [301, 4797]);
     assert.equal(body.remark, "只改备注");
     assert.equal("tags" in body, false);
+    const withParty = buildUpdateTransactionSnapshot({ ...edited, counterpartyName: " 商店 " }, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(withParty.ok, true);
+    if (withParty.ok) {
+      assert.equal(updateTransactionRequestBody(withParty.value).counterpartyName, "商店");
+    }
+    const cleared = buildUpdateTransactionSnapshot({ ...edited, counterpartyName: "  " }, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) {
+      assert.equal("counterpartyName" in updateTransactionRequestBody(cleared.value), false);
+    }
+    const income = buildUpdateTransactionSnapshot(
+      { ...edited, type: "INCOME", counterpartyName: "商店" },
+      1001,
+      1001,
+      4001,
+      "INCOME",
+      created,
+    );
+    assert.equal(income.ok, true);
+    if (income.ok) {
+      assert.equal("counterpartyName" in updateTransactionRequestBody(income.value), false);
+    }
   });
 
   it("fills the form from the transaction and keeps type out of the request", () => {

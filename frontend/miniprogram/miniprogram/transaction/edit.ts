@@ -33,6 +33,7 @@ export interface TransactionDetailView {
   readonly tagsLabel: string;
   readonly businessTimeLabel: string;
   readonly remarkLabel: string;
+  readonly counterpartyLabel: string;
 }
 
 export interface UpdateTransactionSnapshot {
@@ -48,6 +49,7 @@ export interface UpdateTransactionSnapshot {
   readonly tagIds: readonly number[];
   readonly businessTime: string;
   readonly remark: string | null;
+  readonly counterpartyName?: string | null;
 }
 
 export interface UpdateTransactionRequestBody {
@@ -58,6 +60,7 @@ export interface UpdateTransactionRequestBody {
   readonly tagIds: readonly number[];
   readonly businessTime: string;
   readonly remark?: string;
+  readonly counterpartyName?: string;
 }
 
 export type UpdatePhase = "editing" | "submitting" | "uncertain" | "success";
@@ -97,6 +100,8 @@ export function transactionDetailView(transaction: TransactionView): Transaction
     tagsLabel: tagNames.length === 0 ? "—" : tagNames.join(" "),
     businessTimeLabel,
     remarkLabel: transaction.remark === null || transaction.remark.length === 0 ? "—" : transaction.remark,
+    counterpartyLabel:
+      transaction.counterpartyName == null || transaction.counterpartyName.length === 0 ? "—" : transaction.counterpartyName,
   };
 }
 
@@ -214,6 +219,7 @@ export function editFormFromTransaction(transaction: TransactionView): CreateTra
     selectedTagIds: transaction.tags.map((tag) => tag.id),
     businessTime: transaction.businessTime,
     remark: transaction.remark ?? "",
+    counterpartyName: transaction.counterpartyName ?? "",
   };
 }
 
@@ -267,6 +273,7 @@ export function buildUpdateTransactionSnapshot(
       tagIds,
       businessTime: form.businessTime,
       remark: normalizeOptionalText(form.remark),
+      counterpartyName: fixedType === "EXPENSE" ? normalizeOptionalText(form.counterpartyName ?? "") : null,
     },
   };
 }
@@ -280,6 +287,9 @@ export function updateTransactionRequestBody(snapshot: UpdateTransactionSnapshot
     tagIds: [...snapshot.tagIds],
     businessTime: snapshot.businessTime,
     ...(snapshot.remark === null ? {} : { remark: snapshot.remark }),
+    ...(snapshot.fixedType === "EXPENSE" && snapshot.counterpartyName != null
+      ? { counterpartyName: snapshot.counterpartyName }
+      : {}),
   };
 }
 
