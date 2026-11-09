@@ -34,6 +34,7 @@ import {
   HIGHLIGHT_MS,
   idleHighlight,
   nextLocateGeneration,
+  nextLocateCursor,
   parsePostSaveResult,
   settleLedger,
   startHighlight,
@@ -265,13 +266,36 @@ Page({
     }
     if (filter.mode === "month") void this.loadMonthClose(filter.month);
     try {
-      const ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, null, keyword));
+      let ledger = await ledgerApi.getLedgerPage(this.pageQuery(filter, null, keyword));
       if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey())) {
         return;
       }
-      this.loadedItems = ledger.items.slice();
-      this.nextCursor = ledger.nextCursor;
-      const settlement = settleLedger(this.pendingPostSave, "success", this.loadedItems);
+      let items = ledger.items.slice();
+      let cursor = ledger.nextCursor;
+      const seenCursors = new Set<string>();
+      let stalled = false;
+      while (true) {
+        const step = nextLocateCursor(this.pendingPostSave, items, cursor);
+        if (step === null) {
+          break;
+        }
+        if (seenCursors.has(step)) {
+          stalled = true;
+          break;
+        }
+        seenCursors.add(step);
+        const page = await ledgerApi.getLedgerPage(this.pageQuery(filter, step, keyword));
+        if (!canApplyLedgerResult(this.loadGuard, generation, filterKey, this.currentListKey())) {
+          return;
+        }
+        items = appendLedgerPage(items, page.items);
+        cursor = page.nextCursor;
+        ledger = page;
+      }
+      this.loadedItems = items;
+      this.nextCursor = cursor;
+      const morePages = !stalled && nextLocateCursor(this.pendingPostSave, items, cursor) !== null;
+      const settlement = settleLedger(this.pendingPostSave, "success", this.loadedItems, morePages);
       this.pendingPostSave = settlement.pending;
       const locate = settlement.locate;
       const explicitLocate = this.pendingPostSave !== null || locate !== null;
@@ -607,8 +631,6 @@ Page({
     const pending = accepted?.pending ?? null;
     const listed = noteSavedTransaction(this.openList(), pending?.targetMonth ?? null);
     this.detailReturn = listed.visit;
-    this.selectedMonth = listed.month;
-    if (isMonth(listed.month)) this.filterMode = "month";
     if (pending === null) {
       return;
     }
@@ -667,8 +689,6 @@ Page({
     if (applyAcceptedLocate(current, next) === null) {
       return;
     }
-    this.selectedMonth = next.selectedMonth;
-    if (isMonth(next.selectedMonth)) this.filterMode = "month";
     this.pendingPostSave = next.pending;
     this.stopLocateFeedback();
     this.setData({ highlightKey: "", locateMiss: "" });

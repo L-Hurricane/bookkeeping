@@ -177,7 +177,8 @@ describe("transaction edit", () => {
     assert.equal(saved.postSave?.targetMonth, "2026-08");
     assert.equal(saved.postSave?.transactionId, 4001);
     const home = acceptTransactionCreated({ selectedMonth: "2026-09", pending: null, highlightKey: "" }, saved.postSave);
-    assert.equal(home.selectedMonth, "2026-08");
+    assert.equal(home.selectedMonth, "2026-09");
+    assert.equal(home.pending?.targetMonth, "2026-08");
     assert.equal(home.pending?.kind, "transaction");
     assert.equal(home.pending?.recordId, 4001);
     const otherType = apiFor(() => ({ statusCode: 200, data: { ...responseBody(), type: "INCOME" } }));

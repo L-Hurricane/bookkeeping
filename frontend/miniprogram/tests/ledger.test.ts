@@ -7,6 +7,7 @@ import { appendLedgerPage, isUsableDateRange } from "../miniprogram/ledger/accou
 import {
   canApplyLedgerResult,
   formatBusinessTime,
+  ledgerBalanceEffectAmount,
   ledgerPagePath,
   ledgerPath,
   ledgerRows,
@@ -45,6 +46,19 @@ const transaction = {
   businessTime: "2026-09-12T20:00:00+08:00",
 };
 
+function entry(transactionType: "INCOME" | "EXPENSE", amount: string, id: number) {
+  return {
+    kind: "TRANSACTION",
+    id,
+    transactionType,
+    displayName: "记录",
+    amount,
+    category: null,
+    tags: [],
+    businessTime: "2026-09-12T20:00:00+08:00",
+  };
+}
+
 const adjustment = {
   kind: "BALANCE_ADJUSTMENT",
   id: 8,
@@ -79,11 +93,13 @@ describe("ledger contract", () => {
       assert.equal(ledger.items[1].transactionType, "EXPENSE");
     }
     const rows = ledgerRows(ledger?.items ?? []);
-    assert.equal(rows[0]?.typeLabel, "调整");
+    assert.equal(rows[0]?.typeLabel, "余额调整");
     assert.equal(rows[0]?.amountLabel, "¥37.50");
+    assert.equal(rows[0]?.amountToneClass, "money-positive");
     assert.equal(rows[1]?.recordId, 2);
     assert.equal(rows[1]?.typeLabel, "支出");
-    assert.equal(rows[1]?.amountLabel, "¥-20.00");
+    assert.equal(rows[1]?.amountLabel, "¥20.00");
+    assert.equal(rows[1]?.amountToneClass, "money-positive");
     assert.equal(rows[1]?.detail, "未分类 外卖");
     assert.equal(formatBusinessTime("2026-09-05T09:00:00+08:00"), "09-05 09:00");
     assert.equal(ledger?.summary.transactionCount, 3);
@@ -136,10 +152,51 @@ describe("ledger contract", () => {
     );
     assert.equal(ledger?.items[0]?.kind, "TRANSFER");
     const row = ledgerRows(ledger?.items ?? [])[0];
-    assert.equal(row?.typeLabel, "转账");
+    assert.equal(row?.typeLabel, "转出");
     assert.equal(row?.title, "转账");
-    assert.equal(row?.detail, "转出");
+    assert.equal(row?.detail, "");
+    assert.equal(row?.amountLabel, "¥-12.50");
     assert.equal(row?.amountToneClass, "money-negative");
+  });
+
+  it("shows balance effect for income, expense, transfers, adjustments, and zero without an account-kind flip", () => {
+    const items = [
+      entry("INCOME", "20.00", 1),
+      entry("INCOME", "-12.00", 2),
+      entry("EXPENSE", "20.00", 3),
+      entry("EXPENSE", "-12.00", 4),
+      entry("EXPENSE", "0.00", 5),
+      { kind: "TRANSFER", id: 6, displayName: "工资卡", amount: "50.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "TRANSFER", id: 7, displayName: "工资卡", amount: "-50.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "BALANCE_ADJUSTMENT", id: 8, displayName: "余额调整", amount: "0.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "BALANCE_ADJUSTMENT", id: 9, displayName: "余额调整", amount: "-5.00", businessTime: "2026-09-01T08:00:00+08:00" },
+    ];
+    const ledger = parseLedger(ledgerBody(items));
+    const stored = ledger?.items[3];
+    assert.equal(stored?.kind, "TRANSACTION");
+    if (stored?.kind === "TRANSACTION") {
+      assert.equal(stored.amount, "-12.00");
+    }
+    const expense = ledger?.items[2];
+    assert.equal(expense?.kind, "TRANSACTION");
+    if (expense?.kind === "TRANSACTION") {
+      assert.equal(ledgerBalanceEffectAmount(expense), "-20.00");
+    }
+    const rows = ledgerRows(ledger?.items ?? []);
+    assert.deepEqual(
+      rows.map((row) => [row.typeLabel, row.amountLabel, row.amountToneClass]),
+      [
+        ["收入", "¥20.00", "money-positive"],
+        ["收入", "¥-12.00", "money-negative"],
+        ["支出", "¥-20.00", "money-negative"],
+        ["支出", "¥12.00", "money-positive"],
+        ["支出", "¥0.00", "money-zero"],
+        ["转入", "¥50.00", "money-positive"],
+        ["转出", "¥-50.00", "money-negative"],
+        ["余额调整", "¥0.00", "money-zero"],
+        ["余额调整", "¥-5.00", "money-negative"],
+      ],
+    );
   });
 
   it("rejects invalid money, kind, summary, accountId, and month", () => {

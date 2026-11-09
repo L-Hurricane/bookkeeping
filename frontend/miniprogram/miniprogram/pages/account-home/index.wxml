@@ -75,7 +75,10 @@
           <view class="row-main">
             <text class="row-title">{{row.title}}</text>
             <text class="row-detail" wx:if="{{row.detail}}">{{row.detail}}</text>
-            <text class="row-time">{{row.timeLabel}}</text>
+            <view class="row-meta">
+              <text class="row-type">{{row.typeLabel}}</text>
+              <text class="row-time">{{row.timeLabel}}</text>
+            </view>
           </view>
           <text class="amount {{row.amountToneClass}}">{{row.amountLabel}}</text>
         </view>

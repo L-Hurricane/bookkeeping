@@ -57,7 +57,8 @@ describe("transfer ledger", () => {
     assert.equal(ledger?.items[0]?.kind, "TRANSFER");
     const rows = ledgerRows(ledger?.items ?? []);
     assert.equal(rows[0]?.kind, "transfer");
-    assert.equal(rows[0]?.typeLabel, "转账");
+    assert.equal(rows[0]?.typeLabel, "转出");
+    assert.equal(rows[1]?.typeLabel, "转入");
     assert.equal(rows[0]?.title, "转账");
     assert.equal(rows[0]?.amountLabel, "¥-50.00");
     assert.equal(rows[0]?.amountToneClass, "money-negative");
@@ -102,7 +103,8 @@ describe("transfer post-save", () => {
     assert.equal(resolveTransferTargetMonth(300, payload), "2026-09");
     const home = { selectedMonth: "2026-09", pending: null, highlightKey: "" };
     const accepted = acceptTransferCreated(home, payload);
-    assert.equal(accepted.selectedMonth, "2026-08");
+    assert.equal(accepted.selectedMonth, "2026-09");
+    assert.equal(accepted.pending?.targetMonth, "2026-08");
     const items = [
       {
         kind: "TRANSFER" as const,

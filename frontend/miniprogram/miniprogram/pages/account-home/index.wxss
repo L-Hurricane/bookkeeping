@@ -49,7 +49,7 @@
 }
 
 .day {
-  margin: 20rpx 8rpx 8rpx;
+  margin: 8rpx 8rpx 0;
   color: #666666;
   font-size: 24rpx;
 }
@@ -91,9 +91,17 @@
 .status,
 .count,
 .row-detail,
+.row-meta,
+.row-type,
 .row-time {
   color: #666666;
   font-size: 26rpx;
+}
+
+.row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
 }
 
 .balance {
@@ -157,7 +165,7 @@
 
 .month-heading {
   display: block;
-  margin: 24rpx 8rpx 0;
+  margin: 8rpx 8rpx 0;
   font-weight: 600;
 }
 
@@ -185,7 +193,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 24rpx;
-  margin-top: 12rpx;
+  margin-top: 4rpx;
   padding: 20rpx 24rpx;
 }
 
