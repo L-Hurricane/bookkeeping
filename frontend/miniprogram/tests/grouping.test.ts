@@ -7,9 +7,14 @@ import {
   hitKey,
   indexFromDelta,
   parseAccountGroupList,
+  edgeScrollDelta,
   planAccountDrop,
   planGroupDrop,
   planHome,
+  rowShiftUnits,
+  sectionExpanded,
+  toggleCollapsed,
+  transferPickerSections,
   type AccountGroup,
 } from "../miniprogram/account/grouping";
 
@@ -85,6 +90,40 @@ describe("account grouping", () => {
     assert.equal(indexFromDelta(0, 80, 72, 3), 1);
     assert.equal(hitKey([{ key: "group:7", top: 0, bottom: 40 }, { key: "group:8", top: 40, bottom: 80 }], 40), "group:8");
     assert.equal(hitKey([{ key: "group:7", top: 0, bottom: 40 }], 40), null);
+  });
+
+  it("keeps sort expansion apart from the home collapse and shifts only the crossed rows", () => {
+    assert.equal(sectionExpanded("group:1", ["group:1"], [], false), false);
+    assert.equal(sectionExpanded("group:1", ["group:1"], [], true), true);
+    assert.equal(sectionExpanded("group:2", [], ["group:2"], true), false);
+    assert.deepEqual(toggleCollapsed(["group:1"], "group:1"), []);
+    assert.deepEqual([0, 1, 2, 3].map((index) => rowShiftUnits(index, 1, 3)), [0, 0, -1, -1]);
+    assert.equal(edgeScrollDelta(20, 800, 80, 28), -28);
+    assert.equal(edgeScrollDelta(760, 800, 80, 28), 28);
+    assert.equal(edgeScrollDelta(400, 800, 80, 28), 0);
+  });
+
+  it("orders the transfer picker by group and display order, and hides archived or the other side", () => {
+    const groups = [
+      { ...group(1, "现金", "0.00", 2), displayOrder: 1 },
+      { ...group(2, "信用卡", "0.00", 1), displayOrder: 2 },
+    ];
+    const accounts = [
+      account(4, 1, 2),
+      account(3, 1, 1),
+      account(5, 2, 1),
+      account(6, null, 1),
+      account(7, 1, 3, "ARCHIVED"),
+    ];
+    const view = transferPickerSections(groups, accounts, 3, 4, "");
+    assert.deepEqual(view.sections.map((section) => [section.title, section.accounts.map((item) => item.id)]), [
+      ["现金", [3]],
+      ["信用卡", [5]],
+      ["未分组", [6]],
+    ]);
+    const searched = transferPickerSections(groups, accounts, 0, 0, "账户5");
+    assert.deepEqual(searched.sections.map((section) => section.accounts.map((item) => item.id)), [[5]]);
+    assert.deepEqual(transferPickerSections([], accounts, 0, 0, "").sections[0]?.accounts.map((item) => item.id), [3, 5, 6, 4]);
   });
 
   it("uses the same grip mark as category rows and follows the finger", () => {

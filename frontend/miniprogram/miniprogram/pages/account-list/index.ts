@@ -5,11 +5,14 @@ import {
   type Account,
 } from "../../account/account";
 import {
+  edgeScrollDelta,
   hitKey,
   indexFromDelta,
   planAccountDrop,
   planGroupDrop,
   planHome,
+  rowShiftUnits,
+  toggleCollapsed,
   type DropRect,
   type HomeSectionPlan,
 } from "../../account/grouping";
@@ -39,6 +42,7 @@ interface AccountRow {
   readonly kindLabel: string;
   readonly balanceLabel: string;
   readonly balanceToneClass: string;
+  readonly shiftPx: number;
 }
 
 interface SectionView {
@@ -48,11 +52,24 @@ interface SectionView {
   readonly showSubtotal: boolean;
   readonly subtotalLabel: string;
   readonly expanded: boolean;
+  readonly shiftPx: number;
   readonly accounts: AccountRow[];
   readonly archivedIds: number[];
 }
 
+interface ActiveDrag {
+  readonly kind: "group" | "account";
+  readonly id: number;
+  readonly sectionKey: string;
+  readonly startY: number;
+  readonly startIndex: number;
+  readonly startScroll: number;
+  overIndex: number;
+}
+
 const ROW_HEIGHT = 72;
+const EDGE_PX = 80;
+const EDGE_STEP = 28;
 
 Page({
   loadGuard: createLoadGuard(),
@@ -61,8 +78,11 @@ Page({
   accounts: [] as Account[],
   sectionPlans: [] as HomeSectionPlan[],
   collapsedKeys: [] as string[],
+  sortCollapsedKeys: [] as string[],
   summaryGeneration: 0,
-  drag: null as null | { kind: "group" | "account"; id: number; sectionKey: string; startY: number; startIndex: number },
+  viewportHeight: 0,
+  pageScrollTop: 0,
+  drag: null as ActiveDrag | null,
 
   data: {
     phase: "loading" as "loading" | "ready" | "error",
@@ -143,8 +163,8 @@ Page({
       this.setData({
         phase: "ready",
         grouped: home.grouped,
-        rows: home.grouped ? [] : route.accounts.map(toRow),
-        sections: home.sections.map((section) => toSection(section, this.accounts, this.collapsedKeys)),
+        rows: home.grouped ? [] : route.accounts.map((account) => toRow(account, 0)),
+        sections: this.viewSections(this.data.sorting),
         sorting: home.grouped ? this.data.sorting : false,
         hasArchived: archived.length > 0,
         errorMessage: "",
@@ -197,23 +217,30 @@ Page({
       return;
     }
     this.drag = null;
-    this.setData({ sorting: !this.data.sorting, draggingKey: "", dragOffset: 0 });
+    const sorting = !this.data.sorting;
+    if (sorting) {
+      this.sortCollapsedKeys = [];
+    }
+    this.setData({ sorting, draggingKey: "", dragOffset: 0, sections: this.viewSections(sorting) });
+  },
+
+  onPageScroll(event: WechatMiniprogram.Page.IPageScrollOption) {
+    if (Number.isFinite(event.scrollTop) && event.scrollTop >= 0) {
+      this.pageScrollTop = event.scrollTop;
+    }
   },
 
   onToggleSection(event: WechatMiniprogram.BaseEvent) {
-    if (this.data.sorting) {
-      return;
-    }
     const key = String(event.currentTarget.dataset["key"] ?? "");
     if (key.length === 0) {
       return;
     }
-    this.collapsedKeys = this.collapsedKeys.includes(key)
-      ? this.collapsedKeys.filter((item) => item !== key)
-      : [...this.collapsedKeys, key];
-    this.setData({
-      sections: this.sectionPlans.map((section) => toSection(section, this.accounts, this.collapsedKeys)),
-    });
+    if (this.data.sorting) {
+      this.sortCollapsedKeys = toggleCollapsed(this.sortCollapsedKeys, key);
+    } else {
+      this.collapsedKeys = toggleCollapsed(this.collapsedKeys, key);
+    }
+    this.setData({ sections: this.viewSections(this.data.sorting) });
   },
 
   onDragStart(event: WechatMiniprogram.TouchEvent) {
@@ -237,7 +264,8 @@ Page({
     if (startIndex < 0) {
       return;
     }
-    this.drag = { kind, id, sectionKey, startY: touch.clientY, startIndex };
+    this.rememberViewport();
+    this.drag = { kind, id, sectionKey, startY: touch.clientY, startIndex, startScroll: this.pageScrollTop, overIndex: startIndex };
     this.setData({ draggingKey: `${kind}:${id}`, dragOffset: 0 });
   },
 
@@ -247,13 +275,25 @@ Page({
     if (drag === null || touch === undefined) {
       return;
     }
-    this.setData({ dragOffset: touch.clientY - drag.startY });
+    const scroll = edgeScrollDelta(touch.clientY, this.viewportHeight, EDGE_PX, EDGE_STEP);
+    if (scroll !== 0) {
+      this.pageScrollTop = Math.max(0, this.pageScrollTop + scroll);
+      wx.pageScrollTo({ scrollTop: this.pageScrollTop, duration: 0 });
+    }
+    const length = drag.kind === "group"
+      ? this.sectionPlans.filter((section) => section.groupId !== null).length
+      : this.sectionPlans.find((section) => section.key === drag.sectionKey)?.accountIds.length ?? 0;
+    drag.overIndex = indexFromDelta(drag.startIndex, touch.clientY - drag.startY + (this.pageScrollTop - drag.startScroll), ROW_HEIGHT, length);
+    this.setData({
+      dragOffset: touch.clientY - drag.startY + (this.pageScrollTop - drag.startScroll),
+      sections: this.viewSections(true, this.dragShifts(drag)),
+    });
   },
 
   async onDragEnd(event: WechatMiniprogram.TouchEvent) {
     const drag = this.drag;
     this.drag = null;
-    this.setData({ draggingKey: "", dragOffset: 0 });
+    this.setData({ draggingKey: "", dragOffset: 0, sections: this.viewSections(this.data.sorting) });
     const touch = event.changedTouches[0];
     if (drag === null || touch === undefined) {
       return;
@@ -263,7 +303,7 @@ Page({
     try {
       if (drag.kind === "group") {
         const groupIds = this.sectionPlans.flatMap((section) => section.groupId === null ? [] : [section.groupId]);
-        const toIndex = indexFromDelta(drag.startIndex, touch.clientY - drag.startY, ROW_HEIGHT, groupIds.length);
+        const toIndex = drag.overIndex;
         const next = planGroupDrop(groupIds, drag.id, toIndex);
         if (next === null) {
           return;
@@ -271,10 +311,7 @@ Page({
         await accountApi.reorderGroups(next);
       } else {
         const toKey = targetKey ?? drag.sectionKey;
-        const target = this.sectionPlans.find((section) => section.key === toKey);
-        const toIndex = toKey === drag.sectionKey
-          ? indexFromDelta(drag.startIndex, touch.clientY - drag.startY, ROW_HEIGHT, target?.accountIds.length ?? 0)
-          : 0;
+        const toIndex = toKey === drag.sectionKey ? drag.overIndex : 0;
         const placement = planAccountDrop(this.sectionPlans, drag.id, drag.sectionKey, toKey, toIndex);
         if (placement === null) {
           return;
@@ -335,6 +372,38 @@ Page({
     wx.navigateTo({ url: entryChooserPath(kind) });
   },
 
+  viewSections(sorting: boolean, shifts: ReadonlyMap<string, number> = new Map()) {
+    const collapsed = sorting ? this.sortCollapsedKeys : this.collapsedKeys;
+    return this.sectionPlans.map((section) => toSection(section, this.accounts, collapsed, shifts));
+  },
+
+  dragShifts(drag: ActiveDrag): Map<string, number> {
+    const shifts = new Map<string, number>();
+    if (drag.kind === "group") {
+      const groups = this.sectionPlans.filter((section) => section.groupId !== null);
+      groups.forEach((section, index) => {
+        shifts.set(section.key, rowShiftUnits(index, drag.startIndex, drag.overIndex) * ROW_HEIGHT);
+      });
+      return shifts;
+    }
+    const section = this.sectionPlans.find((item) => item.key === drag.sectionKey);
+    section?.accountIds.forEach((id, index) => {
+      shifts.set(`account:${id}`, rowShiftUnits(index, drag.startIndex, drag.overIndex) * ROW_HEIGHT);
+    });
+    return shifts;
+  },
+
+  rememberViewport() {
+    const reader = (wx as unknown as { getWindowInfo?: () => { windowHeight: number } }).getWindowInfo;
+    if (reader === undefined) {
+      return;
+    }
+    const height = reader().windowHeight;
+    if (Number.isFinite(height) && height > 0) {
+      this.viewportHeight = height;
+    }
+  },
+
   async loadSummary() {
     const generation = ++this.summaryGeneration;
     try {
@@ -358,7 +427,12 @@ Page({
 
 });
 
-function toSection(section: HomeSectionPlan, accounts: readonly Account[], collapsedKeys: readonly string[]): SectionView {
+function toSection(
+  section: HomeSectionPlan,
+  accounts: readonly Account[],
+  collapsedKeys: readonly string[],
+  shifts: ReadonlyMap<string, number>,
+): SectionView {
   const byId = new Map(accounts.map((account) => [account.id, account]));
   return {
     key: section.key,
@@ -367,9 +441,10 @@ function toSection(section: HomeSectionPlan, accounts: readonly Account[], colla
     showSubtotal: section.subtotal !== null,
     subtotalLabel: section.subtotal === null ? "" : formatMoneyLabel(section.subtotal),
     expanded: !collapsedKeys.includes(section.key),
+    shiftPx: shifts.get(section.key) ?? 0,
     accounts: section.accountIds.flatMap((id) => {
       const account = byId.get(id);
-      return account === undefined ? [] : [toRow(account)];
+      return account === undefined ? [] : [toRow(account, shifts.get(`account:${id}`) ?? 0)];
     }),
     archivedIds: [...section.archivedIds],
   };
@@ -390,12 +465,13 @@ function measureDropTargets(page: WechatMiniprogram.Page.TrivialInstance): Promi
   });
 }
 
-function toRow(account: Account): AccountRow {
+function toRow(account: Account, shiftPx: number): AccountRow {
   return {
     id: account.id,
     name: account.name,
     kindLabel: accountKindLabel(account.kind),
     balanceLabel: formatCurrentBalance(account),
     balanceToneClass: moneyToneClass(account.currentBalance),
+    shiftPx,
   };
 }

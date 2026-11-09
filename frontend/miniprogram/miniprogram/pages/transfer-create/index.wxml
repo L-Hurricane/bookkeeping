@@ -42,14 +42,17 @@
       <text class="editor-title">选择转出账户</text>
       <input class="field" type="text" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
       <scroll-view class="account-list" scroll-y style="height: {{accountSheetHeight}}rpx">
-        <view class="account-option" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseFromAccount">
-          <view class="account-copy">
-            <text class="account-name">{{item.name}}</text>
-            <text class="account-kind">{{item.kindLabel}}</text>
+        <block wx:for="{{pickerSections}}" wx:key="key">
+          <text class="group-label" wx:if="{{item.title}}">{{item.title}}</text>
+          <view class="account-option" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onChooseFromAccount">
+            <view class="account-copy">
+              <text class="account-name">{{account.name}}</text>
+              <text class="account-kind">{{account.kindLabel}}</text>
+            </view>
+            <text class="account-balance {{account.balanceTone}}">{{account.balanceLabel}}</text>
+            <text class="account-mark" wx:if="{{account.selected}}">✓</text>
           </view>
-          <text class="account-balance {{item.balanceTone}}">{{item.balanceLabel}}</text>
-          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
-        </view>
+        </block>
       </scroll-view>
       <button class="cancel" bindtap="onCloseFromAccounts">取消</button>
     </view>
@@ -60,14 +63,17 @@
       <text class="editor-title">选择转入账户</text>
       <input class="field" type="text" placeholder="搜索账户" value="{{accountQuery}}" bindinput="onAccountQuery" />
       <scroll-view class="account-list" scroll-y style="height: {{accountSheetHeight}}rpx">
-        <view class="account-option" wx:for="{{accountRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onChooseToAccount">
-          <view class="account-copy">
-            <text class="account-name">{{item.name}}</text>
-            <text class="account-kind">{{item.kindLabel}}</text>
+        <block wx:for="{{pickerSections}}" wx:key="key">
+          <text class="group-label" wx:if="{{item.title}}">{{item.title}}</text>
+          <view class="account-option" wx:for="{{item.accounts}}" wx:for-item="account" wx:key="id" data-id="{{account.id}}" bindtap="onChooseToAccount">
+            <view class="account-copy">
+              <text class="account-name">{{account.name}}</text>
+              <text class="account-kind">{{account.kindLabel}}</text>
+            </view>
+            <text class="account-balance {{account.balanceTone}}">{{account.balanceLabel}}</text>
+            <text class="account-mark" wx:if="{{account.selected}}">✓</text>
           </view>
-          <text class="account-balance {{item.balanceTone}}">{{item.balanceLabel}}</text>
-          <text class="account-mark" wx:if="{{item.selected}}">✓</text>
-        </view>
+        </block>
       </scroll-view>
       <button class="cancel" bindtap="onCloseToAccounts">取消</button>
     </view>

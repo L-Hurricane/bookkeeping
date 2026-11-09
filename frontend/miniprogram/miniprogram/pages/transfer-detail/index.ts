@@ -1,4 +1,5 @@
-import { accountPickerCards, findAccount, type Account, type AccountPickerCard } from "../../account/account";
+import { findAccount, type Account } from "../../account/account";
+import { transferPickerSections, type AccountGroup, type TransferPickerSection } from "../../account/grouping";
 import { createLoadGuard } from "../../account/load-guard";
 import { ApiError } from "../../http/client";
 import { accountApi, transferApi } from "../../services/runtime";
@@ -57,6 +58,7 @@ Page({
   context: null as TransferDetailContext | null,
   transfer: null as TransferView | null,
   accounts: [] as Account[],
+  groups: [] as AccountGroup[],
   fromAccountId: 0,
   toAccountId: 0,
   fromAccountLabel: "",
@@ -78,7 +80,7 @@ Page({
     archiveHint: "",
     fromAccountText: "",
     toAccountText: "",
-    accountRows: [] as AccountPickerCard[],
+    pickerSections: [] as TransferPickerSection[],
     accountQuery: "",
     accountSheetHeight: 240,
     fromSelectorOpen: false,
@@ -137,10 +139,16 @@ Page({
     this.screen = "loading";
     this.setData({ screen: "loading", actionError: "" });
     try {
-      const [transfer, accounts, sourceAccount] = await Promise.all([
+      const [transfer, accounts, sourceAccount, groups] = await Promise.all([
         transferApi.getTransfer(context.transferId),
         accountApi.listAccounts(),
         accountApi.loadAccount(context.sourceAccountId),
+        accountApi.listGroups().catch((error: unknown) => {
+          if (isUnauthorized(error)) {
+            throw error;
+          }
+          return [] as AccountGroup[];
+        }),
       ]);
       const fromAccount = await accountApi.loadAccount(transfer.fromAccountId);
       const toAccount = await accountApi.loadAccount(transfer.toAccountId);
@@ -153,6 +161,7 @@ Page({
       }
       this.transfer = transfer;
       this.accounts = accounts;
+      this.groups = groups;
       this.fromAccountId = transfer.fromAccountId;
       this.toAccountId = transfer.toAccountId;
       this.fromAccountLabel = accountName(fromAccount, transfer.fromAccountId);
@@ -195,12 +204,19 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ fromSelectorOpen: true, toSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.fromAccountId, "") });
+    this.setData({
+      fromSelectorOpen: true,
+      toSelectorOpen: false,
+      accountQuery: "",
+      ...this.pickerData(this.fromAccountId, this.toAccountId, ""),
+    });
   },
 
   onAccountQuery(event: WechatMiniprogram.Input) {
-    const selected = this.data.fromSelectorOpen ? this.fromAccountId : this.toAccountId;
-    this.setData({ accountQuery: event.detail.value, ...accountPickerCards(this.accounts, selected, event.detail.value) });
+    const fromOpen = this.data.fromSelectorOpen;
+    const selected = fromOpen ? this.fromAccountId : this.toAccountId;
+    const blocked = fromOpen ? this.toAccountId : this.fromAccountId;
+    this.setData({ accountQuery: event.detail.value, ...this.pickerData(selected, blocked, event.detail.value) });
   },
 
   onCloseFromAccounts() {
@@ -224,7 +240,12 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ toSelectorOpen: true, fromSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.toAccountId, "") });
+    this.setData({
+      toSelectorOpen: true,
+      fromSelectorOpen: false,
+      accountQuery: "",
+      ...this.pickerData(this.toAccountId, this.fromAccountId, ""),
+    });
   },
 
   onCloseToAccounts() {
@@ -518,6 +539,11 @@ Page({
 
   onBack() {
     wx.navigateBack();
+  },
+
+  pickerData(selectedId: number, blockedId: number, query: string) {
+    const view = transferPickerSections(this.groups, this.accounts, selectedId, blockedId, query);
+    return { pickerSections: view.sections, accountSheetHeight: view.accountSheetHeight };
   },
 
   onHold() {

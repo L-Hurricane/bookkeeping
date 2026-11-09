@@ -1,4 +1,5 @@
-import { MONEY_RESPONSE_PATTERN, type Account } from "./account";
+import { accountKindLabel, formatCurrentBalance, MONEY_RESPONSE_PATTERN, type Account, type AccountPickerCard } from "./account";
+import { moneyToneClass } from "./money-tone";
 
 export interface AccountGroup {
   readonly id: number;
@@ -124,6 +125,103 @@ export function hitKey(rects: readonly DropRect[], y: number): string | null {
   return null;
 }
 
+export function sectionExpanded(key: string, homeCollapsed: readonly string[], sortCollapsed: readonly string[], sorting: boolean): boolean {
+  const collapsed = sorting ? sortCollapsed : homeCollapsed;
+  return !collapsed.includes(key);
+}
+
+export function toggleCollapsed(keys: readonly string[], key: string): string[] {
+  return keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key];
+}
+
+export function rowShiftUnits(index: number, startIndex: number, overIndex: number): number {
+  if (index === startIndex) {
+    return 0;
+  }
+  if (startIndex < overIndex && index > startIndex && index <= overIndex) {
+    return -1;
+  }
+  if (overIndex < startIndex && index >= overIndex && index < startIndex) {
+    return 1;
+  }
+  return 0;
+}
+
+export function edgeScrollDelta(clientY: number, viewportHeight: number, edge: number, step: number): number {
+  if (viewportHeight <= 0 || edge <= 0 || step === 0) {
+    return 0;
+  }
+  if (clientY < edge) {
+    return -Math.abs(step);
+  }
+  if (clientY > viewportHeight - edge) {
+    return Math.abs(step);
+  }
+  return 0;
+}
+
+export interface TransferPickerSection {
+  readonly key: string;
+  readonly title: string;
+  readonly accounts: readonly AccountPickerCard[];
+}
+
+export function transferPickerSections(
+  groups: readonly AccountGroup[],
+  accounts: readonly Account[],
+  selectedId: number,
+  blockedId: number,
+  query: string,
+): { readonly sections: TransferPickerSection[]; readonly accountSheetHeight: number } {
+  const needle = query.trim();
+  const selectable = accounts.filter((account) =>
+    account.lifecycle !== "ARCHIVED"
+    && account.id !== blockedId
+    && (needle.length === 0 || account.name.includes(needle)),
+  );
+  const planned = planHome(groups, selectable, []);
+  const sections = planned.grouped
+    ? planned.sections.flatMap((section) => {
+      const rows = section.accountIds.flatMap((id) => {
+        const account = selectable.find((item) => item.id === id);
+        return account === undefined ? [] : [pickerCard(account, selectedId)];
+      });
+      return rows.length === 0 ? [] : [{ key: section.key, title: section.title, accounts: rows }];
+    })
+    : [{
+      key: "accounts",
+      title: "",
+      accounts: [...selectable].sort(compareDisplayOrder).map((account) => pickerCard(account, selectedId)),
+    }];
+  const visible = sections.filter((section) => section.accounts.length > 0);
+  const rows = visible.reduce((count, section) => count + section.accounts.length, 0);
+  const heads = visible.filter((section) => section.title.length > 0).length;
+  return {
+    sections: [...visible],
+    accountSheetHeight: Math.min(Math.max(rows * 128 + heads * 56, 128), 640),
+  };
+}
+
+function pickerCard(account: Account, selectedId: number): AccountPickerCard {
+  return {
+    id: account.id,
+    name: account.name,
+    kindLabel: accountKindLabel(account.kind),
+    balanceLabel: formatCurrentBalance(account),
+    balanceTone: moneyToneClass(account.currentBalance),
+    selected: account.id === selectedId,
+  };
+}
+
+function compareDisplayOrder(left: Account, right: Account): number {
+  const leftOrder = left.displayOrder ?? left.id;
+  const rightOrder = right.displayOrder ?? right.id;
+  if (leftOrder !== rightOrder) {
+    return leftOrder < rightOrder ? -1 : 1;
+  }
+  return left.id < right.id ? -1 : 1;
+}
+
 export function indexFromDelta(startIndex: number, deltaY: number, rowHeight: number, length: number): number {
   if (length <= 0 || rowHeight <= 0) {
     return 0;
@@ -186,14 +284,7 @@ function insertId(ids: readonly number[], id: number, toIndex: number): number[]
 }
 
 function sortAccounts(accounts: readonly Account[]): Account[] {
-  return [...accounts].sort((left, right) => {
-    const leftOrder = left.displayOrder ?? left.id;
-    const rightOrder = right.displayOrder ?? right.id;
-    if (leftOrder !== rightOrder) {
-      return leftOrder < rightOrder ? -1 : 1;
-    }
-    return left.id < right.id ? -1 : 1;
-  });
+  return [...accounts].sort(compareDisplayOrder);
 }
 
 function positiveId(value: unknown): number | null {

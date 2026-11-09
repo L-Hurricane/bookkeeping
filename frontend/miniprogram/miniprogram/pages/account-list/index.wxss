@@ -69,6 +69,15 @@
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
+.card.member {
+  transition: transform 160ms ease;
+}
+
+.dragging {
+  transition: none;
+  z-index: 2;
+}
+
 .card-main,
 .card-side {
   display: flex;
