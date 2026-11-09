@@ -21,6 +21,7 @@ import {
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
+  businessTimePickerDate,
   businessTimePickerMinute,
   isBusinessTimeAllowed,
   isFutureBusinessTime,
@@ -171,8 +172,10 @@ Page({
     timeError: "",
     futureHint: "",
     timeEditorOpen: false,
+    timeEditorTitle: "编辑交易时间",
     timeDate: "",
     timeClock: "",
+    timePickerDate: "",
     timePickerMinute: "00:00",
     timeDraftError: "",
     deleteLocked: false,
@@ -504,7 +507,7 @@ Page({
       return;
     }
     this.timeDraft = { date: event.detail.value, time: this.timeDraft?.time ?? "" };
-    this.setData({ timeDate: event.detail.value });
+    this.setData({ timeDate: event.detail.value, timePickerDate: businessTimePickerDate(event.detail.value) });
   },
 
   onTimeDateBlur() {

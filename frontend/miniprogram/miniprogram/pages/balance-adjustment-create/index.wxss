@@ -1,3 +1,5 @@
+@import "../../transaction/time-editor.wxss";
+
 .page {
   min-height: 100vh;
   padding: 32rpx 32rpx calc(180rpx + env(safe-area-inset-bottom));

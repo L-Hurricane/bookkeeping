@@ -1,4 +1,5 @@
 @import "../transaction-create/index.wxss";
+@import "../../transaction/time-editor.wxss";
 
 .sync-row {
   display: flex;

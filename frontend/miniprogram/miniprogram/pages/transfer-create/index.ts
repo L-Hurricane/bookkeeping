@@ -27,13 +27,21 @@ import {
   unsyncTransferTimes,
 } from "../../transfer/time-sync";
 import {
+  applyDatePickerValue,
   applyNow,
+  applyTimePickerValue,
   applyToday,
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
   businessTimeFromParts,
+  businessTimePickerDate,
+  businessTimePickerMinute,
   currentBeijingBusinessTime,
+  normalizeBusinessTimeDraft,
+  normalizeDateOnBlur,
+  normalizeTimeOnBlur,
+  timeEditorFields,
   type BusinessTimeDraft,
 } from "../../transaction/business-time";
 import { createIdempotencyKey, readRandomBytes } from "../../transaction/idempotency";
@@ -80,8 +88,11 @@ Page({
     uncertainHint: TRANSFER_UNCERTAIN_HINT,
     timeEditorOpen: false,
     timeEditorSide: "from" as TimeEditorSide,
+    timeEditorTitle: "编辑转出时间",
     timeDate: "",
     timeClock: "",
+    timePickerDate: "",
+    timePickerMinute: "00:00",
     timeDraftError: "",
   },
 
@@ -235,9 +246,9 @@ Page({
     this.setData({
       timeEditorOpen: true,
       timeEditorSide: side,
-      timeDate: draft.date,
-      timeClock: draft.time,
+      timeEditorTitle: side === "from" ? "编辑转出时间" : "编辑转入时间",
       timeDraftError: "",
+      ...timeEditorFields(draft),
     });
   },
 
@@ -245,16 +256,50 @@ Page({
     if (this.timeDraft === null || !this.canEditFields()) {
       return;
     }
-    this.timeDraft = { ...this.timeDraft, date: event.detail.value };
-    this.setData({ timeDate: event.detail.value });
+    this.timeDraft = { date: event.detail.value, time: this.timeDraft.time };
+    this.setData({ timeDate: event.detail.value, timePickerDate: businessTimePickerDate(event.detail.value) });
+  },
+
+  onTimeDateBlur() {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    const date = normalizeDateOnBlur(this.timeDraft.date);
+    this.timeDraft = { date, time: this.timeDraft.time };
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
+  onPickTimeDate(event: WechatMiniprogram.PickerChange) {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    this.timeDraft = applyDatePickerValue(String(event.detail.value), this.timeDraft);
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeClock(event: WechatMiniprogram.Input) {
     if (this.timeDraft === null || !this.canEditFields()) {
       return;
     }
-    this.timeDraft = { ...this.timeDraft, time: event.detail.value };
-    this.setData({ timeClock: event.detail.value });
+    this.timeDraft = { date: this.timeDraft.date, time: event.detail.value };
+    this.setData({ timeClock: event.detail.value, timePickerMinute: businessTimePickerMinute(event.detail.value) });
+  },
+
+  onTimeClockBlur() {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    const time = normalizeTimeOnBlur(this.timeDraft.time);
+    this.timeDraft = { date: this.timeDraft.date, time };
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
+  onPickTimeClock(event: WechatMiniprogram.PickerChange) {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    this.timeDraft = applyTimePickerValue(String(event.detail.value), this.timeDraft);
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeNow() {
@@ -262,7 +307,7 @@ Page({
       return;
     }
     this.timeDraft = applyNow(new Date());
-    this.setData({ timeDate: this.timeDraft.date, timeClock: this.timeDraft.time });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeToday() {
@@ -270,7 +315,7 @@ Page({
       return;
     }
     this.timeDraft = applyToday(this.timeDraft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeYesterday() {
@@ -278,14 +323,15 @@ Page({
       return;
     }
     this.timeDraft = applyYesterday(this.timeDraft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onConfirmTime() {
     if (this.timeDraft === null) {
       return;
     }
-    const next = businessTimeFromParts(this.timeDraft.date, this.timeDraft.time);
+    const normalized = normalizeBusinessTimeDraft(this.timeDraft);
+    const next = normalized === null ? null : businessTimeFromParts(normalized.date, normalized.time);
     if (next === null) {
       this.setData({ timeDraftError: "请输入有效的日期和时间" });
       return;

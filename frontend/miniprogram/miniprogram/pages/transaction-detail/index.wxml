@@ -1,4 +1,5 @@
 <import src="../../transaction/tag-sheet.wxml" />
+<import src="../../transaction/time-editor.wxml" />
 <view class="page" wx:if="{{screen === 'invalid'}}">
   <text class="error">交易页面参数无效</text>
   <button bindtap="onBack">返回</button>
@@ -150,35 +151,6 @@
       <button class="cancel" bindtap="onCloseCategories">取消</button>
     </view>
   </view>
-  <view class="mask" wx:if="{{timeEditorOpen}}" catchtouchmove="onHold">
-    <view class="backdrop" bindtap="onCancelTime"></view>
-    <view class="panel">
-      <text class="editor-title">编辑交易时间</text>
-      <text class="label">日期</text>
-      <view class="datetime-row">
-        <input class="field datetime-input" type="text" placeholder="YYYY-MM-DD" value="{{timeDate}}" disabled="{{formLocked}}" bindinput="onTimeDate" bindblur="onTimeDateBlur" />
-        <picker class="datetime-picker" mode="date" value="{{timeDate}}" disabled="{{formLocked}}" bindchange="onPickTimeDate">
-          <text class="picker-link">选择</text>
-        </picker>
-      </view>
-      <text class="label">时间</text>
-      <view class="datetime-row">
-        <input class="field datetime-input" type="text" placeholder="HH:mm:ss" value="{{timeClock}}" disabled="{{formLocked}}" bindinput="onTimeClock" bindblur="onTimeClockBlur" />
-        <picker class="datetime-picker" mode="time" value="{{timePickerMinute}}" disabled="{{formLocked}}" bindchange="onPickTimeClock">
-          <text class="picker-link">选择</text>
-        </picker>
-      </view>
-      <view class="shortcuts {{formLocked ? 'locked' : ''}}">
-        <text class="shortcut" bindtap="onTimeNow">现在</text>
-        <text class="shortcut" bindtap="onTimeToday">今天</text>
-        <text class="shortcut" bindtap="onTimeYesterday">昨天</text>
-      </view>
-      <text class="error" wx:if="{{timeDraftError}}">{{timeDraftError}}</text>
-      <view class="editor-actions">
-        <button bindtap="onCancelTime">取消</button>
-        <button class="save" bindtap="onConfirmTime">确定</button>
-      </view>
-    </view>
-  </view>
+  <template is="timeEditor" data="{{timeEditorOpen, timeEditorTitle, timeDate, timeClock, timePickerDate, timePickerMinute, timeDraftError, formLocked}}" />
   <template is="tagSheet" data="{{tagSheetOpen: tagSheetOpen, tagQuery: tagQuery, tagRows: tagRows, tagSheetHeight: tagSheetHeight, tagComposer: tagComposer, tagDraft: tagDraft, tagInputLocked: tagInputLocked, formLocked: formLocked, tagCreateInFlight: tagCreateInFlight, tagError: tagError, tagNotice: tagNotice}}" />
 </view>
