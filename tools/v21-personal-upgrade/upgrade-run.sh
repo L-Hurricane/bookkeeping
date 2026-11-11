@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Start RC-02 against asserted bookkeeping DSN only after explicit confirm.
+# Default does not run Spring unless BK_V21_EXECUTE_UPGRADE=1 (owner).
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+source "$ROOT/lib.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: upgrade-run.sh --env FILE --new-wt DIR --old-wt DIR --old-sha SHA --port N --backup-sha SHA256
+Refuses default execution. Owner sets BK_V21_EXECUTE_UPGRADE=1 after special approval.
+EOF
+  exit 2
+}
+
+ENV_FILE="" NEW_WT="" OLD_WT="" OLD_SHA="" PORT="" BACKUP_SHA=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env) ENV_FILE="${2:-}"; shift 2 ;;
+    --new-wt) NEW_WT="${2:-}"; shift 2 ;;
+    --old-wt) OLD_WT="${2:-}"; shift 2 ;;
+    --old-sha) OLD_SHA="${2:-}"; shift 2 ;;
+    --port) PORT="${2:-}"; shift 2 ;;
+    --backup-sha) BACKUP_SHA="${2:-}"; shift 2 ;;
+    -h|--help) usage ;;
+    *) bk_die "unknown arg: $1" ;;
+  esac
+done
+[[ -n "$ENV_FILE" && -n "$NEW_WT" && -n "$OLD_WT" && -n "$OLD_SHA" && -n "$PORT" && -n "$BACKUP_SHA" ]] || usage
+[[ "$BACKUP_SHA" =~ ^[a-f0-9]{64}$ ]] || bk_die "backup sha must be 64 hex chars"
+
+bk_unset_test_urls
+bk_load_env_file "$ENV_FILE"
+bk_assert_db_url
+bk_assert_port "$PORT"
+bk_assert_new_artifact_tree "$NEW_WT"
+bk_assert_old_artifact_tree "$OLD_WT" "$OLD_SHA"
+bk_assert_pre_upgrade_schema
+
+bk_log "upgrade gate: new=$BK_V21_EXPECTED_NEW_SHA port=$PORT backup_sha=$BACKUP_SHA"
+bk_require_confirm "UPGRADE-BOOKKEEPING" "Type UPGRADE-BOOKKEEPING to allow upgrade start:"
+
+if [[ "${BK_V21_EXECUTE_UPGRADE:-0}" != "1" ]]; then
+  bk_log "confirm accepted but BK_V21_EXECUTE_UPGRADE!=1 — dry stop (safe default)"
+  bk_log "UPGRADE_DRY_OK"
+  exit 0
+fi
+
+[[ "${BK_V21_ALLOW_LIVE_MYSQL:-0}" == "1" ]] \
+  || bk_die "refusing live upgrade process without BK_V21_ALLOW_LIVE_MYSQL=1"
+
+# Launch is owner-operated; we still refuse forbidden ports/DSN above.
+export JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/bookkeeping-bootstrap/zulu25.36.205-ca-jdk25.0.4.1-macosx_aarch64/Contents/Home}"
+export PATH="$JAVA_HOME/bin:$PATH"
+bk_log "starting Spring Boot from NEW_WT (owner live mode)"
+cd "$NEW_WT/backend"
+exec ./mvnw -DskipTests spring-boot:run \
+  -Dspring-boot.run.jvmArguments="-Dspring.profiles.active=local" \
+  -Dspring-boot.run.arguments="--server.port=${PORT}"
