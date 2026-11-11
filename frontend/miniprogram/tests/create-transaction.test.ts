@@ -241,7 +241,13 @@ describe("create transaction form", () => {
     });
     assert.equal("categoryId" in body, false);
     assert.equal("remark" in body, false);
+    assert.equal("counterpartyName" in body, false);
     assert.deepEqual(createTransactionRequestBody(built.value), body);
+    const withParty = buildCreateTransactionSnapshot({ ...form, counterpartyName: " 雇主 " }, 1001);
+    assert.equal(withParty.ok, true);
+    if (withParty.ok) {
+      assert.equal(createTransactionRequestBody(withParty.value).counterpartyName, "雇主");
+    }
     assert.equal(buildCreateTransactionSnapshot({ ...form, amount: "0" }, 1001).ok, false);
     const illegalType = { ...form, type: "TRANSFER" } as unknown as CreateTransactionForm;
     const rejected = buildCreateTransactionSnapshot(illegalType, 1001);

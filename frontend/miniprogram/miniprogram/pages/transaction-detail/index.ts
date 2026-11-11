@@ -975,7 +975,7 @@ Page({
       remarkLabel: view.remarkLabel,
       showRemark: view.remarkLabel !== "—",
       counterpartyLabel: view.counterpartyLabel,
-      showCounterparty: this.transaction.type === "EXPENSE" && view.counterpartyLabel !== "—",
+      showCounterparty: view.counterpartyLabel !== "—",
       accountName: this.accountName,
       deleteLocked: false,
       deleteHint: "",

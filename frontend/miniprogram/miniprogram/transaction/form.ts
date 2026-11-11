@@ -135,7 +135,7 @@ export function buildCreateTransactionSnapshot(
       tagIds,
       businessTime: form.businessTime,
       remark: normalizeOptionalText(form.remark),
-      counterpartyName: form.type === "EXPENSE" ? normalizeOptionalText(form.counterpartyName ?? "") : null,
+      counterpartyName: normalizeOptionalText(form.counterpartyName ?? ""),
     },
   };
 }
@@ -149,9 +149,7 @@ export function createTransactionRequestBody(snapshot: CreateTransactionSnapshot
     tagIds: [...snapshot.tagIds],
     businessTime: snapshot.businessTime,
     ...(snapshot.remark === null ? {} : { remark: snapshot.remark }),
-    ...(snapshot.type === "EXPENSE" && snapshot.counterpartyName != null
-      ? { counterpartyName: snapshot.counterpartyName }
-      : {}),
+    ...(snapshot.counterpartyName != null ? { counterpartyName: snapshot.counterpartyName } : {}),
   };
 }
 

@@ -78,9 +78,6 @@ public class TransactionService {
         String key = operationKey(operationId);
         TransactionType type = type(typeRaw);
         var fields = fields(draft);
-        if (type == TransactionType.INCOME && fields.counterpartyName() != null) {
-            throw new ApiFailure(400, "VALIDATION_FAILED", "收入不能填写交易对方");
-        }
         byte[] legacy = requestHash(accountId, type, fields);
         byte[] current = requestHashV2(accountId, type, fields);
         try {
@@ -169,12 +166,8 @@ public class TransactionService {
             var ownedTags = tags.requireOwned(fields.tagIds(), current.getType().name());
             var businessTime = businessTime(fields.businessTime());
             var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-            if (current.getType() == TransactionType.INCOME && fields.counterpartyName() != null) {
-                throw new ApiFailure(400, "VALIDATION_FAILED", "收入不能填写交易对方");
-            }
             current.edit(fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime,
-                    blankToNull(fields.remark(), Integer.MAX_VALUE),
-                    current.getType() == TransactionType.EXPENSE ? fields.counterpartyName() : null, now);
+                    blankToNull(fields.remark(), Integer.MAX_VALUE), fields.counterpartyName(), now);
             if (targetAccountId != sourceAccountId) {
                 current.reassignAccount(targetAccountId);
             }

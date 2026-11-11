@@ -273,7 +273,7 @@ export function buildUpdateTransactionSnapshot(
       tagIds,
       businessTime: form.businessTime,
       remark: normalizeOptionalText(form.remark),
-      counterpartyName: fixedType === "EXPENSE" ? normalizeOptionalText(form.counterpartyName ?? "") : null,
+      counterpartyName: normalizeOptionalText(form.counterpartyName ?? ""),
     },
   };
 }
@@ -287,9 +287,7 @@ export function updateTransactionRequestBody(snapshot: UpdateTransactionSnapshot
     tagIds: [...snapshot.tagIds],
     businessTime: snapshot.businessTime,
     ...(snapshot.remark === null ? {} : { remark: snapshot.remark }),
-    ...(snapshot.fixedType === "EXPENSE" && snapshot.counterpartyName != null
-      ? { counterpartyName: snapshot.counterpartyName }
-      : {}),
+    ...(snapshot.counterpartyName != null ? { counterpartyName: snapshot.counterpartyName } : {}),
   };
 }
 

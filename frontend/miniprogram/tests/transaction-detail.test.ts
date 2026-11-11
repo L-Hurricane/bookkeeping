@@ -130,7 +130,19 @@ describe("transaction edit", () => {
     );
     assert.equal(income.ok, true);
     if (income.ok) {
-      assert.equal("counterpartyName" in updateTransactionRequestBody(income.value), false);
+      assert.equal(updateTransactionRequestBody(income.value).counterpartyName, "商店");
+    }
+    const incomeCleared = buildUpdateTransactionSnapshot(
+      { ...edited, type: "INCOME", counterpartyName: "  " },
+      1001,
+      1001,
+      4001,
+      "INCOME",
+      created,
+    );
+    assert.equal(incomeCleared.ok, true);
+    if (incomeCleared.ok) {
+      assert.equal("counterpartyName" in updateTransactionRequestBody(incomeCleared.value), false);
     }
   });
 

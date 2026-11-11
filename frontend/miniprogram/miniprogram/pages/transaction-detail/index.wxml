@@ -34,6 +34,10 @@
     <text class="label">资金账户</text>
     <text>{{accountName}}</text>
   </view>
+  <view class="fact" wx:if="{{showCounterparty}}">
+    <text class="label">交易对方</text>
+    <text>{{counterpartyLabel}}</text>
+  </view>
   <view class="fact">
     <text class="label">分类</text>
     <text>{{categoryLabel}}</text>
@@ -45,10 +49,6 @@
   <view class="fact">
     <text class="label">交易时间</text>
     <text>{{businessTimeLabel}}</text>
-  </view>
-  <view class="fact" wx:if="{{showCounterparty}}">
-    <text class="label">交易对方</text>
-    <text>{{counterpartyLabel}}</text>
   </view>
   <view class="fact" wx:if="{{showRemark}}">
     <text class="label">备注</text>
@@ -84,6 +84,8 @@
     <text class="error" wx:if="{{accountError && accountPhase === 'ready'}}">{{accountError}}</text>
     <text class="label">名称</text>
     <input class="field" type="text" value="{{name}}" disabled="{{formLocked}}" bindinput="onNameInput" />
+    <text class="label">交易对方</text>
+    <input class="field" type="text" value="{{counterpartyName}}" disabled="{{formLocked}}" bindinput="onCounterpartyInput" />
   </view>
   <view class="card">
     <text class="label">分类</text>
@@ -107,10 +109,6 @@
     <view class="choice {{formLocked ? 'locked' : ''}}" bindtap="onOpenTime">{{businessTimeText}} ></view>
     <text class="error" wx:if="{{timeError}}">{{timeError}}</text>
     <text class="hint" wx:if="{{futureHint}}">{{futureHint}}</text>
-    <block wx:if="{{typeLabel === '支出'}}">
-      <text class="label">交易对方</text>
-      <input class="field" type="text" value="{{counterpartyName}}" disabled="{{formLocked}}" bindinput="onCounterpartyInput" />
-    </block>
     <text class="label">备注</text>
     <input class="field" type="text" value="{{remark}}" disabled="{{formLocked}}" bindinput="onRemarkInput" />
   </view>

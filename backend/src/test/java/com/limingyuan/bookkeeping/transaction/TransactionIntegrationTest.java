@@ -545,12 +545,57 @@ class TransactionIntegrationTest {
         mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + id).header("Authorization", "Bearer " + other.token()))
                 .andExpect(status().isNotFound());
 
-        long beforeIncome = transactionCount();
-        var income = submit("income-party", partyBody("INCOME", "8.00", "工资", incomeCategory, time, "商店"), token);
-        assertThat(income.getResponse().getStatus()).isEqualTo(400);
-        assertThat(transactionCount()).isEqualTo(beforeIncome);
-        assertThat(jdbc.sql("SELECT COUNT(*) FROM idempotency_records WHERE user_id = :id AND operation_id = 'income-party'")
-                .param("id", userId).query(Long.class).single()).isZero();
+        String incomeKey = "income-party";
+        String incomeTime = "2026-09-21T13:00:00+08:00";
+        var income = submit(incomeKey, partyBody("INCOME", "8.00", "工资", incomeCategory, incomeTime, " 雇主 "), token);
+        assertThat(income.getResponse().getStatus()).isEqualTo(201);
+        long incomeId = json.readTree(income.getResponse().getContentAsString()).path("id").asLong();
+        assertThat(json.readTree(income.getResponse().getContentAsString()).path("counterpartyName").asText()).isEqualTo("雇主");
+        assertThat(counterpartyOf(incomeId)).isEqualTo("雇主");
+        byte[] incomeH2 = TransactionRequestHash.sha256V2(accountId, "INCOME", "8.00", incomeCategory, List.of(), incomeTime, "工资", "", "雇主");
+        byte[] incomeH1 = TransactionRequestHash.sha256(accountId, "INCOME", "8.00", incomeCategory, List.of(), incomeTime, "工资", "");
+        assertThat(storedHash(incomeKey)).isEqualTo(incomeH2).isNotEqualTo(incomeH1);
+        var incomeReplay = submit(incomeKey, partyBody("INCOME", "8.00", "工资", incomeCategory, incomeTime, "雇主"), token);
+        assertThat(incomeReplay.getResponse().getStatus()).isEqualTo(200);
+        assertThat(json.readTree(incomeReplay.getResponse().getContentAsString()).path("id").asLong()).isEqualTo(incomeId);
+        var incomeConflict = submit(incomeKey, partyBody("INCOME", "8.00", "工资", incomeCategory, incomeTime, "另一人"), token);
+        assertThat(incomeConflict.getResponse().getStatus()).isEqualTo(409);
+        assertThat(counterpartyOf(incomeId)).isEqualTo("雇主");
+        String incomeCleared = partyBody("INCOME", "8.00", "工资", incomeCategory, incomeTime, null).replace("\"type\":\"INCOME\",", "");
+        var incomeClear = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + incomeId).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(incomeCleared))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(incomeClear.getResponse().getContentAsString()).has("counterpartyName")).isFalse();
+        assertThat(counterpartyOf(incomeId)).isNull();
+
+        var negativeIncome = submit("neg-income-party", partyBody("INCOME", "-3.50", "退回", incomeCategory, "2026-09-21T14:00:00+08:00", "客户"), token);
+        assertThat(negativeIncome.getResponse().getStatus()).isEqualTo(201);
+        long negativeIncomeId = json.readTree(negativeIncome.getResponse().getContentAsString()).path("id").asLong();
+        assertThat(counterpartyOf(negativeIncomeId)).isEqualTo("客户");
+        String negativeIncomeEdited = partyBody("INCOME", "-3.50", "退回", incomeCategory, "2026-09-21T14:00:00+08:00", "新客户")
+                .replace("\"type\":\"INCOME\",", "");
+        mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + negativeIncomeId).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(negativeIncomeEdited))
+                .andExpect(status().isOk());
+        assertThat(counterpartyOf(negativeIncomeId)).isEqualTo("新客户");
+
+        var negativeExpense = submit("neg-expense-party", partyBody("EXPENSE", "-4.00", "退货", expenseCategory, "2026-09-21T15:00:00+08:00", null), token);
+        assertThat(negativeExpense.getResponse().getStatus()).isEqualTo(201);
+        long negativeExpenseId = json.readTree(negativeExpense.getResponse().getContentAsString()).path("id").asLong();
+        assertThat(counterpartyOf(negativeExpenseId)).isNull();
+        String negativeExpenseFilled = partyBody("EXPENSE", "-4.00", "退货", expenseCategory, "2026-09-21T15:00:00+08:00", "商家")
+                .replace("\"type\":\"EXPENSE\",", "");
+        var negativeExpenseUpdate = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + negativeExpenseId)
+                        .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON).content(negativeExpenseFilled))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(negativeExpenseUpdate.getResponse().getContentAsString()).path("counterpartyName").asText()).isEqualTo("商家");
+        assertThat(counterpartyOf(negativeExpenseId)).isEqualTo("商家");
+        String negativeExpenseCleared = partyBody("EXPENSE", "-4.00", "退货", expenseCategory, "2026-09-21T15:00:00+08:00", null)
+                .replace("\"type\":\"EXPENSE\",", "");
+        mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + negativeExpenseId).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(negativeExpenseCleared))
+                .andExpect(status().isOk());
+        assertThat(counterpartyOf(negativeExpenseId)).isNull();
 
         String legacyKey = "counterparty-v1";
         var plain = submit(legacyKey, partyBody("EXPENSE", "6.00", "早餐", expenseCategory, "2026-09-22T08:00:00+08:00", null), token);
@@ -578,6 +623,17 @@ class TransactionIntegrationTest {
                 .andExpect(status().isOk()).andReturn();
         assertThat(json.readTree(amountOnly.getResponse().getContentAsString()).path("amount").asText()).isEqualTo("7.00");
         assertThat(counterpartyOf(plainId)).isNull();
+        String plainFilled = partyBody("EXPENSE", "7.00", "早餐", expenseCategory, "2026-09-22T08:00:00+08:00", "路边摊")
+                .replace("\"type\":\"EXPENSE\",", "");
+        var plainFill = mvc.perform(put("/api/v1/accounts/" + accountId + "/transactions/" + plainId).header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(plainFilled))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(plainFill.getResponse().getContentAsString()).path("counterpartyName").asText()).isEqualTo("路边摊");
+        assertThat(counterpartyOf(plainId)).isEqualTo("路边摊");
+        var plainReload = mvc.perform(get("/api/v1/accounts/" + accountId + "/transactions/" + plainId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(json.readTree(plainReload.getResponse().getContentAsString()).path("counterpartyName").asText()).isEqualTo("路边摊");
+        assertThat(json.readTree(plainReload.getResponse().getContentAsString()).path("amount").asText()).isEqualTo("7.00");
 
         mvc.perform(delete("/api/v1/accounts/" + accountId + "/transactions/" + plainId).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
