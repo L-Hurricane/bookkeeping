@@ -82,10 +82,11 @@ write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" 
 
 write_env() {
   local path="$1" url="$2"
+  local user="${3:-bookkeeping_user}"
   umask 077
   cat >"$path" <<EOF
 DB_URL=${url}
-DB_USERNAME=synth_user
+DB_USERNAME=${user}
 DB_PASSWORD=not-a-real-secret-for-git
 SERVER_PORT=18090
 BK_V21_BACKUP_PASSPHRASE=test-only-passphrase
@@ -94,22 +95,32 @@ EOF
 }
 
 GOOD_ENV="$WORK/envs/good.env"
-write_env "$GOOD_ENV" "jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false"
+# Username may contain "bookkeeping"; schema target must still be bk_personal_local.
+write_env "$GOOD_ENV" "jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false" "bookkeeping_user"
 LEGACY_BOOKKEEPING_ENV="$WORK/envs/legacy-bookkeeping.env"
-write_env "$LEGACY_BOOKKEEPING_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping?useSSL=false'
+write_env "$LEGACY_BOOKKEEPING_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping?useSSL=false' "bookkeeping_user"
 BAD_DB_ENV="$WORK/envs/bad-db.env"
-write_env "$BAD_DB_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_uat?useSSL=false'
+write_env "$BAD_DB_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_uat?useSSL=false' "bookkeeping_user"
 BAD_TEST_ENV="$WORK/envs/bad-test.env"
-write_env "$BAD_TEST_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_test?useSSL=false'
+write_env "$BAD_TEST_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_test?useSSL=false' "bookkeeping_user"
 BAD_DRILL_ENV="$WORK/envs/bad-drill.env"
-write_env "$BAD_DRILL_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_v21_restore_drill?useSSL=false'
+write_env "$BAD_DRILL_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_v21_restore_drill?useSSL=false' "bookkeeping_user"
 BAD_PORT_JDBC_ENV="$WORK/envs/bad-port-jdbc.env"
-write_env "$BAD_PORT_JDBC_ENV" "jdbc:mysql://127.0.0.1:3307/${TARGET_DB}?useSSL=false"
+write_env "$BAD_PORT_JDBC_ENV" "jdbc:mysql://127.0.0.1:3307/${TARGET_DB}?useSSL=false" "bookkeeping_user"
+MISSING_USER_ENV="$WORK/envs/missing-user.env"
+umask 077
+cat >"$MISSING_USER_ENV" <<EOF
+DB_URL=jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false
+DB_PASSWORD=not-a-real-secret-for-git
+SERVER_PORT=18090
+BK_V21_BACKUP_PASSPHRASE=test-only-passphrase
+EOF
+chmod 600 "$MISSING_USER_ENV"
 
 export BK_V21_MOCK=1
 export BK_V21_MOCK_DIR="$MOCK"
 
-# 0 legacy / wrong formal names
+# 0 legacy / wrong formal names (username may contain bookkeeping; schema must not)
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
 expect_fail "reject-legacy-bookkeeping-db" \
   "$ROOT/preflight.sh" --env "$LEGACY_BOOKKEEPING_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
@@ -122,6 +133,9 @@ expect_fail "reject-test-db" \
 
 expect_fail "reject-drill-db" \
   "$ROOT/preflight.sh" --env "$BAD_DRILL_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+expect_fail "reject-missing-db-username" \
+  "$ROOT/preflight.sh" --env "$MISSING_USER_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 # 2 docs HEAD is not RC-02
 expect_fail "reject-docs-head-as-new" \
@@ -176,9 +190,9 @@ expect_fail "reject-missing-mysql-identity-evidence" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
-# 12 happy preflight (bk_personal_local)
+# 12 happy preflight (bk_personal_local + username containing bookkeeping)
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
-expect_pass "preflight-ok-bk-personal-local" \
+expect_pass "preflight-ok-bk-personal-local-with-bookkeeping-username" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 # 13 backup without passphrase
@@ -186,7 +200,7 @@ NO_PASS="$WORK/envs/nopass.env"
 umask 077
 cat >"$NO_PASS" <<EOF
 DB_URL=jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false
-DB_USERNAME=synth_user
+DB_USERNAME=bookkeeping_user
 DB_PASSWORD=x
 SERVER_PORT=18090
 EOF

@@ -25,7 +25,7 @@ Reviewed baseline scripts: `50fe905…`. This adaptation is a later commit on `v
 - New business SHA: `824a3ce3ccc3bbb1223ded64c5cdfb04eb2f3b03`
 - V21 file SHA-256: `525bf36b67633b1b4b5d9b77694195db4502dcab22ef02274c9c6eea8d45d5f9`
 - Target DB name: **`bk_personal_local`** (exact match on JDBC path **and** `DATABASE()`, not substring; **not** env-overridable)
-- Forbidden DSN substrings: **`bookkeeping`** (covers legacy formal name `bookkeeping` and `bookkeeping_uat` / `_test` / `_migration_test` / `_v21_restore_drill`)
+- Forbidden DSN substrings: **`bookkeeping`** applied to **JDBC `DB_URL` / backup schema text only** (covers legacy formal name `bookkeeping` and `bookkeeping_uat` / `_test` / `_migration_test` / `_v21_restore_drill`). **Not** applied to `DB_USERNAME`, `DB_PASSWORD`, or `JAVA_HOME` — a login name may contain `bookkeeping`.
 - Forbidden ports: `18081`, `18082`, `18083`
 
 NEW_WT must be an **independent** tree whose `HEAD` is RC-02. The docs-archive worktree HEAD is rejected.

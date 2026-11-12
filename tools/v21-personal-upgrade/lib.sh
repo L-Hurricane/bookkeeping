@@ -125,8 +125,12 @@ bk_assert_no_forbidden_substrings() {
 bk_assert_db_url() {
   local url="${DB_URL:-}"
   [[ -n "$url" ]] || bk_die "DB_URL unset"
+  # Schema denylist applies only to JDBC URL / backup schema text — not to
+  # DB_USERNAME, DB_PASSWORD, JAVA_HOME, or other credential/path fields.
+  # A login name may legally contain "bookkeeping"; target schema still must be
+  # exactly bk_personal_local via parse + DATABASE() identity checks below.
   bk_assert_no_forbidden_substrings "DB_URL" "$url"
-  bk_assert_no_forbidden_substrings "DB_USERNAME" "${DB_USERNAME:-}"
+  [[ -n "${DB_USERNAME:-}" ]] || bk_die "DB_USERNAME unset"
 
   local parsed host port db
   parsed="$(bk_jdbc_parse "$url")"
