@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start RC-02 against asserted bookkeeping DSN only after explicit confirm.
+# Start RC-02 against asserted bk_personal_local DSN only after explicit confirm.
 # Default does not run Spring unless BK_V21_EXECUTE_UPGRADE=1 (owner).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -12,6 +12,8 @@ Usage: upgrade-run.sh --env FILE --new-wt DIR --old-wt DIR --old-sha SHA --port 
          --backup-file FILE --backup-sha SHA256 [--manifest FILE]
 Refuses default execution. Owner sets BK_V21_EXECUTE_UPGRADE=1 after special approval.
 Requires backup file + manifest binding (SHA + instance identity).
+Live launch always passes --spring.datasource.url=$DB_URL (never rely on
+application-local.yml default jdbc:.../bookkeeping).
 EOF
   exit 2
 }
@@ -57,10 +59,15 @@ fi
   || bk_die "refusing live upgrade process without BK_V21_ALLOW_LIVE_MYSQL=1"
 
 # Launch is owner-operated; we still refuse forbidden ports/DSN above.
+# application-local.yml may default to jdbc:.../bookkeeping — refuse that fallback.
+[[ -n "${DB_URL:-}" ]] || bk_die "DB_URL unset before Spring launch"
+[[ "${BK_V21_JDBC_DB:-}" == "$BK_V21_TARGET_DB" ]] \
+  || bk_die "JDBC db must be $BK_V21_TARGET_DB before Spring launch"
 export JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/bookkeeping-bootstrap/zulu25.36.205-ca-jdk25.0.4.1-macosx_aarch64/Contents/Home}"
 export PATH="$JAVA_HOME/bin:$PATH"
-bk_log "starting Spring Boot from NEW_WT (owner live mode)"
+export DB_URL
+bk_log "starting Spring Boot from NEW_WT (owner live mode; explicit spring.datasource.url)"
 cd "$NEW_WT/backend"
 exec ./mvnw -DskipTests spring-boot:run \
   -Dspring-boot.run.jvmArguments="-Dspring.profiles.active=local" \
-  -Dspring-boot.run.arguments="--server.port=${PORT}"
+  -Dspring-boot.run.arguments="--server.port=${PORT} --spring.datasource.url=${DB_URL}"

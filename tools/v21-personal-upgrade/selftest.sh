@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mock/synthetic self-test for V21 upgrade safety scripts.
-# Does not connect to real bookkeeping. Does not clean drill DBs.
+# Does not connect to real personal ledger DBs. Does not clean drill DBs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
@@ -49,6 +49,7 @@ RC02_SHA="$BK_V21_EXPECTED_NEW_SHA"
 OLD_FIXED_SHA="7281d1f156924e92eebc11f1843059ba41eb5f26"
 DOCS_WT="/Users/limingyuan/Documents/code/personal/bookkeeping-v11-s1"
 REPO_GIT="$(git -C "$DOCS_WT" rev-parse --show-toplevel)"
+TARGET_DB="$BK_V21_TARGET_DB"
 
 prepare_trees() {
   mkdir -p "$TEST_ROOT"
@@ -75,9 +76,9 @@ MOCK="$WORK/mock"
 mkdir -p "$MOCK" "$WORK/backup" "$WORK/enc" "$WORK/envs"
 printf '20\n' >"$MOCK/flyway_max.txt"
 printf '0\n' >"$MOCK/counterparty_col.txt"
-printf 'bookkeeping\n' >"$MOCK/schema_exists.txt"
+printf '%s\n' "$TARGET_DB" >"$MOCK/schema_exists.txt"
 GOOD_UUID="11111111-2222-3333-4444-555555555555"
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
 write_env() {
   local path="$1" url="$2"
@@ -93,24 +94,34 @@ EOF
 }
 
 GOOD_ENV="$WORK/envs/good.env"
-write_env "$GOOD_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping?useSSL=false'
+write_env "$GOOD_ENV" "jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false"
+LEGACY_BOOKKEEPING_ENV="$WORK/envs/legacy-bookkeeping.env"
+write_env "$LEGACY_BOOKKEEPING_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping?useSSL=false'
 BAD_DB_ENV="$WORK/envs/bad-db.env"
 write_env "$BAD_DB_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_uat?useSSL=false'
 BAD_TEST_ENV="$WORK/envs/bad-test.env"
 write_env "$BAD_TEST_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_test?useSSL=false'
+BAD_DRILL_ENV="$WORK/envs/bad-drill.env"
+write_env "$BAD_DRILL_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_v21_restore_drill?useSSL=false'
 BAD_PORT_JDBC_ENV="$WORK/envs/bad-port-jdbc.env"
-write_env "$BAD_PORT_JDBC_ENV" 'jdbc:mysql://127.0.0.1:3307/bookkeeping?useSSL=false'
+write_env "$BAD_PORT_JDBC_ENV" "jdbc:mysql://127.0.0.1:3307/${TARGET_DB}?useSSL=false"
 
 export BK_V21_MOCK=1
 export BK_V21_MOCK_DIR="$MOCK"
 
-# 1 wrong database name
+# 0 legacy / wrong formal names
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
+expect_fail "reject-legacy-bookkeeping-db" \
+  "$ROOT/preflight.sh" --env "$LEGACY_BOOKKEEPING_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
 expect_fail "reject-uat-db" \
   "$ROOT/preflight.sh" --env "$BAD_DB_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 expect_fail "reject-test-db" \
   "$ROOT/preflight.sh" --env "$BAD_TEST_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+expect_fail "reject-drill-db" \
+  "$ROOT/preflight.sh" --env "$BAD_DRILL_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 # 2 docs HEAD is not RC-02
 expect_fail "reject-docs-head-as-new" \
@@ -142,21 +153,20 @@ expect_fail "reject-missing-confirm" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 # 8 MySQL @@port != JDBC port (Spring/MySQL instance mismatch)
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3307" "$GOOD_UUID" "bookkeeping"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3307" "$GOOD_UUID" "$TARGET_DB"
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
 expect_fail "reject-mysql-jdbc-port-mismatch" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
 # 9 MySQL DATABASE() != target (even if JDBC string looked ok)
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping_other"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "other_local_schema"
 expect_fail "reject-mysql-database-identity-mismatch" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
-# 10 JDBC port differs from mock MySQL while URL uses alternate port (still exact-name bookkeeping)
+# 10 JDBC port differs from mock MySQL while URL uses alternate port (exact target name)
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
-# SERVER_PORT still 18090; JDBC says 3307 but mock identity stays 3306 → reject
 expect_fail "reject-jdbc-port-vs-mysql-identity" \
   "$ROOT/preflight.sh" --env "$BAD_PORT_JDBC_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
@@ -164,18 +174,18 @@ expect_fail "reject-jdbc-port-vs-mysql-identity" \
 rm -f "$MOCK/mysql_identity.txt"
 expect_fail "reject-missing-mysql-identity-evidence" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
-# 12 happy preflight
+# 12 happy preflight (bk_personal_local)
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
-expect_pass "preflight-ok" \
+expect_pass "preflight-ok-bk-personal-local" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
 # 13 backup without passphrase
 NO_PASS="$WORK/envs/nopass.env"
 umask 077
 cat >"$NO_PASS" <<EOF
-DB_URL=jdbc:mysql://127.0.0.1:3306/bookkeeping?useSSL=false
+DB_URL=jdbc:mysql://127.0.0.1:3306/${TARGET_DB}?useSSL=false
 DB_USERNAME=synth_user
 DB_PASSWORD=x
 SERVER_PORT=18090
@@ -194,6 +204,12 @@ BACKUP_FILE="$(grep '^BACKUP_FILE=' /tmp/bk-v21-st-out.txt | cut -d= -f2-)"
 BACKUP_MANIFEST="$(grep '^BACKUP_MANIFEST=' /tmp/bk-v21-st-out.txt | cut -d= -f2-)"
 [[ -n "$BACKUP_SHA" && -n "$BACKUP_FILE" && -f "$BACKUP_FILE" && -f "$BACKUP_MANIFEST" ]] \
   || bk_die "selftest could not capture backup/manifest outputs"
+grep -q "target_db=${TARGET_DB}" "$BACKUP_MANIFEST" \
+  || bk_die "manifest target_db must be ${TARGET_DB}"
+case "$(basename "$BACKUP_FILE")" in
+  "${TARGET_DB}"-pre-v21-*.sql) ;;
+  *) bk_die "backup basename must be ${TARGET_DB}-pre-v21-*.sql (got $(basename "$BACKUP_FILE"))" ;;
+esac
 printf '20\n' >"$MOCK/flyway_max.txt"
 printf '0\n' >"$MOCK/counterparty_col.txt"
 
@@ -226,7 +242,6 @@ expect_fail "reject-tampered-backup-bytes" \
 # 19 manifest points at wrong target / uuid
 BAD_MF="$WORK/backup/bad.manifest"
 cp "$BACKUP_MANIFEST" "$BAD_MF"
-# rewrite uuid line
 python3 - "$BAD_MF" <<'PY'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1])
@@ -242,6 +257,27 @@ chmod 600 "$BAD_MF"
 expect_fail "reject-manifest-wrong-instance-uuid" \
   "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
   --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --manifest "$BAD_MF"
+
+# 19b manifest target_db mismatch (legacy name)
+BAD_MF_DB="$WORK/backup/bad-db.manifest"
+cp "$BACKUP_MANIFEST" "$BAD_MF_DB"
+python3 - "$BAD_MF_DB" <<'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1])
+lines=[]
+for line in p.read_text().splitlines():
+    if line.startswith("target_db="):
+        lines.append("target_db=bookkeeping")
+    elif line.startswith("mysql_database="):
+        lines.append("mysql_database=bookkeeping")
+    else:
+        lines.append(line)
+p.write_text("\n".join(lines)+"\n")
+PY
+chmod 600 "$BAD_MF_DB"
+expect_fail "reject-manifest-legacy-target-db" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --manifest "$BAD_MF_DB"
 
 # 20 missing manifest
 expect_fail "reject-missing-manifest" \

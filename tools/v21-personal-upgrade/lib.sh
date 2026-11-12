@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Shared helpers for V21 personal-upgrade safety scripts.
-# No credentials are printed. Not authorized to run against real bookkeeping
+# No credentials are printed. Not authorized to operate the personal formal ledger
 # unless a separate owner special approval says so.
 
 set -euo pipefail
 
 BK_V21_EXPECTED_NEW_SHA="${BK_V21_EXPECTED_NEW_SHA:-824a3ce3ccc3bbb1223ded64c5cdfb04eb2f3b03}"
 BK_V21_EXPECTED_V21_FILE_SHA="${BK_V21_EXPECTED_V21_FILE_SHA:-525bf36b67633b1b4b5d9b77694195db4502dcab22ef02274c9c6eea8d45d5f9}"
-BK_V21_TARGET_DB="${BK_V21_TARGET_DB:-bookkeeping}"
+# Pinned personal formal target (owner-approved 2026-11-12). Not env-overridable.
+# Legacy name "bookkeeping" is refused (forbidden substring + exact-match gate).
+BK_V21_TARGET_DB="bk_personal_local"
 BK_V21_V21_RELPATH="backend/src/main/resources/db/migration/V21__transaction_counterparty_name.sql"
 
+# Substring denylist for DB_URL / username. Plain "bookkeeping" also covers
+# bookkeeping_uat / _test / _migration_test / _v21_restore_drill path segments.
 BK_V21_FORBIDDEN_DB_SUBSTRINGS=(
-  bookkeeping_uat
-  bookkeeping_test
-  bookkeeping_migration_test
-  bookkeeping_v21_restore_drill
-  bk_personal_local
+  bookkeeping
 )
 
 BK_V21_FORBIDDEN_PORTS=(18081 18082 18083)
@@ -66,7 +66,7 @@ bk_load_env_file() {
 }
 
 # Parse jdbc:mysql URL → host, port (default 3306), database (exact path segment).
-# Prints three lines. Does not treat substring "bookkeeping" as proof of safety.
+# Prints three lines. Does not treat substring matches as proof of safety.
 bk_jdbc_parse() {
   local url="${1:-}"
   [[ -n "$url" ]] || bk_die "DB_URL empty"
@@ -187,6 +187,13 @@ bk_assert_instance_identity() {
     [[ -f "$yml" ]] || bk_die "Spring application.yml missing: $yml"
     grep -Eq '^[[:space:]]*url:[[:space:]]*\$\{DB_URL\}' "$yml" \
       || bk_die "Spring datasource url must be exactly \${DB_URL} (refuse non-env binding)"
+    # application-local.yml may still ship a jdbc:.../bookkeeping default. That is a
+    # residual risk: live upgrade must pass --spring.datasource.url=$DB_URL explicitly
+    # (see upgrade-run.sh). Do not treat the local-profile default as the target.
+    local local_yml="$new_wt/backend/src/main/resources/application-local.yml"
+    if [[ -f "$local_yml" ]] && grep -Eq 'bookkeeping' "$local_yml"; then
+      bk_log "WARN application-local.yml still mentions bookkeeping default; runtime must use explicit DB_URL (not profile fallback)"
+    fi
   fi
 
   local probe host_p port_p uuid_p db_p
