@@ -65,21 +65,50 @@ bk_load_env_file() {
   done <"$file"
 }
 
-bk_jdbc_database_name() {
+# Parse jdbc:mysql URL → host, port (default 3306), database (exact path segment).
+# Prints three lines. Does not treat substring "bookkeeping" as proof of safety.
+bk_jdbc_parse() {
   local url="${1:-}"
   [[ -n "$url" ]] || bk_die "DB_URL empty"
   python3 - "$url" <<'PY'
 import sys, re
 url = sys.argv[1]
-m = re.search(r"jdbc:mysql://([^/?]+)/([^?]+)", url)
+m = re.search(r"^jdbc:mysql://([^/?]+)/([^?]+)", url)
 if not m:
     sys.stderr.write("STOP: DB_URL not a jdbc:mysql URL with database path\n")
     sys.exit(1)
-host, db = m.group(1), m.group(2)
-# host may be host:port
-print(host.split(":")[0])
+hostport, db = m.group(1), m.group(2)
+if "/" in db or not db or db.strip() != db:
+    sys.stderr.write("STOP: DB_URL database path invalid\n")
+    sys.exit(1)
+if ":" in hostport:
+    host, port_s = hostport.rsplit(":", 1)
+    if not port_s.isdigit():
+        sys.stderr.write("STOP: DB_URL port invalid\n")
+        sys.exit(1)
+    port = int(port_s)
+else:
+    host, port = hostport, 3306
+print(host)
+print(port)
 print(db)
 PY
+}
+
+# Back-compat helper used by older call sites: host\ndb
+bk_jdbc_database_name() {
+  local parsed host db
+  parsed="$(bk_jdbc_parse "${1:-}")"
+  host="$(printf '%s\n' "$parsed" | sed -n '1p')"
+  db="$(printf '%s\n' "$parsed" | sed -n '3p')"
+  printf '%s\n%s\n' "$host" "$db"
+}
+
+bk_normalize_host() {
+  case "$1" in
+    localhost|LOCALHOST) printf '%s\n' "127.0.0.1" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
 }
 
 bk_assert_no_forbidden_substrings() {
@@ -99,13 +128,220 @@ bk_assert_db_url() {
   bk_assert_no_forbidden_substrings "DB_URL" "$url"
   bk_assert_no_forbidden_substrings "DB_USERNAME" "${DB_USERNAME:-}"
 
-  local host db
-  host="$(bk_jdbc_database_name "$url" | sed -n '1p')"
-  db="$(bk_jdbc_database_name "$url" | sed -n '2p')"
-  [[ "$host" == "127.0.0.1" || "$host" == "localhost" ]] \
+  local parsed host port db
+  parsed="$(bk_jdbc_parse "$url")"
+  host="$(printf '%s\n' "$parsed" | sed -n '1p')"
+  port="$(printf '%s\n' "$parsed" | sed -n '2p')"
+  db="$(printf '%s\n' "$parsed" | sed -n '3p')"
+  host="$(bk_normalize_host "$host")"
+  [[ "$host" == "127.0.0.1" ]] \
     || bk_die "DB_URL host must be 127.0.0.1 or localhost (got $host)"
   [[ "$db" == "$BK_V21_TARGET_DB" ]] \
     || bk_die "DB_URL database must be exactly $BK_V21_TARGET_DB (got $db)"
+  [[ "$port" =~ ^[0-9]+$ ]] || bk_die "DB_URL port invalid: $port"
+  BK_V21_JDBC_HOST="$host"
+  BK_V21_JDBC_PORT="$port"
+  BK_V21_JDBC_DB="$db"
+  export BK_V21_JDBC_HOST BK_V21_JDBC_PORT BK_V21_JDBC_DB
+}
+
+# Probe MySQL client identity. Prints: host_or_dash port server_uuid schema_db
+# schema_db must equal DATABASE() after connecting to target schema.
+bk_mysql_probe_identity() {
+  if bk_mock_enabled; then
+    local mock_dir="${BK_V21_MOCK_DIR:-}"
+    local f="${mock_dir}/mysql_identity.txt"
+    [[ -n "$mock_dir" && -f "$f" ]] || bk_die "missing mock mysql identity fixture: $f"
+    # expected lines: host port server_uuid database
+    local lines
+    lines="$(wc -l <"$f" | tr -d ' ')"
+    [[ "$lines" -ge 4 ]] || bk_die "mysql_identity.txt must have host/port/uuid/database lines"
+    cat "$f"
+    return 0
+  fi
+  [[ "${BK_V21_ALLOW_LIVE_MYSQL:-0}" == "1" ]] \
+    || bk_die "live MySQL disabled (set BK_V21_ALLOW_LIVE_MYSQL=1 only after owner special approval)"
+  local cnf="${BK_V21_MYSQL_DEFAULTS_FILE:-}"
+  [[ -n "$cnf" && -f "$cnf" ]] || bk_die "BK_V21_MYSQL_DEFAULTS_FILE required for live MySQL"
+  local mode
+  mode=$(stat -f '%OLp' "$cnf" 2>/dev/null || stat -c '%a' "$cnf")
+  case "$mode" in
+    600|400) ;;
+    *) bk_die "mysql defaults-file mode must be 600/400" ;;
+  esac
+  # Connect WITH the target schema so DATABASE() is authoritative evidence.
+  "$(bk_mysql_bin)" --defaults-file="$cnf" --protocol=TCP -h127.0.0.1 \
+    -D "$BK_V21_TARGET_DB" --batch -N -e \
+    "SELECT @@hostname, @@port, @@server_uuid, DATABASE();"
+}
+
+# Cross-check Spring-bound DB_URL (env → application.yml ${DB_URL}) vs live/mock MySQL identity.
+# Optional arg: NEW_WT path to verify Spring Boot yaml binding.
+bk_assert_instance_identity() {
+  local new_wt="${1:-}"
+  [[ -n "${BK_V21_JDBC_HOST:-}" && -n "${BK_V21_JDBC_PORT:-}" && -n "${BK_V21_JDBC_DB:-}" ]] \
+    || bk_die "JDBC identity unset; call bk_assert_db_url first"
+
+  if [[ -n "$new_wt" ]]; then
+    local yml="$new_wt/backend/src/main/resources/application.yml"
+    [[ -f "$yml" ]] || bk_die "Spring application.yml missing: $yml"
+    grep -Eq '^[[:space:]]*url:[[:space:]]*\$\{DB_URL\}' "$yml" \
+      || bk_die "Spring datasource url must be exactly \${DB_URL} (refuse non-env binding)"
+  fi
+
+  local probe host_p port_p uuid_p db_p
+  probe="$(bk_mysql_probe_identity)"
+  host_p="$(printf '%s\n' "$probe" | sed -n '1p' | tr -d '\r')"
+  port_p="$(printf '%s\n' "$probe" | sed -n '2p' | tr -d '\r')"
+  uuid_p="$(printf '%s\n' "$probe" | sed -n '3p' | tr -d '\r')"
+  db_p="$(printf '%s\n' "$probe" | sed -n '4p' | tr -d '\r')"
+
+  [[ -n "$port_p" && -n "$uuid_p" && -n "$db_p" ]] \
+    || bk_die "MySQL identity evidence incomplete (need port, server_uuid, DATABASE())"
+
+  # Host from @@hostname may be machine name; for local-only policy we require JDBC host loopback
+  # and MySQL TCP port + DATABASE() must match JDBC. Optional MYSQL_HOST env must agree if set.
+  if [[ -n "${MYSQL_HOST:-}" ]]; then
+    local mh
+    mh="$(bk_normalize_host "$MYSQL_HOST")"
+    [[ "$mh" == "$BK_V21_JDBC_HOST" ]] \
+      || bk_die "MYSQL_HOST ($mh) != JDBC host ($BK_V21_JDBC_HOST)"
+  fi
+
+  [[ "$db_p" == "$BK_V21_TARGET_DB" ]] \
+    || bk_die "MySQL DATABASE() must be exactly $BK_V21_TARGET_DB (got ${db_p:-empty}) — not string-contains"
+  [[ "$db_p" == "$BK_V21_JDBC_DB" ]] \
+    || bk_die "MySQL DATABASE() ($db_p) != JDBC database ($BK_V21_JDBC_DB)"
+  [[ "$port_p" == "$BK_V21_JDBC_PORT" ]] \
+    || bk_die "MySQL @@port ($port_p) != JDBC port ($BK_V21_JDBC_PORT) — client/Spring instance mismatch"
+
+  if [[ -n "${BK_V21_EXPECT_SERVER_UUID:-}" ]]; then
+    [[ "$uuid_p" == "$BK_V21_EXPECT_SERVER_UUID" ]] \
+      || bk_die "MySQL @@server_uuid mismatch (expected pinned uuid)"
+  fi
+
+  BK_V21_MYSQL_PORT="$port_p"
+  BK_V21_MYSQL_SERVER_UUID="$uuid_p"
+  BK_V21_MYSQL_DATABASE="$db_p"
+  BK_V21_MYSQL_HOSTNAME="$host_p"
+  export BK_V21_MYSQL_PORT BK_V21_MYSQL_SERVER_UUID BK_V21_MYSQL_DATABASE BK_V21_MYSQL_HOSTNAME
+  bk_log "instance identity ok jdbc=${BK_V21_JDBC_HOST}:${BK_V21_JDBC_PORT}/${BK_V21_JDBC_DB} mysql_port=$port_p uuid=${uuid_p:0:8}…"
+}
+
+bk_manifest_path_for_backup() {
+  local backup="$1"
+  printf '%s.manifest\n' "$backup"
+}
+
+bk_write_backup_manifest() {
+  local backup="$1"
+  local sha="$2"
+  local enc="${3:-}"
+  [[ -f "$backup" ]] || bk_die "backup missing for manifest"
+  [[ "$sha" =~ ^[a-f0-9]{64}$ ]] || bk_die "manifest sha invalid"
+  [[ -n "${BK_V21_JDBC_HOST:-}" && -n "${BK_V21_JDBC_PORT:-}" && -n "${BK_V21_MYSQL_SERVER_UUID:-}" ]] \
+    || bk_die "instance identity required before writing manifest"
+
+  local manifest
+  manifest="$(bk_manifest_path_for_backup "$backup")"
+  umask 077
+  cat >"$manifest" <<EOF
+manifest_version=1
+target_db=${BK_V21_TARGET_DB}
+jdbc_host=${BK_V21_JDBC_HOST}
+jdbc_port=${BK_V21_JDBC_PORT}
+mysql_port=${BK_V21_MYSQL_PORT}
+mysql_server_uuid=${BK_V21_MYSQL_SERVER_UUID}
+mysql_database=${BK_V21_MYSQL_DATABASE}
+backup_basename=$(basename "$backup")
+backup_sha256=${sha}
+backup_enc_basename=$(basename "${enc:-}")
+created_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+new_business_sha=${BK_V21_EXPECTED_NEW_SHA}
+EOF
+  chmod 600 "$manifest"
+  [[ -s "$manifest" ]] || bk_die "manifest empty"
+  bk_log "manifest written $(basename "$manifest")"
+}
+
+# Load KEY=VAL manifest into prefixed vars BK_V21_MF_*
+bk_load_backup_manifest() {
+  local manifest="$1"
+  [[ -f "$manifest" ]] || bk_die "backup manifest missing: $manifest"
+  local mode
+  mode=$(stat -f '%OLp' "$manifest" 2>/dev/null || stat -c '%a' "$manifest")
+  case "$mode" in
+    600|400) ;;
+    *) bk_die "manifest mode must be 600/400 (got $mode)" ;;
+  esac
+  local line key val
+  BK_V21_MF_manifest_version=""
+  BK_V21_MF_target_db=""
+  BK_V21_MF_jdbc_host=""
+  BK_V21_MF_jdbc_port=""
+  BK_V21_MF_mysql_port=""
+  BK_V21_MF_mysql_server_uuid=""
+  BK_V21_MF_mysql_database=""
+  BK_V21_MF_backup_basename=""
+  BK_V21_MF_backup_sha256=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" == *"="* ]] || bk_die "invalid manifest line"
+    key="${line%%=*}"
+    val="${line#*=}"
+    case "$key" in
+      manifest_version|target_db|jdbc_host|jdbc_port|mysql_port|mysql_server_uuid|mysql_database|backup_basename|backup_sha256|backup_enc_basename|created_utc|new_business_sha) ;;
+      *) bk_die "manifest key not allowed: $key" ;;
+    esac
+    printf -v "BK_V21_MF_${key}" '%s' "$val"
+  done <"$manifest"
+  [[ "${BK_V21_MF_manifest_version}" == "1" ]] || bk_die "unsupported manifest_version"
+  [[ -n "${BK_V21_MF_backup_sha256}" && -n "${BK_V21_MF_target_db}" && -n "${BK_V21_MF_mysql_server_uuid}" ]] \
+    || bk_die "manifest missing required identity/sha fields"
+}
+
+# Bind backup file + manifest + current instance identity. Fail-closed.
+bk_assert_backup_binding() {
+  local backup="$1"
+  local expect_sha="${2:-}"
+  local manifest="${3:-}"
+  [[ -n "$backup" ]] || bk_die "backup path required"
+  [[ -f "$backup" ]] || bk_die "backup missing: $backup"
+  [[ -s "$backup" ]] || bk_die "backup empty: $backup"
+  if [[ -z "$manifest" ]]; then
+    manifest="$(bk_manifest_path_for_backup "$backup")"
+  fi
+  bk_load_backup_manifest "$manifest"
+
+  local got
+  got="$(bk_sha256_file "$backup")"
+  [[ "$got" == "${BK_V21_MF_backup_sha256}" ]] \
+    || bk_die "backup SHA != manifest (file may be modified)"
+  if [[ -n "$expect_sha" ]]; then
+    [[ "$expect_sha" =~ ^[a-f0-9]{64}$ ]] || bk_die "expected backup sha must be 64 hex"
+    [[ "$got" == "$expect_sha" ]] || bk_die "backup SHA != --backup-sha argument"
+    [[ "$expect_sha" == "${BK_V21_MF_backup_sha256}" ]] || bk_die "--backup-sha != manifest sha"
+  fi
+  [[ "$(basename "$backup")" == "${BK_V21_MF_backup_basename}" ]] \
+    || bk_die "backup basename != manifest backup_basename"
+  [[ "${BK_V21_MF_target_db}" == "$BK_V21_TARGET_DB" ]] \
+    || bk_die "manifest target_db != $BK_V21_TARGET_DB"
+  [[ "${BK_V21_MF_mysql_database}" == "$BK_V21_TARGET_DB" ]] \
+    || bk_die "manifest mysql_database != $BK_V21_TARGET_DB"
+
+  [[ -n "${BK_V21_JDBC_HOST:-}" && -n "${BK_V21_MYSQL_SERVER_UUID:-}" ]] \
+    || bk_die "current instance identity required before backup binding"
+  [[ "${BK_V21_MF_jdbc_host}" == "${BK_V21_JDBC_HOST}" ]] \
+    || bk_die "manifest jdbc_host != current JDBC host"
+  [[ "${BK_V21_MF_jdbc_port}" == "${BK_V21_JDBC_PORT}" ]] \
+    || bk_die "manifest jdbc_port != current JDBC port"
+  [[ "${BK_V21_MF_mysql_port}" == "${BK_V21_MYSQL_PORT}" ]] \
+    || bk_die "manifest mysql_port != current MySQL @@port"
+  [[ "${BK_V21_MF_mysql_server_uuid}" == "${BK_V21_MYSQL_SERVER_UUID}" ]] \
+    || bk_die "manifest mysql_server_uuid != current instance uuid"
+  [[ "${BK_V21_MF_mysql_database}" == "${BK_V21_MYSQL_DATABASE}" ]] \
+    || bk_die "manifest mysql_database != current DATABASE()"
+  bk_log "backup binding ok sha=$got"
 }
 
 bk_assert_port() {

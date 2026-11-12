@@ -8,13 +8,15 @@ source "$ROOT/lib.sh"
 
 usage() {
   cat >&2 <<'EOF'
-Usage: upgrade-run.sh --env FILE --new-wt DIR --old-wt DIR --old-sha SHA --port N --backup-sha SHA256
+Usage: upgrade-run.sh --env FILE --new-wt DIR --old-wt DIR --old-sha SHA --port N \
+         --backup-file FILE --backup-sha SHA256 [--manifest FILE]
 Refuses default execution. Owner sets BK_V21_EXECUTE_UPGRADE=1 after special approval.
+Requires backup file + manifest binding (SHA + instance identity).
 EOF
   exit 2
 }
 
-ENV_FILE="" NEW_WT="" OLD_WT="" OLD_SHA="" PORT="" BACKUP_SHA=""
+ENV_FILE="" NEW_WT="" OLD_WT="" OLD_SHA="" PORT="" BACKUP_SHA="" BACKUP_FILE="" MANIFEST=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENV_FILE="${2:-}"; shift 2 ;;
@@ -22,12 +24,14 @@ while [[ $# -gt 0 ]]; do
     --old-wt) OLD_WT="${2:-}"; shift 2 ;;
     --old-sha) OLD_SHA="${2:-}"; shift 2 ;;
     --port) PORT="${2:-}"; shift 2 ;;
+    --backup-file) BACKUP_FILE="${2:-}"; shift 2 ;;
     --backup-sha) BACKUP_SHA="${2:-}"; shift 2 ;;
+    --manifest) MANIFEST="${2:-}"; shift 2 ;;
     -h|--help) usage ;;
     *) bk_die "unknown arg: $1" ;;
   esac
 done
-[[ -n "$ENV_FILE" && -n "$NEW_WT" && -n "$OLD_WT" && -n "$OLD_SHA" && -n "$PORT" && -n "$BACKUP_SHA" ]] || usage
+[[ -n "$ENV_FILE" && -n "$NEW_WT" && -n "$OLD_WT" && -n "$OLD_SHA" && -n "$PORT" && -n "$BACKUP_SHA" && -n "$BACKUP_FILE" ]] || usage
 [[ "$BACKUP_SHA" =~ ^[a-f0-9]{64}$ ]] || bk_die "backup sha must be 64 hex chars"
 
 bk_unset_test_urls
@@ -36,6 +40,8 @@ bk_assert_db_url
 bk_assert_port "$PORT"
 bk_assert_new_artifact_tree "$NEW_WT"
 bk_assert_old_artifact_tree "$OLD_WT" "$OLD_SHA"
+bk_assert_instance_identity "$NEW_WT"
+bk_assert_backup_binding "$BACKUP_FILE" "$BACKUP_SHA" "${MANIFEST:-}"
 bk_assert_pre_upgrade_schema
 
 bk_log "upgrade gate: new=$BK_V21_EXPECTED_NEW_SHA port=$PORT backup_sha=$BACKUP_SHA"

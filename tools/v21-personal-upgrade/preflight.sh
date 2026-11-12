@@ -42,6 +42,7 @@ bk_assert_port "$PORT"
 
 bk_assert_new_artifact_tree "$NEW_WT"
 bk_assert_old_artifact_tree "$OLD_WT" "$OLD_SHA"
+bk_assert_instance_identity "$NEW_WT"
 bk_assert_pre_upgrade_schema
 
 bk_log "preflight assertions passed (db=$BK_V21_TARGET_DB new=$BK_V21_EXPECTED_NEW_SHA old=$OLD_SHA port=$PORT)"

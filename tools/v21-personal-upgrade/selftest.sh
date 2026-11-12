@@ -36,13 +36,39 @@ expect_pass() {
   fi
 }
 
+write_mysql_identity() {
+  local path="$1" host="$2" port="$3" uuid="$4" db="$5"
+  printf '%s\n%s\n%s\n%s\n' "$host" "$port" "$uuid" "$db" >"$path"
+}
+
 TEST_ROOT="${BK_V21_SELFTEST_ROOT:-/tmp/bookkeeping-v21-upgrade-script-test}"
 RC02_WT="$TEST_ROOT/rc02-wt"
 OLD_WT="$TEST_ROOT/old-wt"
-[[ -d "$RC02_WT" ]] || bk_die "missing RC02 test tree: $RC02_WT (create worktree first)"
-[[ -d "$OLD_WT" ]] || bk_die "missing OLD test tree: $OLD_WT"
-OLD_SHA="$(git -C "$OLD_WT" rev-parse HEAD)"
+RC02_SHA="$BK_V21_EXPECTED_NEW_SHA"
+# Parent of V21 introduction — must not contain V21 file.
+OLD_FIXED_SHA="7281d1f156924e92eebc11f1843059ba41eb5f26"
 DOCS_WT="/Users/limingyuan/Documents/code/personal/bookkeeping-v11-s1"
+REPO_GIT="$(git -C "$DOCS_WT" rev-parse --show-toplevel)"
+
+prepare_trees() {
+  mkdir -p "$TEST_ROOT"
+  if [[ ! -d "$RC02_WT/.git" && ! -f "$RC02_WT/.git" ]]; then
+    rm -rf "$RC02_WT"
+    git -C "$REPO_GIT" worktree add --detach "$RC02_WT" "$RC02_SHA"
+  fi
+  if [[ ! -d "$OLD_WT/.git" && ! -f "$OLD_WT/.git" ]]; then
+    rm -rf "$OLD_WT"
+    git -C "$REPO_GIT" worktree add --detach "$OLD_WT" "$OLD_FIXED_SHA"
+  fi
+  [[ "$(git -C "$RC02_WT" rev-parse HEAD)" == "$RC02_SHA" ]] \
+    || bk_die "rc02-wt HEAD mismatch"
+  [[ "$(git -C "$OLD_WT" rev-parse HEAD)" == "$OLD_FIXED_SHA" ]] \
+    || bk_die "old-wt HEAD mismatch"
+  [[ ! -f "$OLD_WT/$BK_V21_V21_RELPATH" ]] || bk_die "old-wt unexpectedly has V21"
+}
+
+prepare_trees
+OLD_SHA="$(git -C "$OLD_WT" rev-parse HEAD)"
 
 WORK="$(mktemp -d)"
 MOCK="$WORK/mock"
@@ -50,6 +76,8 @@ mkdir -p "$MOCK" "$WORK/backup" "$WORK/enc" "$WORK/envs"
 printf '20\n' >"$MOCK/flyway_max.txt"
 printf '0\n' >"$MOCK/counterparty_col.txt"
 printf 'bookkeeping\n' >"$MOCK/schema_exists.txt"
+GOOD_UUID="11111111-2222-3333-4444-555555555555"
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
 
 write_env() {
   local path="$1" url="$2"
@@ -70,6 +98,8 @@ BAD_DB_ENV="$WORK/envs/bad-db.env"
 write_env "$BAD_DB_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_uat?useSSL=false'
 BAD_TEST_ENV="$WORK/envs/bad-test.env"
 write_env "$BAD_TEST_ENV" 'jdbc:mysql://127.0.0.1:3306/bookkeeping_test?useSSL=false'
+BAD_PORT_JDBC_ENV="$WORK/envs/bad-port-jdbc.env"
+write_env "$BAD_PORT_JDBC_ENV" 'jdbc:mysql://127.0.0.1:3307/bookkeeping?useSSL=false'
 
 export BK_V21_MOCK=1
 export BK_V21_MOCK_DIR="$MOCK"
@@ -111,12 +141,37 @@ unset BK_V21_CONFIRM_STDIN
 expect_fail "reject-missing-confirm" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
-# 8 happy preflight
+# 8 MySQL @@port != JDBC port (Spring/MySQL instance mismatch)
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3307" "$GOOD_UUID" "bookkeeping"
+export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
+expect_fail "reject-mysql-jdbc-port-mismatch" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+
+# 9 MySQL DATABASE() != target (even if JDBC string looked ok)
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping_other"
+expect_fail "reject-mysql-database-identity-mismatch" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+
+# 10 JDBC port differs from mock MySQL while URL uses alternate port (still exact-name bookkeeping)
+export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
+# SERVER_PORT still 18090; JDBC says 3307 but mock identity stays 3306 → reject
+expect_fail "reject-jdbc-port-vs-mysql-identity" \
+  "$ROOT/preflight.sh" --env "$BAD_PORT_JDBC_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+# 11 missing identity fixture
+rm -f "$MOCK/mysql_identity.txt"
+expect_fail "reject-missing-mysql-identity-evidence" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+
+# 12 happy preflight
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
 expect_pass "preflight-ok" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 
-# 9 backup without passphrase
+# 13 backup without passphrase
 NO_PASS="$WORK/envs/nopass.env"
 umask 077
 cat >"$NO_PASS" <<EOF
@@ -130,43 +185,97 @@ export BK_V21_CONFIRM_STDIN=BACKUP-OK
 expect_fail "reject-backup-without-passphrase" \
   "$ROOT/backup.sh" --env "$NO_PASS" --backup-dir "$WORK/backup" --encrypt-dir "$WORK/enc"
 
-# 10 backup ok
+# 14 backup ok (+ manifest)
 export BK_V21_CONFIRM_STDIN=BACKUP-OK
 expect_pass "backup-ok" \
   "$ROOT/backup.sh" --env "$GOOD_ENV" --backup-dir "$WORK/backup" --encrypt-dir "$WORK/enc"
 BACKUP_SHA="$(grep '^BACKUP_SHA256=' /tmp/bk-v21-st-out.txt | cut -d= -f2)"
 BACKUP_FILE="$(grep '^BACKUP_FILE=' /tmp/bk-v21-st-out.txt | cut -d= -f2-)"
-[[ -n "$BACKUP_SHA" && -n "$BACKUP_FILE" && -f "$BACKUP_FILE" ]] || bk_die "selftest could not capture backup outputs"
-# reset schema mock to V20 for upgrade path
+BACKUP_MANIFEST="$(grep '^BACKUP_MANIFEST=' /tmp/bk-v21-st-out.txt | cut -d= -f2-)"
+[[ -n "$BACKUP_SHA" && -n "$BACKUP_FILE" && -f "$BACKUP_FILE" && -f "$BACKUP_MANIFEST" ]] \
+  || bk_die "selftest could not capture backup/manifest outputs"
 printf '20\n' >"$MOCK/flyway_max.txt"
 printf '0\n' >"$MOCK/counterparty_col.txt"
 
-# 11 upgrade without confirm
+# 15 upgrade without confirm
 unset BK_V21_CONFIRM_STDIN
 expect_fail "reject-upgrade-without-confirm" \
-  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090 --backup-sha "$BACKUP_SHA"
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA"
 
-# 12 upgrade dry with confirm
+# 16 upgrade without backup file
+export BK_V21_CONFIRM_STDIN=UPGRADE-BOOKKEEPING
+expect_fail "reject-upgrade-missing-backup-file" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-sha "$BACKUP_SHA"
+
+# 17 backup SHA mismatch
+expect_fail "reject-upgrade-sha-mismatch" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+# 18 tampered backup bytes (SHA vs manifest)
+TAMPER="$WORK/backup/tampered.sql"
+cp "$BACKUP_FILE" "$TAMPER"
+cp "$BACKUP_MANIFEST" "$TAMPER.manifest"
+echo "-- tampered" >>"$TAMPER"
+expect_fail "reject-tampered-backup-bytes" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$TAMPER" --backup-sha "$BACKUP_SHA" --manifest "$TAMPER.manifest"
+
+# 19 manifest points at wrong target / uuid
+BAD_MF="$WORK/backup/bad.manifest"
+cp "$BACKUP_MANIFEST" "$BAD_MF"
+# rewrite uuid line
+python3 - "$BAD_MF" <<'PY'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1])
+lines=[]
+for line in p.read_text().splitlines():
+    if line.startswith("mysql_server_uuid="):
+        lines.append("mysql_server_uuid=00000000-0000-0000-0000-000000000000")
+    else:
+        lines.append(line)
+p.write_text("\n".join(lines)+"\n")
+PY
+chmod 600 "$BAD_MF"
+expect_fail "reject-manifest-wrong-instance-uuid" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --manifest "$BAD_MF"
+
+# 20 missing manifest
+expect_fail "reject-missing-manifest" \
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --manifest "$WORK/backup/no-such.manifest"
+
+# 21 upgrade dry with confirm + binding
 export BK_V21_CONFIRM_STDIN=UPGRADE-BOOKKEEPING
 expect_pass "upgrade-dry-ok" \
-  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090 --backup-sha "$BACKUP_SHA"
+  "$ROOT/upgrade-run.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" \
+  --port 18090 --backup-file "$BACKUP_FILE" --backup-sha "$BACKUP_SHA"
 
-# 13 restore dry against mocked V21 without blank approval
+# 22 restore dry against mocked V21 without blank approval
 printf '21\n' >"$MOCK/flyway_max.txt"
 printf '1\n' >"$MOCK/counterparty_col.txt"
 unset BK_V21_ALLOW_BLANK_RESTORE
 expect_fail "reject-restore-v21-without-blank-flag" \
   "$ROOT/restore.sh" --env "$GOOD_ENV" --backup "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --old-wt "$OLD_WT" --old-sha "$OLD_SHA"
 
-# 14 restore dry with blank flag allowed (still dry)
+# 23 restore dry with blank flag allowed (still dry)
 export BK_V21_ALLOW_BLANK_RESTORE=1
 expect_pass "restore-dry-with-blank-flag" \
   "$ROOT/restore.sh" --env "$GOOD_ENV" --backup "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --old-wt "$OLD_WT" --old-sha "$OLD_SHA"
 
-# 15 execute without arming switches still fails
+# 24 execute without arming switches still fails
 export BK_V21_CONFIRM_STDIN=RESTORE-BOOKKEEPING-FULL
 expect_fail "reject-restore-execute-unarmed" \
   "$ROOT/restore.sh" --env "$GOOD_ENV" --backup "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --execute
+
+# 25 restore rejects when identity evidence gone
+rm -f "$MOCK/mysql_identity.txt"
+expect_fail "reject-restore-without-identity" \
+  "$ROOT/restore.sh" --env "$GOOD_ENV" --backup "$BACKUP_FILE" --backup-sha "$BACKUP_SHA" --old-wt "$OLD_WT" --old-sha "$OLD_SHA"
+
 rm -rf "$WORK"
 echo "SELFTEST_PASS=$PASS SELFTEST_FAIL=$FAIL" >&2
 [[ "$FAIL" -eq 0 ]]

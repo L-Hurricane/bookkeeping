@@ -9,13 +9,13 @@ source "$ROOT/lib.sh"
 
 usage() {
   cat >&2 <<'EOF'
-Usage: restore.sh --env FILE --backup FILE --backup-sha SHA256 --old-wt DIR --old-sha SHA [--execute]
+Usage: restore.sh --env FILE --backup FILE --backup-sha SHA256 --old-wt DIR --old-sha SHA [--manifest FILE] [--execute]
 Default is dry-run. --execute still requires BK_V21_ALLOW_BLANK_RESTORE=1 and confirm.
 EOF
   exit 2
 }
 
-ENV_FILE="" BACKUP="" BACKUP_SHA="" OLD_WT="" OLD_SHA="" EXECUTE=0
+ENV_FILE="" BACKUP="" BACKUP_SHA="" OLD_WT="" OLD_SHA="" MANIFEST="" EXECUTE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env) ENV_FILE="${2:-}"; shift 2 ;;
@@ -23,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --backup-sha) BACKUP_SHA="${2:-}"; shift 2 ;;
     --old-wt) OLD_WT="${2:-}"; shift 2 ;;
     --old-sha) OLD_SHA="${2:-}"; shift 2 ;;
+    --manifest) MANIFEST="${2:-}"; shift 2 ;;
     --execute) EXECUTE=1; shift ;;
     -h|--help) usage ;;
     *) bk_die "unknown arg: $1" ;;
@@ -35,11 +36,9 @@ bk_unset_test_urls
 bk_load_env_file "$ENV_FILE"
 bk_assert_db_url
 bk_assert_old_artifact_tree "$OLD_WT" "$OLD_SHA"
+bk_assert_instance_identity
+bk_assert_backup_binding "$BACKUP" "$BACKUP_SHA" "${MANIFEST:-}"
 
-[[ -f "$BACKUP" ]] || bk_die "backup missing"
-[[ -s "$BACKUP" ]] || bk_die "backup empty"
-GOT="$(bk_sha256_file "$BACKUP")"
-[[ "$GOT" == "$BACKUP_SHA" ]] || bk_die "backup SHA mismatch"
 grep -q "Database: ${BK_V21_TARGET_DB}" "$BACKUP" || bk_die "backup not for target db"
 grep -q "flyway_schema_history" "$BACKUP" || bk_die "backup missing flyway history"
 

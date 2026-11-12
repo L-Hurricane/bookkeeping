@@ -34,6 +34,7 @@ bk_require_cmd gzip
 bk_unset_test_urls
 bk_load_env_file "$ENV_FILE"
 bk_assert_db_url
+bk_assert_instance_identity
 [[ -n "${BK_V21_BACKUP_PASSPHRASE:-}" ]] || bk_die "BK_V21_BACKUP_PASSPHRASE missing in env file"
 
 mkdir -p "$BACKUP_DIR" "$ENCRYPT_DIR"
@@ -42,7 +43,7 @@ BACKUP="$BACKUP_DIR/${BK_V21_TARGET_DB}-pre-v21-${STAMP}.sql"
 ENC="$ENCRYPT_DIR/${BK_V21_TARGET_DB}-pre-v21-${STAMP}.sql.gz.enc"
 
 cleanup_partial() {
-  rm -f "$BACKUP" "$BACKUP.sha256" "$ENC" 2>/dev/null || true
+  rm -f "$BACKUP" "$BACKUP.sha256" "$ENC" "$(bk_manifest_path_for_backup "$BACKUP")" 2>/dev/null || true
 }
 trap 'cleanup_partial' ERR
 
@@ -90,10 +91,16 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BK_V21_BACKUP_PASSPHRASE -in "$ENC
   || bk_die "decrypt/gunzip feasibility SHA mismatch"
 rm -rf "$TMPDIR_FEAS"
 trap 'cleanup_partial' ERR
+
+bk_write_backup_manifest "$BACKUP" "$SHA" "$ENC"
+MANIFEST="$(bk_manifest_path_for_backup "$BACKUP")"
+# Binding self-check before confirm
+bk_assert_backup_binding "$BACKUP" "$SHA" "$MANIFEST"
 trap - ERR
 
 bk_log "backup ok bytes=$(wc -c <"$BACKUP" | tr -d ' ') sha=$SHA enc=$(basename "$ENC")"
 bk_require_confirm "BACKUP-OK" "Type BACKUP-OK to mark backup usable for upgrade:"
 bk_log "BACKUP_OK path=$BACKUP"
 # Print only non-secret paths for the next step
-printf 'BACKUP_FILE=%s\nBACKUP_SHA256=%s\nBACKUP_ENC=%s\n' "$BACKUP" "$SHA" "$ENC"
+printf 'BACKUP_FILE=%s\nBACKUP_SHA256=%s\nBACKUP_ENC=%s\nBACKUP_MANIFEST=%s\n' \
+  "$BACKUP" "$SHA" "$ENC" "$MANIFEST"
