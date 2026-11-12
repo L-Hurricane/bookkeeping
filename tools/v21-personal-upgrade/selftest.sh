@@ -41,6 +41,12 @@ write_mysql_identity() {
   printf '%s\n%s\n%s\n%s\n' "$host" "$port" "$uuid" "$db" >"$path"
 }
 
+# Live mysql --batch -N shape: one TSV row (defaults-file may omit database=).
+write_mysql_identity_tsv() {
+  local path="$1" host="$2" port="$3" uuid="$4" db="$5"
+  printf '%s\t%s\t%s\t%s\n' "$host" "$port" "$uuid" "$db" >"$path"
+}
+
 TEST_ROOT="${BK_V21_SELFTEST_ROOT:-/tmp/bookkeeping-v21-upgrade-script-test}"
 RC02_WT="$TEST_ROOT/rc02-wt"
 OLD_WT="$TEST_ROOT/old-wt"
@@ -188,10 +194,37 @@ expect_fail "reject-jdbc-port-vs-mysql-identity" \
 rm -f "$MOCK/mysql_identity.txt"
 expect_fail "reject-missing-mysql-identity-evidence" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
-write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 
-# 12 happy preflight (bk_personal_local + username containing bookkeeping)
+# 11b live-shaped TSV with unselected schema (DATABASE() NULL) → incomplete / reject
+write_mysql_identity_tsv "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "NULL"
+expect_fail "reject-tsv-identity-database-unselected" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+# 11c live-shaped TSV with wrong schema still rejected after parse
+write_mysql_identity_tsv "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "bookkeeping"
+expect_fail "reject-tsv-identity-wrong-database" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+# 11d live-shaped TSV port mismatch
+write_mysql_identity_tsv "$MOCK/mysql_identity.txt" "127.0.0.1" "3307" "$GOOD_UUID" "$TARGET_DB"
+expect_fail "reject-tsv-identity-port-mismatch" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+# 11e live-shaped TSV uuid mismatch when pinned
+write_mysql_identity_tsv "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
+export BK_V21_EXPECT_SERVER_UUID="00000000-0000-0000-0000-000000000000"
+expect_fail "reject-tsv-identity-uuid-mismatch" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+unset BK_V21_EXPECT_SERVER_UUID
+
+# 12 happy preflight: TSV live shape (defaults-file has no default DB; probe selected target)
+write_mysql_identity_tsv "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 export BK_V21_CONFIRM_STDIN=PREFLIGHT-OK
+expect_pass "preflight-ok-tsv-identity-bk-personal-local" \
+  "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
+
+# 12b happy preflight also with classic 4-line mock fixture
+write_mysql_identity "$MOCK/mysql_identity.txt" "127.0.0.1" "3306" "$GOOD_UUID" "$TARGET_DB"
 expect_pass "preflight-ok-bk-personal-local-with-bookkeeping-username" \
   "$ROOT/preflight.sh" --env "$GOOD_ENV" --new-wt "$RC02_WT" --old-wt "$OLD_WT" --old-sha "$OLD_SHA" --port 18090
 

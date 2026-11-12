@@ -32,7 +32,7 @@ NEW_WT must be an **independent** tree whose `HEAD` is RC-02. The docs-archive w
 
 ## Instance identity (P1)
 
-Scripts parse JDBC host/port/database, require Spring `application.yml` datasource `url: ${DB_URL}`, then probe MySQL (`@@port`, `@@server_uuid`, `DATABASE()` after connecting to `bk_personal_local`). Mismatch or missing evidence → **STOP**.
+Scripts parse JDBC host/port/database, require Spring `application.yml` datasource `url: ${DB_URL}`, then probe MySQL with an explicit `--database=bk_personal_local` (not relying on defaults-file `database=`). They read live `@@port`, `@@server_uuid`, and `DATABASE()`, accepting either a 4-line mock fixture or live `mysql --batch -N` single-row TSV. Mismatch, NULL/`DATABASE()` unselected, or missing evidence → **STOP**.
 
 ### `application-local.yml` residual risk
 

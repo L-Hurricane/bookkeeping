@@ -149,6 +149,42 @@ bk_assert_db_url() {
   export BK_V21_JDBC_HOST BK_V21_JDBC_PORT BK_V21_JDBC_DB
 }
 
+# Normalize probe stdout to four newline-separated fields:
+# host, port, server_uuid, DATABASE().
+# Accepts mock 4-line fixtures OR live mysql --batch -N single-row TSV
+# (tab-separated SELECT of four columns). Never invents values.
+bk_parse_mysql_identity_probe() {
+  local raw="${1:-}"
+  raw="$(printf '%s' "$raw" | tr -d '\r')"
+  [[ -n "$raw" ]] || bk_die "MySQL identity probe returned empty output"
+
+  local host_p port_p uuid_p db_p
+  local line_count
+  line_count="$(printf '%s\n' "$raw" | awk 'NF{c++} END{print c+0}')"
+
+  if [[ "$line_count" -ge 4 ]]; then
+    host_p="$(printf '%s\n' "$raw" | awk 'NF{print; exit}')"
+    port_p="$(printf '%s\n' "$raw" | awk 'NF{i++; if(i==2){print; exit}}')"
+    uuid_p="$(printf '%s\n' "$raw" | awk 'NF{i++; if(i==3){print; exit}}')"
+    db_p="$(printf '%s\n' "$raw" | awk 'NF{i++; if(i==4){print; exit}}')"
+  else
+    # Live mysql --batch -N: one row, four tab-separated columns.
+    local first
+    first="$(printf '%s\n' "$raw" | awk 'NF{print; exit}')"
+    IFS=$'\t' read -r host_p port_p uuid_p db_p _ <<<"$first" || true
+  fi
+
+  # mysql prints SQL NULL as the literal word NULL for an unselected schema.
+  if [[ -z "${db_p:-}" || "$db_p" == "NULL" || "$db_p" == "null" ]]; then
+    db_p=""
+  fi
+
+  [[ -n "${port_p:-}" && -n "${uuid_p:-}" && -n "${db_p:-}" ]] \
+    || bk_die "MySQL identity evidence incomplete (need port, server_uuid, DATABASE())"
+
+  printf '%s\n%s\n%s\n%s\n' "$host_p" "$port_p" "$uuid_p" "$db_p"
+}
+
 # Probe MySQL client identity. Prints: host_or_dash port server_uuid schema_db
 # schema_db must equal DATABASE() after connecting to target schema.
 bk_mysql_probe_identity() {
@@ -156,10 +192,8 @@ bk_mysql_probe_identity() {
     local mock_dir="${BK_V21_MOCK_DIR:-}"
     local f="${mock_dir}/mysql_identity.txt"
     [[ -n "$mock_dir" && -f "$f" ]] || bk_die "missing mock mysql identity fixture: $f"
-    # expected lines: host port server_uuid database
-    local lines
-    lines="$(wc -l <"$f" | tr -d ' ')"
-    [[ "$lines" -ge 4 ]] || bk_die "mysql_identity.txt must have host/port/uuid/database lines"
+    # Fixture may be 4 lines OR one TSV row (live mysql shape).
+    [[ -s "$f" ]] || bk_die "mysql_identity.txt empty"
     cat "$f"
     return 0
   fi
@@ -173,9 +207,10 @@ bk_mysql_probe_identity() {
     600|400) ;;
     *) bk_die "mysql defaults-file mode must be 600/400" ;;
   esac
-  # Connect WITH the target schema so DATABASE() is authoritative evidence.
+  # Always select target schema on the client CLI. Do not rely on defaults-file
+  # database=…; without an explicit database, DATABASE() is NULL and identity fails.
   "$(bk_mysql_bin)" --defaults-file="$cnf" --protocol=TCP -h127.0.0.1 \
-    -D "$BK_V21_TARGET_DB" --batch -N -e \
+    --database="$BK_V21_TARGET_DB" --batch -N -e \
     "SELECT @@hostname, @@port, @@server_uuid, DATABASE();"
 }
 
@@ -202,10 +237,11 @@ bk_assert_instance_identity() {
 
   local probe host_p port_p uuid_p db_p
   probe="$(bk_mysql_probe_identity)"
-  host_p="$(printf '%s\n' "$probe" | sed -n '1p' | tr -d '\r')"
-  port_p="$(printf '%s\n' "$probe" | sed -n '2p' | tr -d '\r')"
-  uuid_p="$(printf '%s\n' "$probe" | sed -n '3p' | tr -d '\r')"
-  db_p="$(printf '%s\n' "$probe" | sed -n '4p' | tr -d '\r')"
+  probe="$(bk_parse_mysql_identity_probe "$probe")"
+  host_p="$(printf '%s\n' "$probe" | sed -n '1p')"
+  port_p="$(printf '%s\n' "$probe" | sed -n '2p')"
+  uuid_p="$(printf '%s\n' "$probe" | sed -n '3p')"
+  db_p="$(printf '%s\n' "$probe" | sed -n '4p')"
 
   [[ -n "$port_p" && -n "$uuid_p" && -n "$db_p" ]] \
     || bk_die "MySQL identity evidence incomplete (need port, server_uuid, DATABASE())"
