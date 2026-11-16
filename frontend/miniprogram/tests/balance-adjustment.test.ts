@@ -310,6 +310,8 @@ describe("adjustment balance source", () => {
     currentBalance: "80.00",
     createdTime: "2026-10-01T10:00:00+08:00",
     lifecycle,
+    groupId: null,
+    displayOrder: null,
   });
 
   it("reads the requested account from a multi-account result", () => {

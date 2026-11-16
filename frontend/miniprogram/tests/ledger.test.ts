@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { beginLoad, beginLogout, createLoadGuard, endLogout } from "../miniprogram/account/load-guard";
 import { ApiError, createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
+import { appendLedgerPage, isUsableDateRange } from "../miniprogram/ledger/account-history";
 import {
   canApplyLedgerResult,
   formatBusinessTime,
+  ledgerBalanceEffectAmount,
+  ledgerPagePath,
   ledgerPath,
   ledgerRows,
   parseLedger,
@@ -42,6 +46,19 @@ const transaction = {
   businessTime: "2026-09-12T20:00:00+08:00",
 };
 
+function entry(transactionType: "INCOME" | "EXPENSE", amount: string, id: number) {
+  return {
+    kind: "TRANSACTION",
+    id,
+    transactionType,
+    displayName: "记录",
+    amount,
+    category: null,
+    tags: [],
+    businessTime: "2026-09-12T20:00:00+08:00",
+  };
+}
+
 const adjustment = {
   kind: "BALANCE_ADJUSTMENT",
   id: 8,
@@ -76,11 +93,13 @@ describe("ledger contract", () => {
       assert.equal(ledger.items[1].transactionType, "EXPENSE");
     }
     const rows = ledgerRows(ledger?.items ?? []);
-    assert.equal(rows[0]?.typeLabel, "调整");
+    assert.equal(rows[0]?.typeLabel, "余额调整");
     assert.equal(rows[0]?.amountLabel, "¥37.50");
+    assert.equal(rows[0]?.amountToneClass, "money-positive");
     assert.equal(rows[1]?.recordId, 2);
     assert.equal(rows[1]?.typeLabel, "支出");
-    assert.equal(rows[1]?.amountLabel, "¥-20.00");
+    assert.equal(rows[1]?.amountLabel, "¥20.00");
+    assert.equal(rows[1]?.amountToneClass, "money-positive");
     assert.equal(rows[1]?.detail, "未分类 外卖");
     assert.equal(formatBusinessTime("2026-09-05T09:00:00+08:00"), "09-05 09:00");
     assert.equal(ledger?.summary.transactionCount, 3);
@@ -116,17 +135,81 @@ describe("ledger contract", () => {
     assert.equal(tags.length, 1);
   });
 
+  it("rejects an illegal tag id or an empty tag name", () => {
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 0, name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: -1, name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ name: "外卖" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9 }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: "" }] }])), null);
+    assert.equal(parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: null }] }])), null);
+    const spaced = parseLedger(ledgerBody([{ ...transaction, tags: [{ id: 9, name: " " }] }]));
+    assert.equal(spaced?.items[0]?.kind, "TRANSACTION");
+  });
+
   it("parses a transfer entry with signed amount tone", () => {
     const ledger = parseLedger(
       ledgerBody([{ kind: "TRANSFER", id: 4, displayName: "转账", amount: "-12.50", businessTime: "2026-09-01T08:00:00+08:00" }]),
     );
     assert.equal(ledger?.items[0]?.kind, "TRANSFER");
     const row = ledgerRows(ledger?.items ?? [])[0];
-    assert.equal(row?.typeLabel, "转账");
+    assert.equal(row?.typeLabel, "转出");
+    assert.equal(row?.title, "转账");
+    assert.equal(row?.detail, "");
+    assert.equal(row?.amountLabel, "¥-12.50");
     assert.equal(row?.amountToneClass, "money-negative");
   });
 
+  it("shows balance effect for income, expense, transfers, adjustments, and zero without an account-kind flip", () => {
+    const items = [
+      entry("INCOME", "20.00", 1),
+      entry("INCOME", "-12.00", 2),
+      entry("EXPENSE", "20.00", 3),
+      entry("EXPENSE", "-12.00", 4),
+      entry("EXPENSE", "0.00", 5),
+      { kind: "TRANSFER", id: 6, displayName: "工资卡", amount: "50.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "TRANSFER", id: 7, displayName: "工资卡", amount: "-50.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "BALANCE_ADJUSTMENT", id: 8, displayName: "余额调整", amount: "0.00", businessTime: "2026-09-01T08:00:00+08:00" },
+      { kind: "BALANCE_ADJUSTMENT", id: 9, displayName: "余额调整", amount: "-5.00", businessTime: "2026-09-01T08:00:00+08:00" },
+    ];
+    const ledger = parseLedger(ledgerBody(items));
+    const stored = ledger?.items[3];
+    assert.equal(stored?.kind, "TRANSACTION");
+    if (stored?.kind === "TRANSACTION") {
+      assert.equal(stored.amount, "-12.00");
+    }
+    const expense = ledger?.items[2];
+    assert.equal(expense?.kind, "TRANSACTION");
+    if (expense?.kind === "TRANSACTION") {
+      assert.equal(ledgerBalanceEffectAmount(expense), "-20.00");
+    }
+    const rows = ledgerRows(ledger?.items ?? []);
+    assert.deepEqual(
+      rows.map((row) => [row.typeLabel, row.amountLabel, row.amountToneClass]),
+      [
+        ["收入", "¥20.00", "money-positive"],
+        ["收入", "¥-12.00", "money-negative"],
+        ["支出", "¥-20.00", "money-negative"],
+        ["支出", "¥12.00", "money-positive"],
+        ["支出", "¥0.00", "money-zero"],
+        ["转入", "¥50.00", "money-positive"],
+        ["转出", "¥-50.00", "money-negative"],
+        ["余额调整", "¥0.00", "money-zero"],
+        ["余额调整", "¥-5.00", "money-negative"],
+      ],
+    );
+  });
+
   it("rejects invalid money, kind, summary, accountId, and month", () => {
+    assert.equal(parseLedger(ledgerBody([{
+      ...transaction,
+      id: 3,
+      businessTime: "1991-07-15T12:00:00+09:00",
+    }, transaction])), null);
+    assert.notEqual(parseLedger(ledgerBody([{
+      ...transaction,
+      id: 3,
+      businessTime: "1991-07-15T12:00:00+08:00",
+    }, transaction])), null);
     assert.equal(parseLedger(ledgerBody([{ ...transaction, amount: "20" }])), null);
     assert.equal(parseLedger(ledgerBody([{ ...transaction, kind: "NOTE" }])), null);
     assert.equal(parseLedger({ ...ledgerBody([transaction]), summary: { ...summary, surplus: "184.5" } }), null);
@@ -197,6 +280,64 @@ describe("ledger month requests", () => {
       return error instanceof ApiError && error.status === 401;
     });
     assert.equal(unauthorized, 1);
+  });
+});
+
+describe("account history pages", () => {
+  it("keeps a missing cursor and accepts an all-history page", () => {
+    const ledger = parseLedger({ ...ledgerBody([transaction]), month: null, nextCursor: "v1|cursor" });
+    assert.equal(ledger?.month, null);
+    assert.equal(ledger?.nextCursor, "v1|cursor");
+    assert.equal(parseLedger(ledgerBody([transaction]))?.nextCursor, null);
+  });
+
+  it("declares paging and binds the cursor to the query", () => {
+    assert.equal(ledgerPagePath({ accountId: 7 }), "/api/v1/accounts/7/ledger?paged=true");
+    assert.equal(
+      ledgerPagePath({ accountId: 7, month: "2024-08", cursor: "v1|7|MONTH:2024-08" }),
+      "/api/v1/accounts/7/ledger?paged=true&month=2024-08&cursor=v1%7C7%7CMONTH%3A2024-08",
+    );
+    assert.equal(
+      ledgerPagePath({ accountId: 7, from: "2024-08-01", to: "2024-08-31", name: "牛奶 面包", cursor: "v1|7|RANGE" }),
+      "/api/v1/accounts/7/ledger?paged=true&from=2024-08-01&to=2024-08-31&name=%E7%89%9B%E5%A5%B6%20%E9%9D%A2%E5%8C%85&cursor=v1%7C7%7CRANGE",
+    );
+  });
+
+  it("appends the next page once and drops a repeated row", () => {
+    const first = [{ kind: "TRANSACTION", id: 1 }];
+    const second = appendLedgerPage(first, [
+      { kind: "TRANSACTION", id: 1 },
+      { kind: "TRANSFER", id: 2 },
+    ]);
+    assert.deepEqual(second, [
+      { kind: "TRANSACTION", id: 1 },
+      { kind: "TRANSFER", id: 2 },
+    ]);
+    assert.equal(appendLedgerPage(second, [{ kind: "TRANSFER", id: 2 }]).length, 2);
+  });
+
+  it("accepts a frozen date span and rejects an inverted or oversized range", () => {
+    const plusDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+    assert.equal(isUsableDateRange("2020-01-01", "2020-01-01"), true);
+    assert.equal(isUsableDateRange("2010-01-01", plusDays("2010-01-01", 3660)), true);
+    assert.equal(isUsableDateRange("2010-01-01", plusDays("2010-01-01", 3661)), false);
+    assert.equal(isUsableDateRange("2024-02-02", "2024-02-01"), false);
+    assert.equal(isUsableDateRange("2024-02-31", "2024-03-01"), false);
+  });
+});
+
+describe("account ledger surface", () => {
+  it("names the month filter 月份 and keeps horizontal room inside every ledger card", () => {
+    const markup = readFileSync(new URL("../miniprogram/pages/account-home/index.wxml", import.meta.url), "utf8");
+    const style = readFileSync(new URL("../miniprogram/pages/account-home/index.wxss", import.meta.url), "utf8");
+    assert.equal(markup.includes(">月份<"), true);
+    assert.equal(markup.includes(">按月<"), false);
+    assert.equal(markup.includes(">全部时间<"), true);
+    assert.equal(markup.includes(">自定义<"), true);
+    assert.equal((markup.match(/class="row /g) ?? []).length, 1);
+    assert.match(style, /\.row \{[^}]*padding: 20rpx 24rpx;/s);
+    assert.match(style, /\.row-title \{[^}]*word-break: break-all;/s);
+    assert.match(style, /\.amount \{[^}]*text-align: right;/s);
   });
 });
 

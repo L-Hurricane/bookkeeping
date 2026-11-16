@@ -21,6 +21,7 @@ import {
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
+  businessTimePickerDate,
   businessTimePickerMinute,
   isBusinessTimeAllowed,
   isFutureBusinessTime,
@@ -134,8 +135,11 @@ Page({
     tagNamesLabel: "—",
     businessTimeLabel: "",
     remarkLabel: "",
+    counterpartyLabel: "",
+    showCounterparty: false,
     amount: "",
     name: "",
+    counterpartyName: "",
     remark: "",
     amountError: "",
     accountText: "选择账户",
@@ -171,8 +175,10 @@ Page({
     timeError: "",
     futureHint: "",
     timeEditorOpen: false,
+    timeEditorTitle: "编辑交易时间",
     timeDate: "",
     timeClock: "",
+    timePickerDate: "",
     timePickerMinute: "00:00",
     timeDraftError: "",
     deleteLocked: false,
@@ -363,6 +369,14 @@ Page({
     this.setData({ remark: event.detail.value, submitError: "" });
   },
 
+  onCounterpartyInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
+    this.form = { ...this.form, counterpartyName: event.detail.value };
+    this.setData({ counterpartyName: event.detail.value, submitError: "" });
+  },
+
   onOpenCategories() {
     if (!this.canEdit() || this.categories.phase !== "ready") {
       return;
@@ -504,7 +518,7 @@ Page({
       return;
     }
     this.timeDraft = { date: event.detail.value, time: this.timeDraft?.time ?? "" };
-    this.setData({ timeDate: event.detail.value });
+    this.setData({ timeDate: event.detail.value, timePickerDate: businessTimePickerDate(event.detail.value) });
   },
 
   onTimeDateBlur() {
@@ -960,6 +974,8 @@ Page({
       businessTimeLabel: view.businessTimeLabel,
       remarkLabel: view.remarkLabel,
       showRemark: view.remarkLabel !== "—",
+      counterpartyLabel: view.counterpartyLabel,
+      showCounterparty: view.counterpartyLabel !== "—",
       accountName: this.accountName,
       deleteLocked: false,
       deleteHint: "",
@@ -989,6 +1005,7 @@ Page({
       typeLabel: this.form.type === "INCOME" ? "收入" : "支出",
       amount: this.form.amount,
       name: this.form.name,
+      counterpartyName: this.form.counterpartyName ?? "",
       remark: this.form.remark,
       categoryText: editCategoryText(this.categories.items, this.form.categoryId, this.transaction?.category ?? null),
       categoryPhase: this.categories.phase,

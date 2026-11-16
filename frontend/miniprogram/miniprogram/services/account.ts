@@ -1,5 +1,10 @@
 import { parseAccount, parseAccountList, type Account, type AccountKind } from "../account/account";
 import {
+  parseAccountGroup,
+  parseAccountGroupList,
+  type AccountGroup,
+} from "../account/grouping";
+import {
   parsePermanentDeletionPreview,
   type PermanentDeletionPreview,
 } from "../account/permanent-deletion";
@@ -35,6 +40,12 @@ export interface AccountApi {
   restoreAccount(accountId: number): Promise<Account>;
   previewPermanentDeletion(accountId: number): Promise<PermanentDeletionPreview>;
   executePermanentDeletion(accountId: number, previewToken: string): Promise<void>;
+  listGroups(): Promise<AccountGroup[]>;
+  createGroup(name: string): Promise<AccountGroup>;
+  renameGroup(groupId: number, name: string): Promise<AccountGroup>;
+  deleteGroup(groupId: number): Promise<void>;
+  reorderGroups(ids: readonly number[]): Promise<AccountGroup[]>;
+  placeAccount(accountId: number, groupId: number | null, orderedIds: readonly number[]): Promise<void>;
 }
 
 export function createAccountApi(http: HttpClient): AccountApi {
@@ -141,6 +152,78 @@ export function createAccountApi(http: HttpClient): AccountApi {
         method: "POST",
         path: `/api/v1/accounts/${accountId}/permanent-deletion`,
         body: { previewToken },
+        authenticated: true,
+      });
+    },
+
+    async listGroups() {
+      const body = await http.request<unknown>({
+        method: "GET",
+        path: "/api/v1/account-groups",
+        authenticated: true,
+      });
+      const groups = parseAccountGroupList(body);
+      if (groups === null) {
+        throw new AccountResponseError("分组响应无法识别");
+      }
+      return groups;
+    },
+
+    async createGroup(name) {
+      const body = await http.request<unknown>({
+        method: "POST",
+        path: "/api/v1/account-groups",
+        body: { name },
+        authenticated: true,
+      });
+      const group = parseAccountGroup(body);
+      if (group === null) {
+        throw new AccountResponseError("分组响应无法识别");
+      }
+      return group;
+    },
+
+    async renameGroup(groupId, name) {
+      const body = await http.request<unknown>({
+        method: "PUT",
+        path: `/api/v1/account-groups/${groupId}`,
+        body: { name },
+        authenticated: true,
+      });
+      const group = parseAccountGroup(body);
+      if (group === null || group.id !== groupId) {
+        throw new AccountResponseError("分组响应无法识别");
+      }
+      return group;
+    },
+
+    async deleteGroup(groupId) {
+      await http.request<void>({
+        method: "DELETE",
+        path: `/api/v1/account-groups/${groupId}`,
+        authenticated: true,
+      });
+    },
+
+    async reorderGroups(ids) {
+      const body = await http.request<unknown>({
+        method: "PUT",
+        path: "/api/v1/account-groups/order",
+        body: { ids },
+        authenticated: true,
+      });
+      const groups = parseAccountGroupList(body);
+      if (groups === null) {
+        throw new AccountResponseError("分组响应无法识别");
+      }
+      return groups;
+    },
+
+    async placeAccount(accountId, groupId, orderedIds) {
+      await http.request<void>({
+        method: "PUT",
+        path: `/api/v1/accounts/${accountId}/placement`,
+        body: { groupId, orderedIds },
         authenticated: true,
       });
     },

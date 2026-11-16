@@ -65,7 +65,7 @@ export function acceptTransactionCreated(state: LocateNavigation, payload: unkno
   if (saved === null) {
     return state;
   }
-  return acceptLocate({ kind: "transaction", recordId: saved.transactionId, targetMonth: saved.targetMonth });
+  return acceptLocate(state, { kind: "transaction", recordId: saved.transactionId, targetMonth: saved.targetMonth });
 }
 
 export function parseAdjustmentCreated(value: unknown): LedgerLocateIntent | null {
@@ -80,7 +80,7 @@ export function acceptAdjustmentCreated(state: LocateNavigation, payload: unknow
   if (pending === null) {
     return state;
   }
-  return acceptLocate(pending);
+  return acceptLocate(state, pending);
 }
 
 export function acceptTransferCreated(state: LocateNavigation, payload: unknown): LocateNavigation {
@@ -88,7 +88,7 @@ export function acceptTransferCreated(state: LocateNavigation, payload: unknown)
   if (pending === null) {
     return state;
   }
-  return acceptLocate(pending);
+  return acceptLocate(state, pending);
 }
 
 export function parseTransferCreated(value: unknown): LedgerLocateIntent | null {
@@ -118,8 +118,8 @@ export function resolveTransferTargetMonth(
   return businessMonth(businessTime);
 }
 
-function acceptLocate(pending: LedgerLocateIntent): LocateNavigation {
-  return { selectedMonth: pending.targetMonth, pending, highlightKey: "" };
+function acceptLocate(state: LocateNavigation, pending: LedgerLocateIntent): LocateNavigation {
+  return { selectedMonth: state.selectedMonth, pending, highlightKey: "" };
 }
 
 export function applyAcceptedLocate(current: LocateNavigation, next: LocateNavigation): LocateNavigation | null {
@@ -151,12 +151,20 @@ export function handoffPostSave(
   };
 }
 
-export function settleLedger(pending: LedgerLocateIntent | null, outcome: "success" | "error", items: readonly LedgerEntry[]): LedgerSettlement {
+export function settleLedger(
+  pending: LedgerLocateIntent | null,
+  outcome: "success" | "error",
+  items: readonly LedgerEntry[],
+  morePages = false,
+): LedgerSettlement {
   if (pending === null || outcome === "error") {
     return { pending, locate: null, missMessage: "" };
   }
   const locate = locateLedgerRecord(items, pending);
   if (locate === null) {
+    if (morePages) {
+      return { pending, locate: null, missMessage: "" };
+    }
     const missMessage =
       pending.kind === "adjustment"
         ? ADJUSTMENT_LOCATE_MISS_MESSAGE
@@ -166,6 +174,20 @@ export function settleLedger(pending: LedgerLocateIntent | null, outcome: "succe
     return { pending, locate: null, missMessage };
   }
   return { pending: null, locate, missMessage: "" };
+}
+
+export function nextLocateCursor(
+  pending: LedgerLocateIntent | null,
+  items: readonly LedgerEntry[],
+  nextCursor: string | null,
+): string | null {
+  if (pending === null || nextCursor === null || nextCursor.length === 0) {
+    return null;
+  }
+  if (locateLedgerRecord(items, pending) !== null) {
+    return null;
+  }
+  return nextCursor;
 }
 
 export function locateLedgerRecord(items: readonly LedgerEntry[], intent: LedgerLocateIntent): LocatedTransaction | null {

@@ -36,7 +36,8 @@ public class AccountService {
         this.transaction = new TransactionTemplate(transactionManager);
     }
     public record AccountView(long id, String name, String kind, String currency, String openingBalance,
-                              String currentBalance, String createdTime, String lifecycle) { }
+                              String currentBalance, String createdTime, String lifecycle, Long groupId,
+                              Long displayOrder) { }
     @Transactional(readOnly = true)
     public List<AccountView> list() {
         return list(null);
@@ -53,7 +54,7 @@ public class AccountService {
                 throw new ApiFailure(400, "VALIDATION_FAILED", "账户生命周期必须为 ACTIVE 或 ARCHIVED");
             }
         }
-        return accounts.findAllByUserIdAndLifecycleOrderByIdAsc(context.userId(), lifecycle).stream().map(this::view).toList();
+        return accounts.findAllByUserIdAndLifecycleOrderByDisplay(context.userId(), lifecycle).stream().map(this::view).toList();
     }
 
     public AccountView archive(long accountId) {
@@ -269,6 +270,6 @@ public class AccountService {
         String opening = Money.format(account.getOpeningBalance());
         return new AccountView(account.getId(), account.getName(), account.getKind().name(), account.getCurrency(), opening,
                 Money.format(balances.of(account.getId())), TIME.format(account.getCreatedTime().atZone(BEIJING)),
-                account.getLifecycle().name());
+                account.getLifecycle().name(), account.getGroupId(), account.getDisplayOrder());
     }
 }

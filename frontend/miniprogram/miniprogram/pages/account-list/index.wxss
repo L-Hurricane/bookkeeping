@@ -66,6 +66,16 @@
   padding: 28rpx 24rpx;
   background: #ffffff;
   border-radius: 16rpx;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.card.member {
+  transition: transform 160ms ease;
+}
+
+.dragging {
+  transition: none;
+  z-index: 2;
 }
 
 .card-main,
@@ -111,4 +121,45 @@
 
 .error {
   color: #b42318;
+}
+
+.section {
+  margin-bottom: 20rpx;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.section-title {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.section-subtotal,
+.handle {
+  font-size: 28rpx;
+}
+
+.handle {
+  padding: 8rpx 16rpx;
+  color: #1f4b73;
+  letter-spacing: -2rpx;
+}
+
+.dragging {
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: 0 8rpx 24rpx rgba(17, 17, 17, 0.12);
+  transition: none;
+}
+
+.member {
+  margin-left: 24rpx;
 }

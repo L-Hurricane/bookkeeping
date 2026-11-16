@@ -6,6 +6,7 @@ import { saveSession } from "../miniprogram/session/session";
 import { TransactionResponseError, createTransactionApi, transactionResourcePath } from "../miniprogram/services/transaction";
 import type { KeyValueStorage } from "../miniprogram/storage/key-value";
 import type { Tag } from "../miniprogram/tag/tag";
+import { parseTransactionResponse } from "../miniprogram/transaction/transaction";
 import {
   abandonEditSession,
   applyCreateTagToEditSession,
@@ -85,10 +86,66 @@ describe("transaction detail", () => {
     assert.equal(empty.categoryLabel, "未分类");
     assert.equal(empty.tagsLabel, "—");
     assert.equal(empty.remarkLabel, "—");
+    assert.equal(empty.counterpartyLabel, "—");
+    const named = transactionDetailView({ ...transaction, counterpartyName: "商店" });
+    assert.equal(named.counterpartyLabel, "商店");
+    assert.equal(parseTransactionResponse(responseBody())?.counterpartyName, null);
+    assert.equal(parseTransactionResponse({ ...responseBody(), counterpartyName: " 商店 " })?.counterpartyName, " 商店 ");
   });
 });
 
 describe("transaction edit", () => {
+  it("keeps a display-only blank tag id when another field is edited", () => {
+    const form = editFormFromTransaction({
+      ...transaction,
+      tags: [{ id: 4797, name: "（未命名标签）" }, { id: 301, name: "外卖" }],
+    });
+    const edited: CreateTransactionForm = { ...form, remark: "只改备注" };
+    const built = buildUpdateTransactionSnapshot(edited, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(built.ok, true);
+    if (!built.ok) {
+      return;
+    }
+    const body = updateTransactionRequestBody(built.value);
+    assert.deepEqual(body.tagIds, [301, 4797]);
+    assert.equal(body.remark, "只改备注");
+    assert.equal("tags" in body, false);
+    const withParty = buildUpdateTransactionSnapshot({ ...edited, counterpartyName: " 商店 " }, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(withParty.ok, true);
+    if (withParty.ok) {
+      assert.equal(updateTransactionRequestBody(withParty.value).counterpartyName, "商店");
+    }
+    const cleared = buildUpdateTransactionSnapshot({ ...edited, counterpartyName: "  " }, 1001, 1001, 4001, "EXPENSE", created);
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) {
+      assert.equal("counterpartyName" in updateTransactionRequestBody(cleared.value), false);
+    }
+    const income = buildUpdateTransactionSnapshot(
+      { ...edited, type: "INCOME", counterpartyName: "商店" },
+      1001,
+      1001,
+      4001,
+      "INCOME",
+      created,
+    );
+    assert.equal(income.ok, true);
+    if (income.ok) {
+      assert.equal(updateTransactionRequestBody(income.value).counterpartyName, "商店");
+    }
+    const incomeCleared = buildUpdateTransactionSnapshot(
+      { ...edited, type: "INCOME", counterpartyName: "  " },
+      1001,
+      1001,
+      4001,
+      "INCOME",
+      created,
+    );
+    assert.equal(incomeCleared.ok, true);
+    if (incomeCleared.ok) {
+      assert.equal("counterpartyName" in updateTransactionRequestBody(incomeCleared.value), false);
+    }
+  });
+
   it("fills the form from the transaction and keeps type out of the request", () => {
     const form = editFormFromTransaction(transaction);
     assert.equal(form.type, "EXPENSE");
@@ -160,7 +217,8 @@ describe("transaction edit", () => {
     assert.equal(saved.postSave?.targetMonth, "2026-08");
     assert.equal(saved.postSave?.transactionId, 4001);
     const home = acceptTransactionCreated({ selectedMonth: "2026-09", pending: null, highlightKey: "" }, saved.postSave);
-    assert.equal(home.selectedMonth, "2026-08");
+    assert.equal(home.selectedMonth, "2026-09");
+    assert.equal(home.pending?.targetMonth, "2026-08");
     assert.equal(home.pending?.kind, "transaction");
     assert.equal(home.pending?.recordId, 4001);
     const otherType = apiFor(() => ({ statusCode: 200, data: { ...responseBody(), type: "INCOME" } }));

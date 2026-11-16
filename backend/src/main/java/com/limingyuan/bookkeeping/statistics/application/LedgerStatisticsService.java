@@ -1,16 +1,17 @@
 package com.limingyuan.bookkeeping.statistics.application;
 
 import com.limingyuan.bookkeeping.account.application.CurrentBalance;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class LedgerStatisticsService {
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     private static final BigDecimal ZERO = new BigDecimal("0.00");
 
     private final JdbcClient jdbc;
@@ -321,8 +321,11 @@ public class LedgerStatisticsService {
                 ORDER BY tg.id
                 """).param("userId", context.userId()).param("ids", ids)
                 .query((rs, number) -> {
-                    tags.computeIfAbsent(rs.getLong("transaction_id"), ignored -> new ArrayList<>())
-                            .add(new TagRef(rs.getLong("tag_id"), rs.getString("name")));
+                    long tagId = rs.getLong("tag_id");
+                    if (tagId > 0) {
+                        tags.computeIfAbsent(rs.getLong("transaction_id"), ignored -> new ArrayList<>())
+                                .add(new TagRef(tagId, TagNames.display(rs.getString("name"))));
+                    }
                     return null;
                 }).list();
         return tags;
@@ -341,7 +344,7 @@ public class LedgerStatisticsService {
         return jdbc.sql("""
                 SELECT id, parent_id, name FROM tags WHERE user_id = :userId ORDER BY id
                 """).param("userId", context.userId())
-                .query((rs, number) -> new TagRollup.Node(rs.getLong("id"), nullableLong(rs, "parent_id"), rs.getString("name")))
+                .query((rs, number) -> new TagRollup.Node(rs.getLong("id"), nullableLong(rs, "parent_id"), TagNames.display(rs.getString("name"))))
                 .list();
     }
 
@@ -436,7 +439,7 @@ public class LedgerStatisticsService {
     }
 
     private static String beijing(LocalDateTime time) {
-        return TIME.format(time.atZone(StatisticsPeriod.BEIJING));
+        return ApiTime.format(time);
     }
 
     private static String blankToNull(String name) {

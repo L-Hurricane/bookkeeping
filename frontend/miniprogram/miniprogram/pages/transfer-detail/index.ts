@@ -1,4 +1,5 @@
-import { accountPickerCards, findAccount, type Account, type AccountPickerCard } from "../../account/account";
+import { findAccount, type Account } from "../../account/account";
+import { transferPickerSections, type AccountGroup, type TransferPickerSection } from "../../account/grouping";
 import { createLoadGuard } from "../../account/load-guard";
 import { ApiError } from "../../http/client";
 import { accountApi, transferApi } from "../../services/runtime";
@@ -32,12 +33,20 @@ import {
   unsyncTransferTimes,
 } from "../../transfer/time-sync";
 import {
+  applyDatePickerValue,
   applyNow,
+  applyTimePickerValue,
   applyToday,
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
   businessTimeFromParts,
+  businessTimePickerDate,
+  businessTimePickerMinute,
+  normalizeBusinessTimeDraft,
+  normalizeDateOnBlur,
+  normalizeTimeOnBlur,
+  timeEditorFields,
   type BusinessTimeDraft,
 } from "../../transaction/business-time";
 
@@ -49,11 +58,13 @@ Page({
   context: null as TransferDetailContext | null,
   transfer: null as TransferView | null,
   accounts: [] as Account[],
+  groups: [] as AccountGroup[],
   fromAccountId: 0,
   toAccountId: 0,
   fromAccountLabel: "",
   toAccountLabel: "",
   amount: "",
+  name: "",
   times: initialTransferTimes("2026-01-01T00:00:00+08:00"),
   save: editingTransfer(),
   deletePhase: "idle" as TransferDeletePhase,
@@ -69,12 +80,13 @@ Page({
     archiveHint: "",
     fromAccountText: "",
     toAccountText: "",
-    accountRows: [] as AccountPickerCard[],
+    pickerSections: [] as TransferPickerSection[],
     accountQuery: "",
     accountSheetHeight: 240,
     fromSelectorOpen: false,
     toSelectorOpen: false,
     amount: "",
+    name: "",
     amountError: "",
     fromTimeText: "",
     toTimeText: "",
@@ -91,8 +103,11 @@ Page({
     deleteUncertain: false,
     timeEditorOpen: false,
     timeEditorSide: "from" as TimeEditorSide,
+    timeEditorTitle: "编辑转出时间",
     timeDate: "",
     timeClock: "",
+    timePickerDate: "",
+    timePickerMinute: "00:00",
     timeDraftError: "",
   },
 
@@ -124,10 +139,16 @@ Page({
     this.screen = "loading";
     this.setData({ screen: "loading", actionError: "" });
     try {
-      const [transfer, accounts, sourceAccount] = await Promise.all([
+      const [transfer, accounts, sourceAccount, groups] = await Promise.all([
         transferApi.getTransfer(context.transferId),
         accountApi.listAccounts(),
         accountApi.loadAccount(context.sourceAccountId),
+        accountApi.listGroups().catch((error: unknown) => {
+          if (isUnauthorized(error)) {
+            throw error;
+          }
+          return [] as AccountGroup[];
+        }),
       ]);
       const fromAccount = await accountApi.loadAccount(transfer.fromAccountId);
       const toAccount = await accountApi.loadAccount(transfer.toAccountId);
@@ -140,11 +161,13 @@ Page({
       }
       this.transfer = transfer;
       this.accounts = accounts;
+      this.groups = groups;
       this.fromAccountId = transfer.fromAccountId;
       this.toAccountId = transfer.toAccountId;
       this.fromAccountLabel = accountName(fromAccount, transfer.fromAccountId);
       this.toAccountLabel = accountName(toAccount, transfer.toAccountId);
       this.amount = transfer.amount;
+      this.name = transfer.name ?? "";
       this.times = {
         fromBusinessTime: transfer.fromBusinessTime,
         toBusinessTime: transfer.toBusinessTime,
@@ -181,12 +204,19 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ fromSelectorOpen: true, toSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.fromAccountId, "") });
+    this.setData({
+      fromSelectorOpen: true,
+      toSelectorOpen: false,
+      accountQuery: "",
+      ...this.pickerData(this.fromAccountId, this.toAccountId, ""),
+    });
   },
 
   onAccountQuery(event: WechatMiniprogram.Input) {
-    const selected = this.data.fromSelectorOpen ? this.fromAccountId : this.toAccountId;
-    this.setData({ accountQuery: event.detail.value, ...accountPickerCards(this.accounts, selected, event.detail.value) });
+    const fromOpen = this.data.fromSelectorOpen;
+    const selected = fromOpen ? this.fromAccountId : this.toAccountId;
+    const blocked = fromOpen ? this.toAccountId : this.fromAccountId;
+    this.setData({ accountQuery: event.detail.value, ...this.pickerData(selected, blocked, event.detail.value) });
   },
 
   onCloseFromAccounts() {
@@ -210,7 +240,12 @@ Page({
     if (!this.canEditFields()) {
       return;
     }
-    this.setData({ toSelectorOpen: true, fromSelectorOpen: false, accountQuery: "", ...accountPickerCards(this.accounts, this.toAccountId, "") });
+    this.setData({
+      toSelectorOpen: true,
+      fromSelectorOpen: false,
+      accountQuery: "",
+      ...this.pickerData(this.toAccountId, this.fromAccountId, ""),
+    });
   },
 
   onCloseToAccounts() {
@@ -239,6 +274,15 @@ Page({
     this.publish();
   },
 
+  onName(event: WechatMiniprogram.Input) {
+    if (!this.canEditFields()) {
+      return;
+    }
+    this.name = event.detail.value;
+    this.setData({ actionError: "" });
+    this.publish();
+  },
+
   onOpenFromTime() {
     this.openTimeEditor("from");
   },
@@ -261,9 +305,9 @@ Page({
     this.setData({
       timeEditorOpen: true,
       timeEditorSide: side,
-      timeDate: draft.date,
-      timeClock: draft.time,
+      timeEditorTitle: side === "from" ? "编辑转出时间" : "编辑转入时间",
       timeDraftError: "",
+      ...timeEditorFields(draft),
     });
   },
 
@@ -271,16 +315,50 @@ Page({
     if (this.timeDraft === null || !this.canEditFields()) {
       return;
     }
-    this.timeDraft = { ...this.timeDraft, date: event.detail.value };
-    this.setData({ timeDate: event.detail.value });
+    this.timeDraft = { date: event.detail.value, time: this.timeDraft.time };
+    this.setData({ timeDate: event.detail.value, timePickerDate: businessTimePickerDate(event.detail.value) });
+  },
+
+  onTimeDateBlur() {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    const date = normalizeDateOnBlur(this.timeDraft.date);
+    this.timeDraft = { date, time: this.timeDraft.time };
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
+  onPickTimeDate(event: WechatMiniprogram.PickerChange) {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    this.timeDraft = applyDatePickerValue(String(event.detail.value), this.timeDraft);
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeClock(event: WechatMiniprogram.Input) {
     if (this.timeDraft === null || !this.canEditFields()) {
       return;
     }
-    this.timeDraft = { ...this.timeDraft, time: event.detail.value };
-    this.setData({ timeClock: event.detail.value });
+    this.timeDraft = { date: this.timeDraft.date, time: event.detail.value };
+    this.setData({ timeClock: event.detail.value, timePickerMinute: businessTimePickerMinute(event.detail.value) });
+  },
+
+  onTimeClockBlur() {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    const time = normalizeTimeOnBlur(this.timeDraft.time);
+    this.timeDraft = { date: this.timeDraft.date, time };
+    this.setData(timeEditorFields(this.timeDraft));
+  },
+
+  onPickTimeClock(event: WechatMiniprogram.PickerChange) {
+    if (this.timeDraft === null || !this.canEditFields()) {
+      return;
+    }
+    this.timeDraft = applyTimePickerValue(String(event.detail.value), this.timeDraft);
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeNow() {
@@ -288,7 +366,7 @@ Page({
       return;
     }
     this.timeDraft = applyNow(new Date());
-    this.setData({ timeDate: this.timeDraft.date, timeClock: this.timeDraft.time });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeToday() {
@@ -296,7 +374,7 @@ Page({
       return;
     }
     this.timeDraft = applyToday(this.timeDraft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onTimeYesterday() {
@@ -304,14 +382,15 @@ Page({
       return;
     }
     this.timeDraft = applyYesterday(this.timeDraft, new Date());
-    this.setData({ timeDate: this.timeDraft.date });
+    this.setData(timeEditorFields(this.timeDraft));
   },
 
   onConfirmTime() {
     if (this.timeDraft === null) {
       return;
     }
-    const next = businessTimeFromParts(this.timeDraft.date, this.timeDraft.time);
+    const normalized = normalizeBusinessTimeDraft(this.timeDraft);
+    const next = normalized === null ? null : businessTimeFromParts(normalized.date, normalized.time);
     if (next === null) {
       this.setData({ timeDraftError: "请输入有效的日期和时间" });
       return;
@@ -348,6 +427,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     if (!built.ok) {
       this.setData({ actionError: built.message });
@@ -361,6 +441,7 @@ Page({
         return;
       }
       this.transfer = updated;
+      this.name = updated.name ?? "";
       this.save = {
         phase: "success",
         attempt: null,
@@ -460,6 +541,11 @@ Page({
     wx.navigateBack();
   },
 
+  pickerData(selectedId: number, blockedId: number, query: string) {
+    const view = transferPickerSections(this.groups, this.accounts, selectedId, blockedId, query);
+    return { pickerSections: view.sections, accountSheetHeight: view.accountSheetHeight };
+  },
+
   onHold() {
     return;
   },
@@ -479,6 +565,7 @@ Page({
       this.amount,
       this.times.fromBusinessTime,
       this.times.toBusinessTime,
+      this.name,
     );
     const access = transferDetailAccess(this.deletePhase);
     const formLocked = this.readOnly || transferFormLocked(this.save.phase, false);
@@ -489,6 +576,7 @@ Page({
       fromAccountText: fromText,
       toAccountText: toText,
       amount: this.amount,
+      name: this.name,
       amountError:
         !this.readOnly && this.amount.trim().length > 0 && positiveTransferAmount(this.amount) === null
           ? "请输入大于 0 的金额"

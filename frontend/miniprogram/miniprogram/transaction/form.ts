@@ -12,6 +12,7 @@ export interface CreateTransactionForm {
   readonly selectedTagIds: readonly number[];
   readonly businessTime: string;
   readonly remark: string;
+  readonly counterpartyName?: string;
 }
 
 export interface CreateTransactionSnapshot {
@@ -23,6 +24,7 @@ export interface CreateTransactionSnapshot {
   readonly tagIds: readonly number[];
   readonly businessTime: string;
   readonly remark: string | null;
+  readonly counterpartyName?: string | null;
 }
 
 export interface CreateTransactionRequestBody {
@@ -33,6 +35,7 @@ export interface CreateTransactionRequestBody {
   readonly tagIds: readonly number[];
   readonly businessTime: string;
   readonly remark?: string;
+  readonly counterpartyName?: string;
 }
 
 export interface PostSaveResult {
@@ -52,6 +55,7 @@ export function createTransactionForm(now: Date): CreateTransactionForm {
     selectedTagIds: [],
     businessTime: currentBeijingBusinessTime(now),
     remark: "",
+    counterpartyName: "",
   };
 }
 
@@ -67,6 +71,7 @@ export function switchTransactionType(form: CreateTransactionForm, nextType: Tra
     selectedTagIds: [],
     businessTime: form.businessTime,
     remark: form.remark,
+    counterpartyName: form.counterpartyName ?? "",
   };
 }
 
@@ -130,6 +135,7 @@ export function buildCreateTransactionSnapshot(
       tagIds,
       businessTime: form.businessTime,
       remark: normalizeOptionalText(form.remark),
+      counterpartyName: normalizeOptionalText(form.counterpartyName ?? ""),
     },
   };
 }
@@ -143,6 +149,7 @@ export function createTransactionRequestBody(snapshot: CreateTransactionSnapshot
     tagIds: [...snapshot.tagIds],
     businessTime: snapshot.businessTime,
     ...(snapshot.remark === null ? {} : { remark: snapshot.remark }),
+    ...(snapshot.counterpartyName != null ? { counterpartyName: snapshot.counterpartyName } : {}),
   };
 }
 

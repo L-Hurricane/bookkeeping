@@ -10,7 +10,7 @@
     <view class="card" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenAccount">
       <view class="card-main">
         <text class="card-name">{{item.name}}</text>
-        <text class="card-kind">{{item.kindLabel}}</text>
+        <text class="card-kind">{{item.kindLabel}} · {{item.groupLabel}}</text>
       </view>
       <view class="card-side">
         <text class="card-balance {{item.balanceToneClass}}">{{item.balanceLabel}}</text>

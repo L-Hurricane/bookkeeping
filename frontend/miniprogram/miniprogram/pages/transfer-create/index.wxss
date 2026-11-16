@@ -1,4 +1,12 @@
 @import "../transaction-create/index.wxss";
+@import "../../transaction/time-editor.wxss";
+
+.group-label {
+  display: block;
+  margin: 16rpx 8rpx 8rpx;
+  color: #666666;
+  font-size: 24rpx;
+}
 
 .sync-row {
   display: flex;

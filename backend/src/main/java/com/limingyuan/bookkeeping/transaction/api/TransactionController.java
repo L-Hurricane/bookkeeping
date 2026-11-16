@@ -22,7 +22,8 @@ public class TransactionController {
             Long categoryId,
             List<Long> tagIds,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String businessTime,
-            @JsonDeserialize(using = StrictStringDeserializer.class) String remark) { }
+            @JsonDeserialize(using = StrictStringDeserializer.class) String remark,
+            @JsonDeserialize(using = StrictStringDeserializer.class) String counterpartyName) { }
 
     public record EditRequest(
             Long accountId,
@@ -31,13 +32,15 @@ public class TransactionController {
             Long categoryId,
             List<Long> tagIds,
             @NotNull @JsonDeserialize(using = StrictStringDeserializer.class) String businessTime,
-            @JsonDeserialize(using = StrictStringDeserializer.class) String remark) { }
+            @JsonDeserialize(using = StrictStringDeserializer.class) String remark,
+            @JsonDeserialize(using = StrictStringDeserializer.class) String counterpartyName) { }
 
     @PostMapping
     public ResponseEntity<TransactionService.TransactionView> create(@PathVariable long accountId,
             @RequestHeader("Idempotency-Key") String idempotencyKey, @Valid @RequestBody CreateRequest request) {
         var outcome = transactions.create(accountId, idempotencyKey, request.type(), draft(request.amount(),
-                request.name(), request.categoryId(), request.tagIds(), request.businessTime(), request.remark()));
+                request.name(), request.categoryId(), request.tagIds(), request.businessTime(), request.remark(),
+                request.counterpartyName()));
         var response = ResponseEntity.status(outcome.status()).body(outcome.body());
         return outcome.replay() ? ResponseEntity.status(outcome.status()).header("Idempotent-Replay", "true").body(outcome.body()) : response;
     }
@@ -57,7 +60,7 @@ public class TransactionController {
             @Valid @RequestBody EditRequest request) {
         long targetAccountId = request.accountId() == null ? accountId : request.accountId();
         return transactions.edit(accountId, targetAccountId, transactionId, draft(request.amount(), request.name(),
-                request.categoryId(), request.tagIds(), request.businessTime(), request.remark()));
+                request.categoryId(), request.tagIds(), request.businessTime(), request.remark(), request.counterpartyName()));
     }
 
     @DeleteMapping("/{transactionId}")
@@ -75,7 +78,7 @@ public class TransactionController {
     }
 
     private static TransactionService.Draft draft(String amount, String name, Long categoryId, List<Long> tagIds,
-            String businessTime, String remark) {
-        return new TransactionService.Draft(amount, name, categoryId, tagIds, businessTime, remark);
+            String businessTime, String remark, String counterpartyName) {
+        return new TransactionService.Draft(amount, name, categoryId, tagIds, businessTime, remark, counterpartyName);
     }
 }

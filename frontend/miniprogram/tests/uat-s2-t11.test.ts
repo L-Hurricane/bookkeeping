@@ -19,6 +19,8 @@ const active = (id: number, name: string): Account => ({
   currentBalance: "0.00",
   createdTime: "2026-10-01T10:00:00+08:00",
   lifecycle: "ACTIVE",
+  groupId: null,
+  displayOrder: null,
 });
 
 describe("UAT-01 archive return", () => {

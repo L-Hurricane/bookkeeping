@@ -6,7 +6,7 @@
   <button bindtap="reload">重新加载</button>
 </view>
 <view class="page" wx:else>
-  <view class="row {{selectedId === item.id ? 'selected' : ''}}" wx:for="{{rows}}" wx:key="id" style="margin-left: {{(item.depth - 1) * 28}}rpx;">
+  <view class="row {{selectedId === item.id ? 'selected' : ''}}" wx:for="{{rows}}" wx:key="id" data-id="{{item.id}}" style="margin-left: {{(item.depth - 1) * 28}}rpx;">
     <view class="row-main" data-id="{{item.id}}" bindtap="onSelect">
       <text class="name">{{item.name}}</text>
       <text class="meta">{{item.hasChildren ? '有下级' : '可关联'}}</text>

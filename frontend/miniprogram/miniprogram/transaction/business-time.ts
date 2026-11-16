@@ -130,8 +130,15 @@ export function businessTimePickerMinute(time: string): string {
   return `${pad(hour, 2)}:${pad(minute, 2)}`;
 }
 
+export function businessTimePickerDate(date: string): string {
+  return normalizeBusinessDateInput(date) ?? "";
+}
+
 export function applyDatePickerValue(pickerDate: string, draft: BusinessTimeDraft): BusinessTimeDraft {
-  const date = normalizeBusinessDateInput(pickerDate) ?? pickerDate;
+  const date = normalizeBusinessDateInput(pickerDate);
+  if (date === null) {
+    return draft;
+  }
   return { date, time: draft.time };
 }
 
@@ -161,11 +168,13 @@ export function normalizeBusinessTimeDraft(draft: BusinessTimeDraft): BusinessTi
 export function timeEditorFields(draft: BusinessTimeDraft): {
   readonly timeDate: string;
   readonly timeClock: string;
+  readonly timePickerDate: string;
   readonly timePickerMinute: string;
 } {
   return {
     timeDate: draft.date,
     timeClock: draft.time,
+    timePickerDate: businessTimePickerDate(draft.date),
     timePickerMinute: businessTimePickerMinute(draft.time),
   };
 }

@@ -10,6 +10,7 @@ export interface TransferView {
   readonly fromBusinessTime: string;
   readonly toBusinessTime: string;
   readonly firstSaveOrder: number;
+  readonly name: string | null;
 }
 
 export interface TransferRequestBody {
@@ -18,6 +19,7 @@ export interface TransferRequestBody {
   readonly amount: string;
   readonly fromBusinessTime: string;
   readonly toBusinessTime: string;
+  readonly name?: string;
 }
 
 export function parseTransferView(value: unknown): TransferView | null {
@@ -31,6 +33,10 @@ export function parseTransferView(value: unknown): TransferView | null {
   const fromBusinessTime = value.fromBusinessTime;
   const toBusinessTime = value.toBusinessTime;
   const firstSaveOrder = value.firstSaveOrder;
+  const name = value.name;
+  if (name !== undefined && name !== null && (typeof name !== "string" || name.length === 0 || name.length > 255 || name !== name.trim())) {
+    return null;
+  }
   if (
     !isPositiveId(id) ||
     !isPositiveId(fromAccountId) ||
@@ -55,6 +61,7 @@ export function parseTransferView(value: unknown): TransferView | null {
     fromBusinessTime,
     toBusinessTime,
     firstSaveOrder,
+    name: typeof name === "string" ? name : null,
   };
 }
 

@@ -58,7 +58,7 @@ export function noteSavedTransaction(state: OpenList, targetMonth: string | null
   if (targetMonth === null) {
     return stale;
   }
-  return { ...stale, month: targetMonth, locateMonth: targetMonth };
+  return { ...stale, locateMonth: targetMonth };
 }
 
 export type ListShow =

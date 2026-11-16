@@ -17,11 +17,13 @@ public class TransferEntity {
     @Column(name = "first_saved_at_utc", nullable = false, columnDefinition = "DATETIME(6)") private LocalDateTime firstSavedAtUtc;
     @Column(name = "first_save_order", nullable = false) private long firstSaveOrder;
     @Column(name = "updated_at_utc", nullable = false, columnDefinition = "DATETIME(6)") private LocalDateTime updatedAtUtc;
+    @Column(length = 255) private String name;
 
     protected TransferEntity() { }
 
     public TransferEntity(long userId, long fromAccountId, long toAccountId, BigDecimal amount,
-            LocalDateTime fromBusinessTime, LocalDateTime toBusinessTime, LocalDateTime firstSavedAtUtc, long firstSaveOrder) {
+            LocalDateTime fromBusinessTime, LocalDateTime toBusinessTime, LocalDateTime firstSavedAtUtc, long firstSaveOrder,
+            String name) {
         this.userId = userId;
         this.fromAccountId = fromAccountId;
         this.toAccountId = toAccountId;
@@ -31,16 +33,18 @@ public class TransferEntity {
         this.firstSavedAtUtc = firstSavedAtUtc;
         this.firstSaveOrder = firstSaveOrder;
         this.updatedAtUtc = firstSavedAtUtc;
+        this.name = name;
     }
 
-    /** Amount, accounts, and both business times can change. Identity and first-save facts stay. */
+    /** Amount, accounts, both business times, and the optional name can change. Identity and first-save facts stay. */
     public void revise(long fromAccountId, long toAccountId, BigDecimal amount, LocalDateTime fromBusinessTime,
-            LocalDateTime toBusinessTime, LocalDateTime updatedAtUtc) {
+            LocalDateTime toBusinessTime, String name, LocalDateTime updatedAtUtc) {
         this.fromAccountId = fromAccountId;
         this.toAccountId = toAccountId;
         this.amount = amount;
         this.fromBusinessTime = fromBusinessTime;
         this.toBusinessTime = toBusinessTime;
+        this.name = name;
         this.updatedAtUtc = updatedAtUtc;
     }
 
@@ -54,4 +58,5 @@ public class TransferEntity {
     public LocalDateTime getFirstSavedAtUtc() { return firstSavedAtUtc; }
     public long getFirstSaveOrder() { return firstSaveOrder; }
     public LocalDateTime getUpdatedAtUtc() { return updatedAtUtc; }
+    public String getName() { return name; }
 }

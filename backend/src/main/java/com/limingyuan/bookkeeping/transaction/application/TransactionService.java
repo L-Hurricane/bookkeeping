@@ -4,12 +4,14 @@ import com.limingyuan.bookkeeping.account.application.AccountService;
 import com.limingyuan.bookkeeping.category.application.CategoryService;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRecord;
 import com.limingyuan.bookkeeping.idempotency.persistence.IdempotencyRepository;
+import com.limingyuan.bookkeeping.common.ApiTime;
 import com.limingyuan.bookkeeping.common.Money;
 import com.limingyuan.bookkeeping.common.api.ApiErrors;
 import com.limingyuan.bookkeeping.common.api.ApiFailure;
 import com.limingyuan.bookkeeping.identity.TrustedUserContext;
 import com.limingyuan.bookkeeping.ledger.application.LedgerOrdering;
 import com.limingyuan.bookkeeping.tag.application.TagService;
+import com.limingyuan.bookkeeping.tag.domain.TagNames;
 import com.limingyuan.bookkeeping.transaction.domain.TransactionType;
 import com.limingyuan.bookkeeping.transaction.persistence.*;
 import java.math.BigDecimal;
@@ -61,12 +63,14 @@ public class TransactionService {
     public record CategoryRef(long id, String name) { }
     public record TagRef(long id, String name) { }
     public record TransactionView(long id, long accountId, TransactionType type, String amount, String name,
-            String displayName, CategoryRef category, List<TagRef> tags, String businessTime, String remark) { }
+            String displayName, CategoryRef category, List<TagRef> tags, String businessTime, String remark,
+            String counterpartyName) { }
     public record TransactionListItem(long id, TransactionType type, String amount, String displayName,
             CategoryRef category, List<TagRef> tags, String businessTime) { }
     public record TransactionList(String month, List<TransactionListItem> items) { }
     public record TransactionSearchResult(List<TransactionListItem> items) { }
-    public record Draft(String amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark) { }
+    public record Draft(String amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark,
+            String counterpartyName) { }
     public record CreateOutcome(int status, TransactionView body, boolean replay) { }
 
     public CreateOutcome create(long accountId, String operationId, String typeRaw, Draft draft) {
@@ -74,22 +78,24 @@ public class TransactionService {
         String key = operationKey(operationId);
         TransactionType type = type(typeRaw);
         var fields = fields(draft);
-        byte[] hash = requestHash(accountId, type, fields);
+        byte[] legacy = requestHash(accountId, type, fields);
+        byte[] current = requestHashV2(accountId, type, fields);
         try {
-            return transaction.execute(status -> createOnce(userId, accountId, key, type, fields, hash));
+            return transaction.execute(status -> createOnce(userId, accountId, key, type, fields, legacy, current));
         } catch (DataIntegrityViolationException ex) {
             var winner = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
             if (winner == null) throw ex;
-            return transaction.execute(status -> outcome(winner, hash));
+            return transaction.execute(status -> outcome(winner, legacy, current, fields.counterpartyName() == null));
         }
     }
 
-    private CreateOutcome createOnce(long userId, long accountId, String key, TransactionType type, Parsed fields, byte[] hash) {
+    private CreateOutcome createOnce(long userId, long accountId, String key, TransactionType type, Parsed fields,
+            byte[] legacy, byte[] current) {
         // Lock the account before touching idempotency. A pessimistic lock on a missing
         // idempotency row takes an InnoDB gap lock and deadlocks with the account row lock.
         accounts.lockForWrite(accountId);
         var existing = idempotency.findByUserIdAndScopeAndOperationId(userId, CREATE_SCOPE, key).orElse(null);
-        if (existing != null) return outcome(existing, hash);
+        if (existing != null) return outcome(existing, legacy, current, fields.counterpartyName() == null);
         var allocation = accounts.allocateFirstSaveOrder(accountId);
         var category = bookable(fields.categoryId(), type.name());
         var ownedTags = tags.requireOwned(fields.tagIds(), type.name());
@@ -97,14 +103,14 @@ public class TransactionService {
         var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         var saved = transactions.saveAndFlush(new TransactionEntity(userId, allocation.accountId(), type,
                 fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime, now,
-                allocation.firstSaveOrder(), blankToNull(fields.remark(), Integer.MAX_VALUE)));
+                allocation.firstSaveOrder(), blankToNull(fields.remark(), Integer.MAX_VALUE), fields.counterpartyName()));
         replaceTags(saved.getId(), ownedTags);
-        idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, hash, "CREATED", saved.getId(), now));
+        idempotency.saveAndFlush(new IdempotencyRecord(userId, CREATE_SCOPE, key, current, "CREATED", saved.getId(), now));
         return new CreateOutcome(201, detail(saved, category == null ? null : category.name(), ownedTags), false);
     }
 
-    private CreateOutcome outcome(IdempotencyRecord record, byte[] hash) {
-        if (!record.sameRequest(hash)) {
+    private CreateOutcome outcome(IdempotencyRecord record, byte[] legacy, byte[] current, boolean counterpartyEmpty) {
+        if (!record.sameRequest(current) && !(counterpartyEmpty && record.sameRequest(legacy))) {
             throw new ApiFailure(409, "IDEMPOTENCY_CONFLICT", "同一个 Idempotency-Key 已用于不同的创建请求");
         }
         if (record.getResourceId() == null) {
@@ -123,6 +129,14 @@ public class TransactionService {
         var time = parseBusinessTime(fields.businessTime());
         return TransactionRequestHash.sha256(accountId, type.name(), Money.format(fields.amount()), fields.categoryId(),
                 tags, TIME.format(time.atZone(BEIJING)), text(fields.name()), text(fields.remark()));
+    }
+
+    private byte[] requestHashV2(long accountId, TransactionType type, Parsed fields) {
+        var tags = new ArrayList<>(fields.tagIds());
+        tags.sort(null);
+        var time = parseBusinessTime(fields.businessTime());
+        return TransactionRequestHash.sha256V2(accountId, type.name(), Money.format(fields.amount()), fields.categoryId(),
+                tags, TIME.format(time.atZone(BEIJING)), text(fields.name()), text(fields.remark()), text(fields.counterpartyName()));
     }
 
     private static String operationKey(String raw) {
@@ -153,7 +167,7 @@ public class TransactionService {
             var businessTime = businessTime(fields.businessTime());
             var now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
             current.edit(fields.amount(), blankToNull(fields.name(), NAME_LIMIT), category == null ? null : category.id(), businessTime,
-                    blankToNull(fields.remark(), Integer.MAX_VALUE), now);
+                    blankToNull(fields.remark(), Integer.MAX_VALUE), fields.counterpartyName(), now);
             if (targetAccountId != sourceAccountId) {
                 current.reassignAccount(targetAccountId);
             }
@@ -220,7 +234,7 @@ public class TransactionService {
                             TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
                             displayName(rs.getString("name"), categoryName),
                             storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
-                            List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+                            List.of(), ApiTime.format(rs.getObject("business_time", LocalDateTime.class)));
                 }).list();
         var items = new ArrayList<TransactionListItem>();
         for (var row : rows) items.add(withTags(row));
@@ -261,7 +275,7 @@ public class TransactionService {
                 TransactionType.valueOf(rs.getString("type")), Money.format(rs.getBigDecimal("amount")),
                 displayName(rs.getString("name"), categoryName),
                 storedCategoryId == null ? null : new CategoryRef(storedCategoryId, categoryName),
-                List.of(), TIME.format(rs.getObject("business_time", LocalDateTime.class).atZone(BEIJING)));
+                List.of(), ApiTime.format(rs.getObject("business_time", LocalDateTime.class)));
         }).list();
         var items = new ArrayList<TransactionListItem>();
         // Phase 6 Ledger / read-model follow-up: tag names are loaded once per row. Leave this in Phase 4A.
@@ -303,15 +317,16 @@ public class TransactionService {
         return jdbc.sql("""
                 SELECT id, name FROM tags WHERE user_id = :userId AND id IN (:ids) ORDER BY id
                 """).param("userId", context.userId()).param("ids", ids)
-                .query((rs, row) -> new TagRef(rs.getLong("id"), rs.getString("name"))).list();
+                .query((rs, row) -> new TagRef(rs.getLong("id"), TagNames.display(rs.getString("name")))).list().stream()
+                .filter(tag -> tag.id() > 0).toList();
     }
 
     private TransactionView detail(TransactionEntity entity, String categoryName, List<TagService.OwnedTag> ownedTags) {
-        var tagRefs = ownedTags.stream().map(tag -> new TagRef(tag.id(), tag.name())).toList();
+        var tagRefs = ownedTags.stream().map(tag -> new TagRef(tag.id(), TagNames.display(tag.name()))).toList();
         return new TransactionView(entity.getId(), entity.getAccountId(), entity.getType(), Money.format(entity.getAmount()),
                 entity.getName(), displayName(entity.getName(), categoryName),
                 entity.getCategoryId() == null ? null : new CategoryRef(entity.getCategoryId(), categoryName),
-                tagRefs, TIME.format(entity.getBusinessTime().atZone(BEIJING)), entity.getRemark());
+                tagRefs, ApiTime.format(entity.getBusinessTime()), entity.getRemark(), entity.getCounterpartyName());
     }
 
     private static String displayName(String name, String categoryName) {
@@ -319,14 +334,23 @@ public class TransactionService {
         return categoryName == null || categoryName.isBlank() ? null : categoryName;
     }
 
-    private record Parsed(BigDecimal amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark) { }
+    private record Parsed(BigDecimal amount, String name, Long categoryId, List<Long> tagIds, String businessTime, String remark,
+            String counterpartyName) { }
 
     private Parsed fields(Draft draft) {
         var amount = Money.parse(draft.amount());
         if (amount.signum() == 0) throw new ApiFailure(400, "VALIDATION_FAILED", "请求参数不合法",
                 List.of(new ApiErrors.Detail("amount", "MUST_NOT_BE_ZERO")));
         return new Parsed(amount, draft.name(), draft.categoryId(), draft.tagIds() == null ? List.of() : draft.tagIds(),
-                draft.businessTime(), draft.remark());
+                draft.businessTime(), draft.remark(), counterparty(draft.counterpartyName()));
+    }
+
+    private static String counterparty(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.length() > NAME_LIMIT) throw new ApiFailure(400, "VALIDATION_FAILED", "交易对方最长 255 个字符");
+        return trimmed;
     }
 
     private TransactionType type(String raw) {

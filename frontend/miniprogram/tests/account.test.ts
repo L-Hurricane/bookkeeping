@@ -30,6 +30,8 @@ const account: Account = {
   currentBalance: "60.50",
   createdTime: "2026-09-01T10:00:00+08:00",
   lifecycle: "ACTIVE",
+  groupId: null,
+  displayOrder: null,
 };
 
 function memoryStorage(): KeyValueStorage {

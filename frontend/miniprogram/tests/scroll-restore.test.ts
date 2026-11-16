@@ -84,13 +84,14 @@ describe("account home detail return", () => {
     assert.deepEqual(shown.show, { refresh: "background-refresh", scrollTop: null, locate: true });
   });
 
-  it("reloads the target month after an edit and does not restore the old scroll", () => {
+  it("keeps the open month after an edit and lets locate own the scroll", () => {
     const opened = openTransactionDetail(home("2026-09"), 480);
     const saved = noteSavedTransaction(opened, "2026-10");
-    assert.equal(saved.month, "2026-10");
+    assert.equal(saved.month, "2026-09");
+    assert.equal(saved.locateMonth, "2026-10");
     assert.equal(saved.visit?.context, "2026-09");
     const shown = showOpenList(saved);
-    assert.deepEqual(shown.show, { refresh: "reload", scope: "ledger", locate: true });
+    assert.deepEqual(shown.show, { refresh: "background-refresh", scrollTop: null, locate: true });
   });
 
   it("keeps create locate on one account reload", () => {

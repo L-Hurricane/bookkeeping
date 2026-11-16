@@ -2,6 +2,7 @@ import { RESTORE_CONFIRM } from "../../account/archive-copy";
 import { accountKindLabel, formatCurrentBalance, type Account } from "../../account/account";
 import { beginLoad, canApplyLoadResult, createLoadGuard } from "../../account/load-guard";
 import { moneyToneClass } from "../../account/money-tone";
+import { groupNameFor, type AccountGroup } from "../../account/grouping";
 import { accountHomePath } from "../../account/navigation";
 import { ApiError } from "../../http/client";
 import { isUnauthorized } from "../../services/ledger";
@@ -11,6 +12,7 @@ interface ArchiveRow {
   readonly id: number;
   readonly name: string;
   readonly kindLabel: string;
+  readonly groupLabel: string;
   readonly balanceLabel: string;
   readonly balanceToneClass: string;
 }
@@ -40,11 +42,14 @@ Page({
     }
     this.setData({ phase: "loading", errorMessage: "" });
     try {
-      const items = await accountApi.listAccounts("ARCHIVED");
+      const [items, groups] = await Promise.all([
+        accountApi.listAccounts("ARCHIVED"),
+        accountApi.listGroups(),
+      ]);
       if (!canApplyLoadResult(this.loadGuard, generation)) {
         return;
       }
-      this.setData({ phase: "ready", rows: items.map(toRow), restoringId: 0, errorMessage: "" });
+      this.setData({ phase: "ready", rows: items.map((item) => toRow(item, groups)), restoringId: 0, errorMessage: "" });
     } catch (error) {
       if (!canApplyLoadResult(this.loadGuard, generation) || isUnauthorized(error)) {
         return;
@@ -108,11 +113,12 @@ Page({
   },
 });
 
-function toRow(account: Account): ArchiveRow {
+function toRow(account: Account, groups: readonly AccountGroup[]): ArchiveRow {
   return {
     id: account.id,
     name: account.name,
     kindLabel: accountKindLabel(account.kind),
+    groupLabel: groupNameFor(account, groups),
     balanceLabel: formatCurrentBalance(account),
     balanceToneClass: moneyToneClass(account.currentBalance),
   };

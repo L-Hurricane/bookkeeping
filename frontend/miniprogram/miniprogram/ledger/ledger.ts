@@ -53,10 +53,11 @@ export type LedgerEntry = TransactionEntry | BalanceAdjustmentEntry | TransferEn
 
 export interface Ledger {
   readonly accountId: number;
-  readonly month: string;
+  readonly month: string | null;
   readonly currentBalance: string;
   readonly summary: LedgerSummary;
   readonly items: readonly LedgerEntry[];
+  readonly nextCursor: string | null;
 }
 
 export interface LedgerRow {
@@ -76,7 +77,9 @@ export function parseLedger(value: unknown): Ledger | null {
   if (!isRecord(value) || !isRecord(value.summary) || !Array.isArray(value.items)) {
     return null;
   }
-  if (!isPositiveId(value.accountId) || typeof value.month !== "string" || !MONTH_PATTERN.test(value.month)) {
+  const month = parseOptionalMonth(value.month);
+  const nextCursor = parseNextCursor(value.nextCursor);
+  if (!isPositiveId(value.accountId) || month === undefined || nextCursor === undefined) {
     return null;
   }
   if (!isMoney(value.currentBalance)) {
@@ -96,10 +99,11 @@ export function parseLedger(value: unknown): Ledger | null {
   }
   return {
     accountId: value.accountId,
-    month: value.month,
+    month,
     currentBalance: value.currentBalance,
     summary,
     items,
+    nextCursor,
   };
 }
 
@@ -123,8 +127,16 @@ export function formatMoneyLabel(amount: string): string {
   return `¥${amount}`;
 }
 
+export function ledgerBalanceEffectAmount(item: LedgerEntry): string {
+  if (item.kind === "TRANSACTION" && item.transactionType === "EXPENSE") {
+    return negateCanonicalMoney(item.amount);
+  }
+  return item.amount;
+}
+
 export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
   return items.map((item) => {
+    const effect = ledgerBalanceEffectAmount(item);
     if (item.kind === "TRANSFER") {
       return {
         recordId: item.id,
@@ -132,9 +144,9 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         kind: "transfer",
         title: item.displayName,
         detail: "",
-        typeLabel: "转账",
-        amountLabel: formatMoneyLabel(item.amount),
-        amountToneClass: moneyToneClass(item.amount),
+        typeLabel: effect.startsWith("-") ? "转出" : "转入",
+        amountLabel: formatMoneyLabel(effect),
+        amountToneClass: moneyToneClass(effect),
         timeLabel: formatBusinessTime(item.businessTime),
         dayKey: businessDayKey(item.businessTime),
       };
@@ -146,9 +158,9 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
         kind: "adjustment",
         title: item.displayName,
         detail: "",
-        typeLabel: "调整",
-        amountLabel: formatMoneyLabel(item.amount),
-        amountToneClass: moneyToneClass(item.amount),
+        typeLabel: "余额调整",
+        amountLabel: formatMoneyLabel(effect),
+        amountToneClass: moneyToneClass(effect),
         timeLabel: formatBusinessTime(item.businessTime),
         dayKey: businessDayKey(item.businessTime),
       };
@@ -162,12 +174,19 @@ export function ledgerRows(items: readonly LedgerEntry[]): LedgerRow[] {
       title: item.displayName === null || item.displayName.length === 0 ? "未命名交易" : item.displayName,
       detail: tags.length === 0 ? category : `${category} ${tags}`,
       typeLabel: item.transactionType === "INCOME" ? "收入" : "支出",
-      amountLabel: formatMoneyLabel(item.amount),
-      amountToneClass: moneyToneClass(item.amount),
+      amountLabel: formatMoneyLabel(effect),
+      amountToneClass: moneyToneClass(effect),
       timeLabel: formatBusinessTime(item.businessTime),
       dayKey: businessDayKey(item.businessTime),
     };
   });
+}
+
+function negateCanonicalMoney(amount: string): string {
+  if (amount === "0.00" || amount === "-0.00") {
+    return "0.00";
+  }
+  return amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
 }
 
 export function canApplyLedgerResult(
@@ -181,6 +200,36 @@ export function canApplyLedgerResult(
 
 export function ledgerPath(accountId: number, month: string): string {
   return `/api/v1/accounts/${accountId}/ledger?month=${month}`;
+}
+
+export interface LedgerPageQuery {
+  readonly accountId: number;
+  readonly month?: string | null;
+  readonly from?: string | null;
+  readonly to?: string | null;
+  readonly name?: string | null;
+  readonly cursor?: string | null;
+}
+
+export function ledgerPagePath(query: LedgerPageQuery): string {
+  const params = ["paged=true"];
+  if (query.month) params.push(`month=${query.month}`);
+  if (query.from) params.push(`from=${query.from}`);
+  if (query.to) params.push(`to=${query.to}`);
+  if (query.name) params.push(`name=${encodeURIComponent(query.name)}`);
+  if (query.cursor) params.push(`cursor=${encodeURIComponent(query.cursor)}`);
+  return `/api/v1/accounts/${query.accountId}/ledger?${params.join("&")}`;
+}
+
+function parseOptionalMonth(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" && MONTH_PATTERN.test(value) ? value : undefined;
+}
+
+function parseNextCursor(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length === 0 || value.length > 400 || /[\r\n]/.test(value)) return undefined;
+  return value;
 }
 
 function parseSummary(value: Record<string, unknown>): LedgerSummary | null {

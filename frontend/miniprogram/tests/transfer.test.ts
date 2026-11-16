@@ -22,6 +22,8 @@ import {
   SAME_ACCOUNT_MESSAGE,
   NON_POSITIVE_AMOUNT_MESSAGE,
   buildTransferSnapshot,
+  canonicalTransferName,
+  transferRequestBody,
   beginTransfer,
   editingTransfer,
   retryTransfer,
@@ -55,7 +57,8 @@ describe("transfer ledger", () => {
     assert.equal(ledger?.items[0]?.kind, "TRANSFER");
     const rows = ledgerRows(ledger?.items ?? []);
     assert.equal(rows[0]?.kind, "transfer");
-    assert.equal(rows[0]?.typeLabel, "转账");
+    assert.equal(rows[0]?.typeLabel, "转出");
+    assert.equal(rows[1]?.typeLabel, "转入");
     assert.equal(rows[0]?.title, "转账");
     assert.equal(rows[0]?.amountLabel, "¥-50.00");
     assert.equal(rows[0]?.amountToneClass, "money-negative");
@@ -100,7 +103,8 @@ describe("transfer post-save", () => {
     assert.equal(resolveTransferTargetMonth(300, payload), "2026-09");
     const home = { selectedMonth: "2026-09", pending: null, highlightKey: "" };
     const accepted = acceptTransferCreated(home, payload);
-    assert.equal(accepted.selectedMonth, "2026-08");
+    assert.equal(accepted.selectedMonth, "2026-09");
+    assert.equal(accepted.pending?.targetMonth, "2026-08");
     const items = [
       {
         kind: "TRANSFER" as const,
@@ -138,6 +142,7 @@ describe("transfer validation and idempotency", () => {
       amount: "10.00",
       fromBusinessTime: "2026-09-01T00:00:00+08:00",
       toBusinessTime: "2026-09-01T00:00:00+08:00",
+      name: null,
     };
     const started = beginTransfer(editingTransfer(), snapshot, "abc123");
     assert.equal(started?.phase, "submitting");
@@ -184,7 +189,31 @@ describe("transfer api contract", () => {
       firstSaveOrder: 42,
     });
     assert.equal(view?.amount, "30.00");
+    assert.equal(view?.name, null);
     assert.equal(view?.firstSaveOrder, 42);
+    const named = parseTransferView({
+      id: 7,
+      fromAccountId: 1,
+      toAccountId: 2,
+      amount: "30.00",
+      name: "孩子教育储备",
+      fromBusinessTime: "2026-01-31T23:00:00+08:00",
+      toBusinessTime: "2026-02-01T00:00:00+08:00",
+      firstSaveOrder: 42,
+    });
+    assert.equal(named?.name, "孩子教育储备");
+    const built = buildTransferSnapshot(1, 2, "30.00", "2026-01-31T23:00:00+08:00", "2026-02-01T00:00:00+08:00", "  旅行资金  ");
+    assert.equal(built.ok, true);
+    if (built.ok) {
+      assert.equal(built.value.name, "旅行资金");
+      assert.equal(transferRequestBody(built.value).name, "旅行资金");
+    }
+    const blank = buildTransferSnapshot(1, 2, "30.00", "2026-01-31T23:00:00+08:00", "2026-02-01T00:00:00+08:00", "   ");
+    assert.equal(blank.ok, true);
+    if (blank.ok) assert.equal("name" in transferRequestBody(blank.value), false);
+    const fallback = canonicalTransferName("转账");
+    assert.equal(fallback.ok && fallback.name, "转账");
+    assert.equal(buildTransferSnapshot(1, 2, "30.00", "2026-01-31T23:00:00+08:00", "2026-02-01T00:00:00+08:00", "名".repeat(256)).ok, false);
     assert.equal(
       parseTransferView({
         id: 7,

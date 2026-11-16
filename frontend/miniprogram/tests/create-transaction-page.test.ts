@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { CategoryNode } from "../miniprogram/category/category";
 import { createHttpClient, type HttpTransportRequest } from "../miniprogram/http/client";
@@ -17,6 +18,7 @@ import {
   businessTimeDisplay,
   businessTimeDraft,
   businessTimeFromParts,
+  businessTimePickerDate,
   businessTimePickerMinute,
   isFutureBusinessTime,
   normalizeBusinessDateInput,
@@ -25,6 +27,7 @@ import {
   normalizeTimeOnBlur,
   previousBeijingDate,
   resolveBusinessTimeEdit,
+  timeEditorFields,
 } from "../miniprogram/transaction/business-time";
 import { createTransactionForm, switchTransactionType, validateTransactionAmount } from "../miniprogram/transaction/form";
 import { canOpenCreateTransaction, parseCreatePageContext, transactionCreatePath } from "../miniprogram/transaction/navigation";
@@ -379,6 +382,11 @@ describe("business time editor", () => {
   it("keeps seconds when only the date changes and zeroes seconds from the native time picker", () => {
     const draft = { date: "2026-09-26", time: "12:46:06" };
     assert.deepEqual(applyDatePickerValue("2026-10-01", draft), { date: "2026-10-01", time: "12:46:06" });
+    assert.deepEqual(applyDatePickerValue("2026-02-30", draft), draft);
+    assert.deepEqual(applyDatePickerValue("not-a-date", draft), draft);
+    assert.equal(businessTimePickerDate("2026-10-7"), "2026-10-07");
+    assert.equal(businessTimePickerDate("2026-02-30"), "");
+    assert.equal(businessTimePickerDate("not-a-date"), "");
     assert.deepEqual(applyTimePickerValue("13:15", draft), { date: "2026-09-26", time: "13:15:00" });
     assert.equal(businessTimePickerMinute("12:46:06"), "12:46");
     assert.equal(businessTimePickerMinute("12:1:0"), "12:01");
@@ -425,6 +433,29 @@ describe("business time editor", () => {
     assert.equal(rejected.businessTime, canonical);
     assert.equal(rejected.open, true);
     assert.equal(rejected.error, "请输入有效的日期和时间");
+  });
+
+  it("binds only a normalized date to the shared picker and keeps seconds on now", () => {
+    const fields = timeEditorFields({ date: "2026-02-30", time: "12:46:06" });
+    assert.equal(fields.timeDate, "2026-02-30");
+    assert.equal(fields.timePickerDate, "");
+    assert.equal(fields.timePickerMinute, "12:46");
+    const now = applyNow(new Date("2026-09-30T16:00:05Z"));
+    assert.equal(now.time, "00:00:05");
+    const panel = readFileSync(new URL("../miniprogram/transaction/time-editor.wxml", import.meta.url), "utf8");
+    assert.match(panel, /mode="date" value="\{\{timePickerDate\}\}"/);
+    assert.match(panel, /mode="time" value="\{\{timePickerMinute\}\}"/);
+    for (const page of [
+      "transaction-create",
+      "transaction-detail",
+      "transfer-create",
+      "transfer-detail",
+      "balance-adjustment-create",
+    ]) {
+      const markup = readFileSync(new URL(`../miniprogram/pages/${page}/index.wxml`, import.meta.url), "utf8");
+      assert.equal(markup.includes('is="timeEditor"'), true);
+      assert.equal(markup.includes('mode="date"'), false);
+    }
   });
 
   it("describes amount problems without accepting zero", () => {

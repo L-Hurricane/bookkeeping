@@ -20,11 +20,18 @@ public class TransactionEntity {
     @Column(name = "first_save_order", nullable = false) private long firstSaveOrder;
     @Column(name = "updated_at_utc", nullable = false, columnDefinition = "DATETIME(6)") private LocalDateTime updatedAtUtc;
     @Column(columnDefinition = "TEXT") private String remark;
+    @Column(name = "counterparty_name", length = 255) private String counterpartyName;
 
     protected TransactionEntity() { }
 
     public TransactionEntity(long userId, long accountId, TransactionType type, BigDecimal amount, String name,
             Long categoryId, LocalDateTime businessTime, LocalDateTime firstSavedAtUtc, long firstSaveOrder, String remark) {
+        this(userId, accountId, type, amount, name, categoryId, businessTime, firstSavedAtUtc, firstSaveOrder, remark, null);
+    }
+
+    public TransactionEntity(long userId, long accountId, TransactionType type, BigDecimal amount, String name,
+            Long categoryId, LocalDateTime businessTime, LocalDateTime firstSavedAtUtc, long firstSaveOrder, String remark,
+            String counterpartyName) {
         this.userId = userId;
         this.accountId = accountId;
         this.type = type;
@@ -36,15 +43,17 @@ public class TransactionEntity {
         this.firstSaveOrder = firstSaveOrder;
         this.updatedAtUtc = firstSavedAtUtc;
         this.remark = remark;
+        this.counterpartyName = counterpartyName;
     }
 
     public void edit(BigDecimal amount, String name, Long categoryId, LocalDateTime businessTime, String remark,
-            LocalDateTime updatedAtUtc) {
+            String counterpartyName, LocalDateTime updatedAtUtc) {
         this.amount = amount;
         this.name = name;
         this.categoryId = categoryId;
         this.businessTime = businessTime;
         this.remark = remark;
+        this.counterpartyName = counterpartyName;
         this.updatedAtUtc = updatedAtUtc;
     }
 
@@ -65,4 +74,5 @@ public class TransactionEntity {
     public long getFirstSaveOrder() { return firstSaveOrder; }
     public LocalDateTime getUpdatedAtUtc() { return updatedAtUtc; }
     public String getRemark() { return remark; }
+    public String getCounterpartyName() { return counterpartyName; }
 }

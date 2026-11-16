@@ -26,4 +26,13 @@ class TagNameTest {
         assertThatThrownBy(() -> TagNames.required("a".repeat(TagNames.MAX_LENGTH + 1)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test void showsABlankStoredNameWithoutAcceptingThatLabelAsAStoredName() {
+        assertThat(TagNames.display("")).isEqualTo(TagNames.UNNAMED_DISPLAY);
+        assertThat(TagNames.display(null)).isEqualTo(TagNames.UNNAMED_DISPLAY);
+        assertThat(TagNames.display("外卖")).isEqualTo("外卖");
+        assertThat(TagNames.display(" ")).isEqualTo(" ");
+        assertThatThrownBy(() -> TagNames.required(TagNames.UNNAMED_DISPLAY)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TagNames.required("  " + TagNames.UNNAMED_DISPLAY + "  ")).isInstanceOf(IllegalArgumentException.class);
+    }
 }

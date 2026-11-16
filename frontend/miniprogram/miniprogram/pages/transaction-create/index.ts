@@ -20,6 +20,7 @@ import {
   applyYesterday,
   businessTimeDisplay,
   businessTimeDraft,
+  businessTimePickerDate,
   businessTimePickerMinute,
   isBusinessTimeAllowed,
   isFutureBusinessTime,
@@ -111,6 +112,7 @@ Page({
     type: "EXPENSE" as TransactionType,
     amount: "",
     name: "",
+    counterpartyName: "",
     remark: "",
     categoryText: "未分类",
     amountError: "",
@@ -118,8 +120,10 @@ Page({
     futureHint: "",
     businessTimeText: "",
     timeEditorOpen: false,
+    timeEditorTitle: "编辑交易时间",
     timeDate: "",
     timeClock: "",
+    timePickerDate: "",
     timePickerMinute: "00:00",
     timeDraftError: "",
     accountPhase: "loading" as "loading" | "ready" | "error",
@@ -231,6 +235,14 @@ Page({
     }
     this.form = { ...this.form, name: event.detail.value };
     this.setData({ name: event.detail.value, submitError: "" });
+  },
+
+  onCounterpartyInput(event: WechatMiniprogram.Input) {
+    if (!this.canEdit()) {
+      return;
+    }
+    this.form = { ...this.form, counterpartyName: event.detail.value };
+    this.setData({ counterpartyName: event.detail.value, submitError: "" });
   },
 
   onRemarkInput(event: WechatMiniprogram.Input) {
@@ -402,7 +414,7 @@ Page({
       return;
     }
     this.timeDraft = { date: event.detail.value, time: this.timeDraft?.time ?? "" };
-    this.setData({ timeDate: event.detail.value });
+    this.setData({ timeDate: event.detail.value, timePickerDate: businessTimePickerDate(event.detail.value) });
   },
 
   onTimeDateBlur() {
@@ -853,6 +865,7 @@ Page({
       type,
       amount: this.form.amount,
       name: this.form.name,
+      counterpartyName: this.form.counterpartyName ?? "",
       remark: this.form.remark,
       categoryText: categoryLabel(categories.items, this.form.categoryId),
       categoryPhase: categories.phase,

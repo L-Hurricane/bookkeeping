@@ -49,7 +49,7 @@
 }
 
 .day {
-  margin: 20rpx 8rpx 8rpx;
+  margin: 8rpx 8rpx 0;
   color: #666666;
   font-size: 24rpx;
 }
@@ -91,9 +91,17 @@
 .status,
 .count,
 .row-detail,
+.row-meta,
+.row-type,
 .row-time {
   color: #666666;
   font-size: 26rpx;
+}
+
+.row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
 }
 
 .balance {
@@ -140,6 +148,27 @@
   font-weight: 600;
 }
 
+.filter,
+.range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.filter-action,
+.month-heading {
+  color: #333333;
+  font-size: 28rpx;
+}
+
+.month-heading {
+  display: block;
+  margin: 8rpx 8rpx 0;
+  font-weight: 600;
+}
+
 .summary {
   display: flex;
   justify-content: space-between;
@@ -161,10 +190,11 @@
 
 .row {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24rpx;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #ececec;
+  margin-top: 4rpx;
+  padding: 20rpx 24rpx;
 }
 
 .row.post-save-highlight {
@@ -183,6 +213,15 @@
   display: flex;
   flex-direction: column;
   gap: 4rpx;
+  min-width: 0;
+}
+
+.row-main {
+  flex: 1;
+}
+
+.row-title {
+  word-break: break-all;
 }
 
 .row-side {
@@ -192,6 +231,12 @@
 .row-title,
 .amount {
   font-size: 30rpx;
+}
+
+.amount {
+  flex: none;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .type.adjustment {

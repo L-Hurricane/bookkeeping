@@ -53,6 +53,62 @@ export function keptSelection(original: readonly number[]): number[] {
   return [...original];
 }
 
+export interface MeasuredRow {
+  readonly id: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/** Viewport coordinates, same space as a touch clientY. A miss returns null. */
+export function rowHitId(rows: readonly MeasuredRow[], y: number): number | null {
+  const hit = rows.find((row) => y >= row.top && y <= row.bottom);
+  return hit === undefined ? null : hit.id;
+}
+
+export type ParentDrop =
+  | { readonly status: "unmeasured" }
+  | { readonly status: "unchanged" }
+  | { readonly status: "rejected" }
+  | { readonly status: "move"; readonly parentId: number };
+
+/** Drop onto a measured row. Only a legal parent becomes a move. */
+export function planParentDrop(
+  nodes: readonly NamedNode[],
+  dragId: number,
+  measured: readonly MeasuredRow[],
+  y: number,
+): ParentDrop {
+  if (measured.length === 0) {
+    return { status: "unmeasured" };
+  }
+  const targetId = rowHitId(measured, y);
+  if (targetId === null || targetId === dragId) {
+    return { status: "unchanged" };
+  }
+  if (!parentChoices(nodes, dragId).some((choice) => choice.id === targetId)) {
+    return { status: "rejected" };
+  }
+  return { status: "move", parentId: targetId };
+}
+
+/** Reads the first `selectAll` result from `SelectorQuery.exec`. */
+export function measuredRows(result: unknown): MeasuredRow[] {
+  const rects = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : [];
+  return rects.flatMap((rect) => {
+    if (rect === null || typeof rect !== "object") {
+      return [];
+    }
+    const record = rect as { dataset?: { id?: unknown }; top?: unknown; bottom?: unknown };
+    const id = Number(record.dataset?.id);
+    const top = Number(record.top);
+    const bottom = Number(record.bottom);
+    if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(top) || !Number.isFinite(bottom)) {
+      return [];
+    }
+    return [{ id, top, bottom }];
+  });
+}
+
 function appendRows(rows: ManageRow[], nodes: readonly NamedNode[], depth: number): void {
   for (const node of nodes) {
     rows.push({ id: node.id, name: node.name, depth, hasChildren: node.children.length > 0 });
